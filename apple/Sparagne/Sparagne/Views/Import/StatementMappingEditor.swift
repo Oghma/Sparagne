@@ -444,21 +444,23 @@ struct StatementMappingEditor: View {
             if !model.unruledTypeValues.isEmpty { Divider() }
             Button(String(localized: "Other Value")) { model.addRule(value: "") }
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "plus")
-                    .font(.system(size: 9, weight: .semibold))
-                Text(String(localized: "Add Rule"))
-            }
-            .font(Face.ui(11, .medium))
-            .foregroundStyle(Ink.text2)
-            .padding(.horizontal, 8)
-            .frame(height: 22)
-            .contentShape(Rectangle())
+            addRuleLabel
+                .font(Face.label)
+                .foregroundStyle(Ink.text2)
+                .padding(.horizontal, 8)
+                .frame(height: 22)
+                .contentShape(Rectangle())
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
+        .plainMenu()
         .fixedSize()
+    }
+
+    private var addRuleLabel: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "plus")
+                .font(.system(size: 9, weight: .semibold))
+            Text(String(localized: "Add Rule"))
+        }
     }
 
     @ViewBuilder
@@ -565,18 +567,9 @@ struct StatementMappingEditor: View {
                 Button {
                     model.addDescriptionRule()
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 9, weight: .semibold))
-                        Text(String(localized: "Add Rule"))
-                    }
-                    .font(Face.ui(11, .medium))
-                    .foregroundStyle(Ink.text2)
-                    .padding(.horizontal, 8)
-                    .frame(height: 22)
-                    .contentShape(Rectangle())
+                    addRuleLabel
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.chrome(.ghost, small: true))
                 .fixedSize()
             }
             if model.mapping.descriptionRules.isEmpty {
@@ -773,15 +766,19 @@ struct DescriptionRuleEditor: View {
         )
     }
 
+    /// Its own owner, so that several rules can each open the list under
+    /// their own field.
     private var categoryField: some View {
-        RuleCategoryField(
+        CategoryFormField(
+            label: String(localized: "Category"),
             text: Binding(
                 get: { rule?.category ?? "" },
                 set: { new in update { $0.category = new.trimmingCharacters(in: .whitespaces).isEmpty ? nil : new } }
             ),
-            owner: "rule-\(index)",
             store: model.store,
-            completion: completion
+            completion: completion,
+            owner: "rule-\(index)",
+            prompt: String(localized: "category…")
         )
     }
 
@@ -825,36 +822,6 @@ struct DescriptionRuleEditor: View {
     private func walletName(_ id: Uuid?) -> String {
         guard let id else { return String(localized: "Choose…") }
         return model.store.wallets.first { $0.id == id }?.name ?? TransactionRow.placeholder
-    }
-}
-
-/// A category field of a description rule: the box of a `FormTextField`,
-/// completing as the review's CATEGORY field does (`completing`), with its
-/// own owner so that several rules can each open the list under their own
-/// field.
-private struct RuleCategoryField: View {
-    @Binding var text: String
-    let owner: String
-    let store: AppStore
-    let completion: CategoryCompletionModel
-
-    @FocusState private var focused: Bool
-    @Environment(\.formMetrics) private var metrics
-
-    var body: some View {
-        FormBox(focused: metrics.showsFocus && focused) {
-            TextField(
-                String(localized: "Category"),
-                text: $text,
-                prompt: Text(String(localized: "category…")).foregroundStyle(Ink.text3)
-            )
-            .textFieldStyle(.plain)
-            .labelsHidden()
-            .focused($focused)
-            .accessibilityLabel(String(localized: "Category"))
-            .completing(text: $text, owner: owner, isFocused: focused, store: store, completion: completion)
-        }
-        .categoryListAnchor(owner: owner, isFocused: focused, store: store, completion: completion)
     }
 }
 

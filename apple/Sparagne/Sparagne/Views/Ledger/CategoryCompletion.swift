@@ -226,11 +226,11 @@ extension View {
 // MARK: - Outside the grid
 
 /// A CATEGORY field in a form rather than in the grid: the Ricorrenze
-/// inspector's. The box of a `FormTextField`, completing as the CATEGORY
-/// cell does (`completing`): typing opens the list, ↑↓ move in it, ↩ and ⇥
-/// pick, esc closes it. A name nobody has used yet still becomes a new
-/// category when a row is recorded under it, as it does from a cell; the
-/// list is there so that a slip of the keys does not.
+/// inspector's and a description rule's. The box of a `FormTextField`,
+/// completing as the CATEGORY cell does (`completing`): typing opens the
+/// list, ↑↓ move in it, ↩ and ⇥ pick, esc closes it. A name nobody has used
+/// yet still becomes a new category when a row is recorded under it, as it
+/// does from a cell; the list is there so that a slip of the keys does not.
 ///
 /// The list is drawn by the form that holds the field
 /// (`hangingCategoryList`), over everything else, so the form's scroll view
@@ -241,25 +241,26 @@ struct CategoryFormField: View {
     @Binding var text: String
     let store: AppStore
     let completion: CategoryCompletionModel
+    /// Which field of the form the list is open for: the one field of a
+    /// form whose model is its own, by default.
+    var owner: AnyHashable = "form"
+    /// What the empty field says, dimmed. None by default, as
+    /// `FormTextField` has it: the label column already says what it is.
+    var prompt: String?
 
     @FocusState private var focused: Bool
     @Environment(\.formMetrics) private var metrics
 
-    /// The one field of its form: the model is the form's own.
-    private static let owner = "form"
-
     var body: some View {
         FormBox(focused: metrics.showsFocus && focused) {
-            // An empty prompt rather than none, as `FormTextField` has it:
-            // the label column already says what the field is.
-            TextField(label, text: $text, prompt: Text(verbatim: ""))
+            TextField(label, text: $text, prompt: prompt.map { Text($0).foregroundStyle(Ink.text3) } ?? Text(verbatim: ""))
                 .textFieldStyle(.plain)
                 .labelsHidden()
                 .focused($focused)
                 .accessibilityLabel(label)
-                .completing(text: $text, owner: Self.owner, isFocused: focused, store: store, completion: completion)
+                .completing(text: $text, owner: owner, isFocused: focused, store: store, completion: completion)
         }
-        .categoryListAnchor(owner: Self.owner, isFocused: focused, store: store, completion: completion)
+        .categoryListAnchor(owner: owner, isFocused: focused, store: store, completion: completion)
     }
 }
 

@@ -338,7 +338,7 @@ private struct StatementReviewRow: View {
     @ViewBuilder
     private var kind: some View {
         if StatementImportModel.takesAction(row) {
-            CellPicker(
+            FormPicker(
                 label: String(localized: "Kind"),
                 selection: Binding(
                     get: { choice },
@@ -346,6 +346,7 @@ private struct StatementReviewRow: View {
                 ),
                 options: StatementActionChoice.rowChoices,
                 title: StatementText.action,
+                boxed: false,
                 // Half of a move between two accounts reads as the transfer
                 // it makes; another kind of the user's takes it apart.
                 value: pairedHalf ? StatementText.kind(.transferWallet) : StatementText.rowKind(action, resolved: row.kind),
@@ -388,7 +389,7 @@ private struct StatementReviewRow: View {
             let other = existing.fromId == model.walletId ? existing.toId : existing.fromId
             Text(verbatim: "\u{21C4} \(walletName(other))").foregroundStyle(Ink.text3)
         } else if StatementImportModel.takesAction(row), StatementActionChoice(action).isTransfer {
-            CellPicker(
+            FormPicker(
                 label: String(localized: "Wallet"),
                 selection: Binding(
                     get: { action.counterWalletId },
@@ -396,6 +397,7 @@ private struct StatementReviewRow: View {
                 ),
                 options: [nil] + model.counterWallets.map { Optional($0.id) },
                 title: walletName,
+                boxed: false,
                 value: action.counterWalletId.map { "\u{21C4} \(walletName($0))" } ?? walletName(nil),
                 tint: action.counterWalletId == nil ? Ink.text2 : ink
             )
@@ -439,7 +441,7 @@ private struct StatementReviewRow: View {
     @ViewBuilder
     private var envelope: some View {
         if StatementImportModel.takesCategory(row) {
-            CellPicker(
+            FormPicker(
                 label: String(localized: "Envelope"),
                 selection: Binding(
                     get: { model.flow(for: row) },
@@ -447,6 +449,7 @@ private struct StatementReviewRow: View {
                 ),
                 options: model.store.flows.map { Optional($0.id) },
                 title: flowName,
+                boxed: false,
                 tint: ink
             )
             .disabled(!included)
@@ -501,7 +504,7 @@ private struct StatementReviewRow: View {
                     .accessibilityHint(hint ?? "")
                 }
                 GridCell(width: ReviewColumn.choice) {
-                    CellPicker(
+                    FormPicker(
                         label: String(localized: "Matching transaction"),
                         selection: Binding(
                             get: { chosen },
@@ -509,6 +512,7 @@ private struct StatementReviewRow: View {
                         ),
                         options: model.availableChoices(for: row),
                         title: StatementText.matchChoice,
+                        boxed: false,
                         tint: chosen == .importAnyway && included ? Ink.accent : Ink.text2
                     )
                     // A row ticked off writes and records nothing, whatever
@@ -560,49 +564,6 @@ private struct StatementReviewRow: View {
         .font(Face.ui(11))
         .frame(height: 18)
         .overlay(alignment: .bottom) { Rectangle().fill(Ink.rowLine).frame(height: 1) }
-    }
-}
-
-/// A cell that opens a menu of `options`, the chosen one ticked: its value
-/// in the row's ink with a small chevron after it, so it reads as the
-/// review's other cells and still says it opens. `value` is what the cell
-/// shows when it says something else than the item's title.
-private struct CellPicker<Option: Hashable>: View {
-    let label: String
-    @Binding var selection: Option
-    let options: [Option]
-    let title: (Option) -> String
-    var value: String?
-    var tint: Color = Ink.text
-
-    var body: some View {
-        let shown = value ?? title(selection)
-        Menu {
-            Picker(label, selection: $selection) {
-                ForEach(options, id: \.self) { option in
-                    Text(title(option)).tag(option)
-                }
-            }
-            .pickerStyle(.inline)
-            .labelsHidden()
-        } label: {
-            HStack(spacing: 3) {
-                Text(verbatim: shown)
-                    .foregroundStyle(tint)
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 7, weight: .semibold))
-                    .foregroundStyle(Ink.text3)
-                Spacer(minLength: 0)
-            }
-            .contentShape(Rectangle())
-        }
-        // As `FormMenu`: the plain style keeps the label as drawn.
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .accessibilityLabel(label)
-        .accessibilityValue(shown)
     }
 }
 

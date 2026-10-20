@@ -45,7 +45,7 @@ extension RowActionTrack where Content == EmptyView {
 }
 
 /// One cell: fixed width, one line, the grid's padding. Shared with the
-/// setup tables (`Views/Setup`), which are drawn as the same kind of sheet.
+/// statement import's tables (`Views/Import`), ruled as the grid is.
 struct GridCell<Content: View>: View {
     var width: CGFloat?
     var alignment: Alignment = .leading
@@ -444,71 +444,65 @@ struct LedgerRowView: View {
 
     private func isSelected(_ field: RowField) -> Bool { cursor == LineCursor(field: field, editing: false) }
 
-    // MARK: The cells
-
+    /// `field`'s cell: `editor` while it is typed into, which a cell that is
+    /// not `editable` never is; `shown` otherwise.
     @ViewBuilder
-    private var dateCell: some View {
-        if isEdited(.date) {
-            GridCell(width: columns[.date]) { DayCell(key: key(.date), edited: edited) }
+    private func cell<Editor: View, Shown: View>(
+        _ field: RowField,
+        width: CGFloat?,
+        alignment: Alignment = .leading,
+        editable: Bool = true,
+        @ViewBuilder editor: () -> Editor,
+        @ViewBuilder shown: () -> Shown
+    ) -> some View {
+        if editable, isEdited(field) {
+            GridCell(width: width, alignment: alignment, content: editor)
         } else {
-            SheetCell(width: columns[.date], selected: isSelected(.date), onClick: { onClick(.date) }) {
-                DayLabel(date: row.occurredAt, tint: ink(Ink.text), struck: row.voided)
-            }
+            SheetCell(width: width, alignment: alignment, selected: isSelected(field), onClick: { onClick(field) }, content: shown)
+        }
+    }
+
+    private var dateCell: some View {
+        cell(.date, width: columns[.date]) {
+            CellField(field: .date, key: key(.date), edited: edited)
+        } shown: {
+            DayLabel(date: row.occurredAt, tint: ink(Ink.text), struck: row.voided)
         }
     }
 
     /// A transfer's envelopes are its two ends, as its wallets are
     /// (`walletCell`): the cell can be selected, never typed into.
-    @ViewBuilder
     private var envelopeCell: some View {
-        if isEdited(.flow), !row.isTransfer {
-            GridCell(width: columns[.flow]) {
-                EnvelopeSelectCell(
-                    placeholder: row.envelopeDisplay,
-                    store: store,
-                    choices: envelopes,
-                    key: key(.flow),
-                    edited: edited
-                )
-            }
-        } else {
-            SheetCell(width: columns[.flow], selected: isSelected(.flow), onClick: { onClick(.flow) }) {
-                text(row.envelopeColumn, Ink.text2)
-            }
+        cell(.flow, width: columns[.flow], editable: !row.isTransfer) {
+            EnvelopeSelectCell(placeholder: row.envelopeDisplay, store: store, choices: envelopes, key: key(.flow), edited: edited)
+        } shown: {
+            text(row.envelopeColumn, Ink.text2)
         }
     }
 
-    @ViewBuilder
     private var categoryCell: some View {
-        if isEdited(.category) {
-            GridCell(width: columns[.category]) {
-                CategoryCell(placeholder: "", store: store, completion: completion, key: key(.category), edited: edited)
-            }
-        } else {
-            SheetCell(width: columns[.category], selected: isSelected(.category), onClick: { onClick(.category) }) {
-                text(row.category, categoryTint)
-            }
+        cell(.category, width: columns[.category]) {
+            CategoryCell(placeholder: "", store: store, completion: completion, key: key(.category), edited: edited)
+        } shown: {
+            text(row.category, categoryTint)
         }
     }
 
-    @ViewBuilder
     private var noteCell: some View {
-        if isEdited(.note) {
-            GridCell { CellField(field: .note, key: key(.note), edited: edited) }
-        } else {
-            SheetCell(selected: isSelected(.note), onClick: { onClick(.note) }) {
-                HStack(spacing: 6) {
-                    if row.note.isEmpty {
-                        text(TransactionRow.placeholder, Ink.text3)
-                    } else {
-                        text(row.note, Ink.text)
-                    }
-                    if row.kind == .refund {
-                        RowTag(text: String(localized: "refund"), tint: Ink.positive)
-                    }
-                    if let route = row.transferRoute {
-                        RowTag(text: route, tint: ink(Ink.text2))
-                    }
+        cell(.note, width: nil) {
+            CellField(field: .note, key: key(.note), edited: edited)
+        } shown: {
+            HStack(spacing: 6) {
+                if row.note.isEmpty {
+                    text(TransactionRow.placeholder, Ink.text3)
+                } else {
+                    text(row.note, Ink.text)
+                }
+                if row.kind == .refund {
+                    RowTag(text: String(localized: "refund"), tint: Ink.positive)
+                }
+                if let route = row.transferRoute {
+                    RowTag(text: route, tint: ink(Ink.text2))
                 }
             }
         }
@@ -517,56 +511,36 @@ struct LedgerRowView: View {
     /// A transfer's wallets are its two ends, not a field: `UpdateTransaction`
     /// moves them with `from_id`/`to_id`, which the grid does not edit, so the
     /// cell can be selected, never typed into.
-    @ViewBuilder
     private var walletCell: some View {
-        if isEdited(.wallet), !row.isTransfer {
-            GridCell(width: columns[.wallet]) { CellField(field: .wallet, key: key(.wallet), edited: edited) }
-        } else {
-            SheetCell(width: columns[.wallet], selected: isSelected(.wallet), onClick: { onClick(.wallet) }) {
-                text(row.walletDisplay, Ink.text2)
-            }
+        cell(.wallet, width: columns[.wallet], editable: !row.isTransfer) {
+            CellField(field: .wallet, key: key(.wallet), edited: edited)
+        } shown: {
+            text(row.walletDisplay, Ink.text2)
         }
     }
 
     /// Who typed a row recorded for someone else is on hover only: the
     /// column stays one short name wide. A transfer is always its author's,
     /// so its cell is never typed into.
-    @ViewBuilder
     private var personCell: some View {
-        Group {
-            if isEdited(.person), row.isPersonEditable {
-                GridCell(width: columns[.person]) {
-                    CellField(
-                        field: .person,
-                        key: key(.person),
-                        edited: edited,
-                        hint: row.isOnBehalf ? LedgerAccessibility.recordedBy(row.recordedBy) : ""
-                    )
-                }
-            } else {
-                SheetCell(width: columns[.person], selected: isSelected(.person), onClick: { onClick(.person) }) {
-                    text(row.person, Ink.text2)
-                }
-            }
+        cell(.person, width: columns[.person], editable: row.isPersonEditable) {
+            CellField(
+                field: .person,
+                key: key(.person),
+                edited: edited,
+                hint: row.isOnBehalf ? LedgerAccessibility.recordedBy(row.recordedBy) : ""
+            )
+        } shown: {
+            text(row.person, Ink.text2)
         }
         .help(ifAny: row.isOnBehalf ? Self.recordedByHelp(row.recordedBy) : nil)
     }
 
-    @ViewBuilder
     private var amountCell: some View {
-        if isEdited(.amount) {
-            GridCell(width: columns[.amount], alignment: .trailing) {
-                CellField(field: .amount, key: key(.amount), edited: edited, alignment: .trailing)
-            }
-        } else {
-            SheetCell(
-                width: columns[.amount],
-                alignment: .trailing,
-                selected: isSelected(.amount),
-                onClick: { onClick(.amount) }
-            ) {
-                text(Self.amountText(row), amountTint)
-            }
+        cell(.amount, width: columns[.amount], alignment: .trailing) {
+            CellField(field: .amount, key: key(.amount), edited: edited, alignment: .trailing)
+        } shown: {
+            text(Self.amountText(row), amountTint)
         }
     }
 
@@ -654,7 +628,11 @@ extension View {
 }
 
 /// The cell being typed into, for the columns that are plain text:
-/// DESCRIZIONE, WALLET, PERSONA, IMPORTO, and DATA's day (`DayCell`).
+/// DESCRIZIONE, WALLET, PERSONA, IMPORTO, and DATA, typed into from the
+/// bare day number and saved as `29`, `29/8` or `29/8/2026`; a day alone
+/// stays inside the month on screen, and text that means no date leaves the
+/// day alone (`LedgerDate.parseDay`). Not typed into, DATA is `DayLabel`,
+/// which a text field cannot draw.
 ///
 /// `prompt` is what an empty cell says: the empty line's placeholders.
 struct CellField: View {
@@ -857,7 +835,7 @@ struct NewRowView: View {
             }
             .onTapGesture { onClick(.note) }
             if isEdited(.date) {
-                GridCell(width: columns[.date]) { DayCell(key: key(.date), edited: edited) }
+                GridCell(width: columns[.date]) { CellField(field: .date, key: key(.date), edited: edited) }
             } else {
                 cell(.date, width: columns[.date], spoken: LedgerDate.day(line.day)) {
                     DayLabel(date: line.day)
@@ -1001,24 +979,5 @@ struct NewRowView: View {
         .accessibilityLabel(field.label)
         .accessibilityValue(spoken)
         .accessibilityAction { edited.editor.edit(key(field)) }
-    }
-}
-
-// MARK: - The date cell
-
-/// DATA while it is typed into: the bare day number, which is what editing
-/// starts from, and `29`, `29/8` or `29/8/2026` accepted. A day alone stays
-/// inside the month on screen, which is how a ledger is filled in; text that
-/// means no date leaves the day alone (`LedgerDate.parseDay`, read as the
-/// cell is saved).
-///
-/// While not typed into the cell is `DayLabel`, the day and the weekday
-/// smaller and fainter, which a text field cannot draw.
-struct DayCell: View {
-    let key: CellFocus
-    let edited: EditedCell
-
-    var body: some View {
-        CellField(field: .date, key: key, edited: edited)
     }
 }
