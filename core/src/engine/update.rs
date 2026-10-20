@@ -215,36 +215,21 @@ pub(super) struct Leg {
 }
 
 impl Leg {
+    const fn new(kind: TargetKind, id: Uuid, amount: i64) -> Self {
+        Self { kind, id, amount }
+    }
+
     /// Wallet leg (ordinal 0), then flow leg, the same signed amount on both.
     pub(super) const fn entry(wallet_id: Uuid, flow_id: Uuid, signed: i64) -> [Self; 2] {
         [
-            Self {
-                kind: TargetKind::Wallet,
-                id: wallet_id,
-                amount: signed,
-            },
-            Self {
-                kind: TargetKind::Flow,
-                id: flow_id,
-                amount: signed,
-            },
+            Self::new(TargetKind::Wallet, wallet_id, signed),
+            Self::new(TargetKind::Flow, flow_id, signed),
         ]
     }
 
     /// Source leg (ordinal 0), then destination leg.
     pub(super) const fn transfer(kind: TargetKind, from: Uuid, to: Uuid, amount: i64) -> [Self; 2] {
-        [
-            Self {
-                kind,
-                id: from,
-                amount: -amount,
-            },
-            Self {
-                kind,
-                id: to,
-                amount,
-            },
-        ]
+        [Self::new(kind, from, -amount), Self::new(kind, to, amount)]
     }
 }
 
@@ -316,13 +301,7 @@ pub(super) fn load_legs(tx: &Transaction<'_>, transaction_id: Uuid) -> Result<Ve
         })?
         .collect::<std::result::Result<_, _>>()?;
     rows.into_iter()
-        .map(|(kind, id, amount)| {
-            Ok(Leg {
-                kind: TargetKind::parse(&kind)?,
-                id,
-                amount,
-            })
-        })
+        .map(|(kind, id, amount)| Ok(Leg::new(TargetKind::parse(&kind)?, id, amount)))
         .collect()
 }
 
