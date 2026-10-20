@@ -10,20 +10,16 @@
 
 mod common;
 
-use std::path::{Path, PathBuf};
-
-use chrono::NaiveDate;
-use common::{T0, all, at, entry, list};
+use common::{
+    T0, TempDb, all, at, create_vault, day, entry, flow_cmd, list, monthly_from, replayed,
+    wallet_cmd,
+};
 use rusqlite::Connection;
 use sparagne_core::{
-    Command, CommandEnvelope, Core, Currency, DomainError, FlowMode, Frequency, RecurringPatch,
-    Schedule, TransactionKind, TransactionPatch, replay,
+    Command, CommandEnvelope, Core, Currency, DomainError, FlowMode, RecurringPatch,
+    TransactionKind, TransactionPatch,
 };
 use uuid::Uuid;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /// matteo's vault with a wallet `Conto` holding 1000.00 and a `Vacanze`
 /// envelope funded with 100.00; elisa shares it.
@@ -40,24 +36,17 @@ fn setup() -> Fx {
 
 /// [`setup`] on a given database.
 fn setup_on(mut core: Core) -> Fx {
-    let vault = core
-        .execute(CommandEnvelope::create_vault(
-            "matteo",
-            "Casa",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .command_id;
+    let vault = create_vault(&mut core, "matteo", "Casa");
     let mut fx = Fx {
         core,
         vault,
         conto: Uuid::nil(),
         vacanze: Uuid::nil(),
     };
-    fx.conto = fx.run("matteo", common::wallet_cmd("Conto", 100_000));
+    fx.conto = fx.run("matteo", wallet_cmd("Conto", 100_000));
     fx.vacanze = fx.run(
         "matteo",
-        common::flow_cmd("Vacanze", FlowMode::Unlimited, false, 10_000),
+        flow_cmd("Vacanze", FlowMode::Unlimited, false, 10_000),
     );
     fx
 }
@@ -103,10 +92,6 @@ fn spend(fx: &Fx, amount: i64, person: Option<&str>) -> Command {
     Command::Expense(e)
 }
 
-fn date(y: i32, m: u32, d: u32) -> NaiveDate {
-    NaiveDate::from_ymd_opt(y, m, d).unwrap()
-}
-
 /// A monthly 780.00 expense on the 1st from November 2023 out of `wallet`,
 /// owned by `owner`.
 fn mutuo(wallet: Uuid, owner: Option<&str>) -> Command {
@@ -117,12 +102,7 @@ fn mutuo(wallet: Uuid, owner: Option<&str>) -> Command {
         flow_id: None,
         category: Some("Casa".to_string()),
         note: Some("mutuo".to_string()),
-        schedule: Schedule {
-            frequency: Frequency::Monthly { day: 1 },
-            interval: 1,
-            start_date: date(2023, 11, 1),
-            end_date: None,
-        },
+        schedule: monthly_from(1, day(2023, 11, 1)),
         owner: owner.map(str::to_string),
     }
 }
@@ -130,7 +110,7 @@ fn mutuo(wallet: Uuid, owner: Option<&str>) -> Command {
 fn execute(recurring_id: Uuid, month: u32, person: Option<&str>) -> Command {
     Command::ExecuteRecurring {
         recurring_id,
-        period_date: date(2023, month, 1),
+        period_date: day(2023, month, 1),
         occurred_at: at(T0 + i64::from(month)),
         person: person.map(str::to_string),
     }
@@ -156,21 +136,13 @@ fn set_owner(recurring_id: Uuid, owner: &str) -> Command {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Entries
-// ---------------------------------------------------------------------------
-
 #[test]
 fn an_entry_is_its_authors_unless_it_names_someone_else() {
     let mut fx = setup();
-    let own = spend(&fx, 1_000, None);
-    let own = fx.run("matteo", own);
-    let for_elisa = spend(&fx, 2_000, Some("elisa"));
-    let for_elisa = fx.run("matteo", for_elisa);
-    let blank = spend(&fx, 3_000, Some("   "));
-    let blank = fx.run("elisa", blank);
-    let padded = spend(&fx, 4_000, Some(" elisa "));
-    let padded = fx.run("matteo", padded);
+    let own = fx.run("matteo", spend(&fx, 1_000, None));
+    let for_elisa = fx.run("matteo", spend(&fx, 2_000, Some("elisa")));
+    let blank = fx.run("elisa", spend(&fx, 3_000, Some("   ")));
+    let padded = fx.run("matteo", spend(&fx, 4_000, Some(" elisa ")));
 
     assert_eq!(fx.who(own), pair("matteo", "matteo"));
     assert_eq!(fx.who(for_elisa), pair("elisa", "matteo"));
@@ -192,8 +164,7 @@ fn transfers_and_opening_balances_are_always_their_authors() {
 #[test]
 fn a_patch_may_change_only_the_person_and_a_blank_one_gives_it_back() {
     let mut fx = setup();
-    let id = spend(&fx, 1_000, None);
-    let id = fx.run("matteo", id);
+    let id = fx.run("matteo", spend(&fx, 1_000, None));
     let before = fx.core.transaction(fx.vault, id).unwrap();
 
     // A patch that carries nothing but the person is not empty.
@@ -251,10 +222,6 @@ fn a_transfer_refuses_a_person_even_a_blank_one() {
     assert_eq!(fx.who(transfer), pair("matteo", "matteo"));
 }
 
-// ---------------------------------------------------------------------------
-// Recurring templates
-// ---------------------------------------------------------------------------
-
 #[test]
 fn a_template_is_its_creators_unless_it_names_an_owner() {
     let mut fx = setup();
@@ -301,29 +268,18 @@ fn an_execution_is_for_the_person_it_names_and_recorded_by_its_author() {
     assert_eq!(fx.who(unnamed), pair("matteo", "matteo"));
 
     fx.run("matteo", set_owner(template, "matteo"));
-    let log = fx.core.commands_since(fx.vault, 0).unwrap();
-    let mut fresh = Core::open_in_memory().unwrap();
-    replay(&log, &mut fresh).unwrap();
+    let fresh = replayed(&fx.core, fx.vault);
     assert_eq!(
         fresh.transaction(fx.vault, paid).unwrap().person,
         "elisa",
         "a later owner does not move a past execution"
     );
-    assert_eq!(
-        list(&fresh, fx.vault, &all()),
-        list(&fx.core, fx.vault, &all())
-    );
 }
-
-// ---------------------------------------------------------------------------
-// Reads
-// ---------------------------------------------------------------------------
 
 #[test]
 fn people_and_the_person_filter_read_the_person_not_the_author() {
     let mut fx = setup();
-    let for_elisa = spend(&fx, 2_000, Some("elisa"));
-    let for_elisa = fx.run("matteo", for_elisa);
+    let for_elisa = fx.run("matteo", spend(&fx, 2_000, Some("elisa")));
     assert_eq!(fx.core.people(fx.vault).unwrap(), ["elisa", "matteo"]);
 
     let filter = sparagne_core::TransactionFilter {
@@ -347,10 +303,6 @@ fn people_and_the_person_filter_read_the_person_not_the_author() {
     );
     assert_eq!(fx.core.people(fx.vault).unwrap(), ["matteo"]);
 }
-
-// ---------------------------------------------------------------------------
-// The JSON of the log
-// ---------------------------------------------------------------------------
 
 /// Commands exactly as a version 3 client wrote them into the log: they
 /// parse, apply with every row on the author, and serialize back byte for
@@ -429,34 +381,18 @@ fn a_person_or_owner_is_in_the_json_only_when_named() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Migration
-// ---------------------------------------------------------------------------
-
-fn temp_database() -> PathBuf {
-    std::env::temp_dir().join(format!("sparagne-person-{}.sqlite", Uuid::now_v7()))
-}
-
-fn remove_database(path: &Path) {
-    for suffix in ["", "-wal", "-shm"] {
-        let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
-    }
-}
-
 /// A version 3 file is migrated to what a replay of its log gives: every
 /// person is the author and every owner the creator, including the period
 /// elisa executed on matteo's template.
 #[test]
 fn a_version_3_database_migrates_to_what_its_log_replays_to() {
-    let path = temp_database();
+    let db = TempDb::new("person");
     let (vault, log, paid, template) = {
-        let mut fx = setup_on(Core::open(&path).unwrap());
+        let mut fx = setup_on(Core::open(db.path()).unwrap());
         let vault = fx.vault;
-        let contanti = fx.run("elisa", common::wallet_cmd("Contanti", 5_000));
-        let matteos = spend(&fx, 1_000, None);
-        let matteos = fx.run("matteo", matteos);
-        let elisas = spend(&fx, 2_000, None);
-        let elisas = fx.run("elisa", elisas);
+        let contanti = fx.run("elisa", wallet_cmd("Contanti", 5_000));
+        let matteos = fx.run("matteo", spend(&fx, 1_000, None));
+        let elisas = fx.run("elisa", spend(&fx, 2_000, None));
         fx.run(
             "elisa",
             Command::TransferWallet {
@@ -492,7 +428,7 @@ fn a_version_3_database_migrates_to_what_its_log_replays_to() {
     // What version 3 left on disk: no person, no owner, and none of the
     // tables later versions added.
     {
-        let conn = Connection::open(&path).unwrap();
+        let conn = Connection::open(db.path()).unwrap();
         conn.execute_batch(
             "ALTER TABLE transactions DROP COLUMN person;
              ALTER TABLE recurring_templates DROP COLUMN owner;
@@ -504,23 +440,16 @@ fn a_version_3_database_migrates_to_what_its_log_replays_to() {
         .unwrap();
     }
 
-    let migrated = Core::open(&path).unwrap();
-    let mut replayed = Core::open_in_memory().unwrap();
-    replay(&log, &mut replayed).unwrap();
-
-    let rows = |core: &Core| list(core, vault, &all());
-    assert_eq!(rows(&migrated), rows(&replayed));
+    let migrated = Core::open(db.path()).unwrap();
+    assert_eq!(migrated.commands_since(vault, 0).unwrap(), log);
+    let fresh = replayed(&migrated, vault);
     assert_eq!(
         migrated.list_recurring(vault, true).unwrap(),
-        replayed.list_recurring(vault, true).unwrap()
+        fresh.list_recurring(vault, true).unwrap()
     );
     assert_eq!(
         migrated.people(vault).unwrap(),
-        replayed.people(vault).unwrap()
-    );
-    assert_eq!(
-        migrated.snapshot(vault).unwrap(),
-        replayed.snapshot(vault).unwrap()
+        fresh.people(vault).unwrap()
     );
 
     let row = migrated.transaction(vault, paid).unwrap();
@@ -530,15 +459,9 @@ fn a_version_3_database_migrates_to_what_its_log_replays_to() {
     );
     let owner = &migrated.list_recurring(vault, true).unwrap()[0];
     assert_eq!((owner.id, owner.owner.as_str()), (template, "matteo"));
-    assert!(rows(&migrated).iter().all(|t| t.person == t.created_by));
-
-    drop(migrated);
-    remove_database(&path);
+    let rows = list(&migrated, vault, &all());
+    assert!(rows.iter().all(|t| t.person == t.created_by));
 }
-
-// ---------------------------------------------------------------------------
-// The names a command carries
-// ---------------------------------------------------------------------------
 
 /// One command of every kind, each naming "elisa" where it can.
 fn every_command(name: Option<&str>) -> Vec<Command> {
@@ -560,14 +483,14 @@ fn every_command(name: Option<&str>) -> Vec<Command> {
             name: "Casa".to_string(),
         },
         Command::DeleteVault,
-        common::wallet_cmd("Conto", 0),
+        wallet_cmd("Conto", 0),
         Command::RenameWallet {
             wallet_id: id,
             name: "Conto".to_string(),
         },
         Command::ArchiveWallet { wallet_id: id },
         Command::RestoreWallet { wallet_id: id },
-        common::flow_cmd("Vacanze", FlowMode::Unlimited, false, 0),
+        flow_cmd("Vacanze", FlowMode::Unlimited, false, 0),
         Command::UpdateFlow {
             flow_id: id,
             name: None,
@@ -634,13 +557,13 @@ fn every_command(name: Option<&str>) -> Vec<Command> {
         Command::RestoreRecurring { recurring_id: id },
         Command::ExecuteRecurring {
             recurring_id: id,
-            period_date: date(2023, 11, 1),
+            period_date: day(2023, 11, 1),
             occurred_at: when,
             person: named,
         },
         Command::SkipRecurring {
             recurring_id: id,
-            period_date: date(2023, 11, 1),
+            period_date: day(2023, 11, 1),
         },
     ]
 }
