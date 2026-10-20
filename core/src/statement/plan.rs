@@ -488,21 +488,15 @@ impl Columns {
     /// A blank optional column is no column.
     fn resolve(headers: &[String], mapping: &StatementMapping) -> Result<Self> {
         let find = |name: &str| -> Result<usize> {
-            let wanted = name.trim().to_lowercase();
-            if wanted.is_empty() {
+            let name = name.trim();
+            if name.is_empty() {
                 return Err(DomainError::InvalidCommand(
                     "the mapping leaves a required column blank".to_string(),
                 ));
             }
-            headers
-                .iter()
-                .position(|h| h.trim().to_lowercase() == wanted)
-                .ok_or_else(|| {
-                    DomainError::InvalidCommand(format!(
-                        "column '{}' is not in the statement",
-                        name.trim()
-                    ))
-                })
+            csv::column(headers, name).ok_or_else(|| {
+                DomainError::InvalidCommand(format!("column '{name}' is not in the statement"))
+            })
         };
         let optional = |name: &Option<String>| -> Result<Option<usize>> {
             match name.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
@@ -636,17 +630,8 @@ impl<'a> Context<'a> {
                 "the custom date pattern is empty".to_string(),
             ));
         }
-
-        let header = records
-            .next()
-            .ok_or_else(|| DomainError::InvalidCommand("the statement is empty".to_string()))?;
-        if header.unclosed_quote {
-            return Err(DomainError::InvalidCommand(
-                "the header of the statement never closes a quote".to_string(),
-            ));
-        }
         Ok(Self {
-            columns: Columns::resolve(&header.fields, mapping)?,
+            columns: Columns::resolve(&csv::header(records)?, mapping)?,
             mapping,
             vault_id,
             wallet_id: options.wallet_id,

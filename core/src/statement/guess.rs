@@ -15,9 +15,14 @@ use super::{StatementDateFormat, StatementFormatGuess, plan};
 /// Data rows a guess reads.
 const GUESS_ROWS: usize = 50;
 
-/// The guess for the columns named `date_column` and `amount_column`
-/// (case-insensitive, trimmed, as a mapping names them).
-pub(super) fn guess(
+/// The date format and the decimal mark that read every non-empty value of
+/// the first 50 data rows of `date_column` and `amount_column` (named as a
+/// mapping names them), for a mapping that starts blank. Each is `None` when
+/// its column is not named, not in the header or empty, or when no format
+/// reads all its values; a delimiter that is not one character guesses
+/// nothing.
+#[must_use]
+pub fn guess(
     text: &str,
     delimiter: &str,
     date_column: Option<&str>,
@@ -30,20 +35,8 @@ pub(super) fn guess(
     let Some(header) = records.next() else {
         return StatementFormatGuess::default();
     };
-    let index = |name: Option<&str>| {
-        let wanted = name?.trim().to_lowercase();
-        if wanted.is_empty() {
-            return None;
-        }
-        header
-            .fields
-            .iter()
-            .position(|h| h.trim().to_lowercase() == wanted)
-    };
+    let index = |name: Option<&str>| csv::column(&header.fields, name?);
     let (date, amount) = (index(date_column), index(amount_column));
-    if date.is_none() && amount.is_none() {
-        return StatementFormatGuess::default();
-    }
     let rows: Vec<Vec<String>> = records
         .take(GUESS_ROWS)
         .map(|record| record.fields)

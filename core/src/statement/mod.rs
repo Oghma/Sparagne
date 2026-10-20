@@ -871,11 +871,8 @@ pub struct StatementFormatGuess {
     pub decimal_comma: Option<bool>,
 }
 
-/// The built-in presets.
-#[must_use]
-pub fn presets() -> Vec<StatementPreset> {
-    presets::all()
-}
+pub use guess::guess as guess_formats;
+pub use presets::all as presets;
 
 /// Delimiter, header, matching preset and a sample of a statement.
 ///
@@ -885,14 +882,7 @@ pub fn presets() -> Vec<StatementPreset> {
 pub fn detect(text: &str) -> Result<StatementDetection> {
     let delimiter = csv::sniff_delimiter(text);
     let mut records = csv::records(text, delimiter);
-    let header = records
-        .next()
-        .ok_or_else(|| DomainError::InvalidCommand("the statement is empty".to_string()))?;
-    if header.unclosed_quote {
-        return Err(DomainError::InvalidCommand(
-            "the header of the statement never closes a quote".to_string(),
-        ));
-    }
+    let headers = csv::header(&mut records)?;
     let mut rows = 0u32;
     let mut sample = Vec::new();
     for record in records {
@@ -903,26 +893,11 @@ pub fn detect(text: &str) -> Result<StatementDetection> {
     }
     Ok(StatementDetection {
         delimiter: delimiter.to_string(),
-        preset_id: presets::matching(&header.fields).map(str::to_string),
-        headers: header.fields,
+        preset_id: presets::matching(&headers).map(str::to_string),
+        headers,
         rows,
         sample,
     })
-}
-
-/// The date format and the decimal mark that read every non-empty value of
-/// the first 50 data rows of `date_column` and `amount_column`, for a
-/// mapping that starts blank. Each is `None` when its column is not named,
-/// not in the header or empty, or when no format reads all its values; a
-/// delimiter that is not one character guesses nothing.
-#[must_use]
-pub fn guess_formats(
-    text: &str,
-    delimiter: &str,
-    date_column: Option<&str>,
-    amount_column: Option<&str>,
-) -> StatementFormatGuess {
-    guess::guess(text, delimiter, date_column, amount_column)
 }
 
 /// The distinct non-empty values of `column` (named as a mapping names it,
@@ -937,13 +912,10 @@ pub fn column_values(text: &str, delimiter: &str, column: &str) -> Vec<Statement
         return Vec::new();
     };
     let mut records = csv::records(text, delimiter);
-    let wanted = column.trim().to_lowercase();
-    let Some(index) = records.next().and_then(|header| {
-        header
-            .fields
-            .iter()
-            .position(|name| !wanted.is_empty() && name.trim().to_lowercase() == wanted)
-    }) else {
+    let Some(index) = records
+        .next()
+        .and_then(|header| csv::column(&header.fields, column))
+    else {
         return Vec::new();
     };
     let mut values: Vec<(String, StatementColumnValue)> = Vec::new();

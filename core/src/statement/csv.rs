@@ -4,11 +4,13 @@
 //! Quoted fields may hold the delimiter, newlines and doubled quotes. Lines
 //! end with LF, CRLF or a lone CR. A UTF-8 BOM is dropped, every field is
 //! trimmed, and records whose fields are all empty (a blank line, or the
-//! `;;;;` some spreadsheets leave at the end) are skipped. Nothing here
+//! `;;;;` some spreadsheets leave at the end) are skipped. Reading never
 //! fails: a quote left open is reported on the record it swallowed.
 
 use std::iter::Peekable;
 use std::str::Chars;
+
+use crate::{DomainError, Result};
 
 /// The delimiters [`sniff_delimiter`] chooses among, in order of preference.
 const CANDIDATES: [char; 3] = [',', ';', '\t'];
@@ -38,7 +40,32 @@ pub(super) fn records(text: &str, delimiter: char) -> Records<'_> {
     }
 }
 
-/// Iterator returned by [`records`].
+/// The header, the first record: refused when the file has none or the
+/// header never closes a quote.
+pub(super) fn header(records: &mut Records<'_>) -> Result<Vec<String>> {
+    let header = records
+        .next()
+        .ok_or_else(|| DomainError::InvalidCommand("the statement is empty".to_string()))?;
+    if header.unclosed_quote {
+        return Err(DomainError::InvalidCommand(
+            "the header of the statement never closes a quote".to_string(),
+        ));
+    }
+    Ok(header.fields)
+}
+
+/// The position in `headers` of the column a mapping names: trimmed,
+/// whatever the case. A blank name is no column.
+pub(super) fn column(headers: &[String], name: &str) -> Option<usize> {
+    let wanted = name.trim().to_lowercase();
+    if wanted.is_empty() {
+        return None;
+    }
+    headers
+        .iter()
+        .position(|h| h.trim().to_lowercase() == wanted)
+}
+
 pub(super) struct Records<'a> {
     chars: Peekable<Chars<'a>>,
     delimiter: char,
