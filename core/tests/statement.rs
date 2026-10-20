@@ -4682,6 +4682,61 @@ fn accounts_into_their_own_wallets_write_one_transfer_per_move() {
     assert_eq!(command_count(&fx.core, fx.vault), commands);
 }
 
+/// Halves of one amount, some listed before their other half: each money-out
+/// half pairs with the closest money-in half of another account, card to bank
+/// and back, and a half left over stays what its type says.
+#[test]
+fn halves_of_one_amount_pair_card_to_bank_and_back_closest_first() {
+    let mut fx = setup();
+    let ((revolut, bbva, _), options) = three_accounts(&mut fx);
+    let leg = |account, kind, at| {
+        wallet_row(account, kind, "50.00", "Giroconto", at).replace(";false;", ";true;")
+    };
+    let text = wallet_csv(&[
+        leg("BBVA", "Income", "2026-10-01T10:00:00.000Z"),
+        leg("Revolut", "Expense", "2026-10-01T09:00:00.000Z"),
+        leg("Revolut", "Income", "2026-10-06T08:00:00.000Z"),
+        leg("BBVA", "Expense", "2026-10-05T09:00:00.000Z"),
+        leg("Revolut", "Expense", "2026-10-09T09:00:00.000Z"),
+        leg("BBVA", "Income", "2026-10-09T12:00:00.000Z"),
+        leg("BBVA", "Income", "2026-10-10T09:00:00.000Z"),
+    ]);
+    let preview = preview_with(&fx, &text, &wallet_mapping(), &options, &no_overrides());
+    assert_eq!(
+        [2, 3, 4, 5, 6, 7, 8].map(|line| row(&preview, line).paired_line),
+        [Some(3), Some(2), Some(5), Some(4), Some(7), Some(6), None]
+    );
+    let transfer = |line| {
+        let sent = row(&preview, line);
+        (sent.kind, sent.wallet_id, sent.counter_wallet_id)
+    };
+    let to_bank = (
+        Some(TransactionKind::TransferWallet),
+        Some(revolut),
+        Some(bbva),
+    );
+    assert_eq!(transfer(3), to_bank);
+    assert_eq!(
+        transfer(5),
+        (
+            Some(TransactionKind::TransferWallet),
+            Some(bbva),
+            Some(revolut)
+        )
+    );
+    assert_eq!(transfer(6), to_bank);
+    for line in [2, 4, 7] {
+        assert_eq!(
+            skip_code(row(&preview, line)),
+            "transfer_pair",
+            "line {line}"
+        );
+    }
+    let left_over = row(&preview, 8);
+    assert_eq!(left_over.status, StatementRowStatus::New);
+    assert_eq!(left_over.kind, Some(TransactionKind::Income));
+}
+
 #[test]
 fn an_account_left_out_leaves_its_moves_other_half_unpaired() {
     let mut fx = setup();
