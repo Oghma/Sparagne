@@ -92,12 +92,10 @@ pub(super) fn claim(
     standing: &HashSet<Uuid>,
     planned: &mut [Planned],
 ) -> Result<Vec<StatementLookalike>> {
-    // Each row seeks in its own wallet: its account's, else the options'.
     let seekers: Vec<usize> = (0..planned.len())
         .filter(|&at| {
             let item = &planned[at];
             item.row.paired_line.is_none()
-                && item.row.wallet_id.is_some()
                 && (seeks_transfer(item) || seeks_duplicate(item) || seeks_replace(item))
         })
         .collect();
@@ -114,12 +112,7 @@ pub(super) fn claim(
         .iter()
         .filter_map(|item| item.row.wallet_id)
         .collect();
-    let mut also: Vec<Uuid> = Vec::new();
-    for &id in &options.also_check_wallets {
-        if !also.contains(&id) {
-            also.push(id);
-        }
-    }
+    let also = options.also_check_wallets.as_slice();
     let since = options.since;
     let claims = read_claims(core, vault_id)?;
     // Every wallet is read: those a match may sit in (the rows' own, those
@@ -131,9 +124,7 @@ pub(super) fn claim(
         latest + WINDOW_SECONDS,
     )?
     .into_iter()
-    .filter(|(view, _)| {
-        !standing.contains(&view.id) && !left_before_start(view, &own, &also, since)
-    })
+    .filter(|(view, _)| !standing.contains(&view.id) && !left_before_start(view, &own, also, since))
     .map(|(view, imported)| Candidate {
         claimed: claims.entries.contains(&view.id),
         sides: claims.sides.get(&view.id).cloned().unwrap_or_default(),
@@ -153,50 +144,56 @@ pub(super) fn claim(
     statements.extend(&options.statement_wallets);
     statements.extend(&own);
     let fit = Fit {
-        also: &also,
+        also,
         span: dates.clone().min().zip(dates.max()),
         statements: &statements,
         since,
     };
-
     let mut by_amount: HashMap<i64, Vec<usize>> = HashMap::new();
     for (at, tx) in candidates.iter().enumerate() {
         by_amount.entry(tx.view.amount).or_default().push(at);
     }
+    let pairs = pair_by_amount(planned, seekers, &by_amount, |item, txs| {
+        fit.edges(item, txs, &candidates)
+    });
+    for (row, tx, edge) in pairs {
+        let user = overrides.get(&planned[row].row.line).copied();
+        settle(&mut planned[row], &candidates[tx].view, edge, user);
+    }
+    Ok(fit.lookalikes(planned, &candidates, &by_amount, overrides))
+}
+
+/// Pairs the `rows` of `planned` with the `targets` of their amount, amount
+/// by amount, the rows in date order: `edges` lists, closest first, the
+/// targets a row may take, by their position among those of its amount.
+/// Returns each pair's row, target and edge.
+fn pair_by_amount(
+    planned: &[Planned],
+    rows: Vec<usize>,
+    targets: &HashMap<i64, Vec<usize>>,
+    edges: impl Fn(&Planned, &[usize]) -> Vec<Edge>,
+) -> Vec<(usize, usize, Edge)> {
     let mut groups: BTreeMap<i64, Vec<usize>> = BTreeMap::new();
-    for &row in &seekers {
+    for row in rows {
         groups.entry(planned[row].row.amount).or_default().push(row);
     }
     let mut pairs = Vec::new();
     for (amount, mut rows) in groups {
-        let Some(txs) = by_amount.get(&amount) else {
+        let Some(targets) = targets.get(&amount) else {
             continue;
         };
         rows.sort_by_key(|&row| (planned[row].row.occurred_at, planned[row].row.line));
         let edges: Vec<Vec<Edge>> = rows
             .iter()
-            .map(|&row| fit.edges(&planned[row], txs, &candidates))
+            .map(|&row| edges(&planned[row], targets))
             .collect();
-        for (local, tx) in pair(&edges, txs.len()).into_iter().enumerate() {
-            if let Some(edge) = tx {
-                pairs.push((rows[local], txs[edge.tx], edge));
+        for (local, edge) in pair(&edges, targets.len()).into_iter().enumerate() {
+            if let Some(edge) = edge {
+                pairs.push((rows[local], targets[edge.tx], edge));
             }
         }
     }
-    for (row, tx, edge) in pairs {
-        let user = overrides.get(&planned[row].row.line).copied();
-        settle(&mut planned[row], &candidates[tx].view, edge, user);
-    }
-    let pool = Pool {
-        candidates: &candidates,
-        by_amount: &by_amount,
-    };
-    let unchecked = Unchecked {
-        also: &also,
-        statements: &statements,
-        since,
-    };
-    Ok(unchecked.lookalikes(planned, &pool, overrides))
+    pairs
 }
 
 /// Pairs the halves of the file's own moves between two of the user's
@@ -215,51 +212,26 @@ pub(super) fn pair_legs(planned: &mut [Planned], overrides: &Overrides<'_>) {
         let changed = overrides
             .get(&item.row.line)
             .is_some_and(|user| user.skip || user.action.is_some());
-        let leg = item.row.transfer_leg
-            && !changed
-            && item.row.status == StatementRowStatus::New
-            && item.row.wallet_id.is_some()
-            && item.row.occurred_at.is_some()
-            && seeks_duplicate(item);
+        let leg = item.row.transfer_leg && !changed && seeks_duplicate(item);
         leg.then(|| item.row.kind.and_then(moves_out)).flatten()
     };
-    let mut outs: BTreeMap<i64, Vec<usize>> = BTreeMap::new();
+    let mut outs = Vec::new();
     let mut ins: HashMap<i64, Vec<usize>> = HashMap::new();
     for (at, item) in planned.iter().enumerate() {
         match half(item) {
-            Some(true) => outs.entry(item.row.amount).or_default().push(at),
+            Some(true) => outs.push(at),
             Some(false) => ins.entry(item.row.amount).or_default().push(at),
             None => {}
         }
     }
-    let order =
-        |planned: &[Planned], at: usize| (planned[at].row.occurred_at, planned[at].row.line);
-    let mut pairs = Vec::new();
-    for (amount, mut rows) in outs {
-        let Some(mut halves) = ins.get(&amount).cloned() else {
-            continue;
-        };
-        rows.sort_by_key(|&at| order(planned, at));
-        halves.sort_by_key(|&at| order(planned, at));
-        let edges: Vec<Vec<Edge>> = rows
-            .iter()
-            .map(|&out| {
-                halves
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(local, &other)| {
-                        leg_edge(&planned[out].row, &planned[other].row, local)
-                    })
-                    .collect()
-            })
-            .collect();
-        for (local, edge) in pair(&edges, halves.len()).into_iter().enumerate() {
-            if let Some(edge) = edge {
-                pairs.push((rows[local], halves[edge.tx]));
-            }
-        }
+    for halves in ins.values_mut() {
+        halves.sort_by_key(|&at| (planned[at].row.occurred_at, planned[at].row.line));
     }
-    for (out, other) in pairs {
+    let pairs = pair_by_amount(planned, outs, &ins, |out, halves| {
+        let other = |(local, &at): (usize, &usize)| leg_edge(&out.row, &planned[at].row, local);
+        halves.iter().enumerate().filter_map(other).collect()
+    });
+    for (out, other, _) in pairs {
         join(planned, out, other);
     }
 }
@@ -283,11 +255,7 @@ fn leg_edge(out: &StatementRow, other: &StatementRow, local: usize) -> Option<Ed
             cost: days * DAY_COST + seconds * 3,
             found: Found::Transfer,
             days,
-            near_edge: false,
-            other_row: false,
-            in_also: false,
-            statement_row: false,
-            before_start: false,
+            hints: Hints::default(),
         }
     })
 }
@@ -344,72 +312,6 @@ fn join(planned: &mut [Planned], out: usize, other: usize) {
     half.row.counter_wallet_id = Some(from);
 }
 
-/// The transactions read, and their positions by amount.
-struct Pool<'a> {
-    candidates: &'a [Candidate],
-    by_amount: &'a HashMap<i64, Vec<usize>>,
-}
-
-/// The wallets a statement does not check for rows typed by hand.
-struct Unchecked<'a> {
-    also: &'a [Uuid],
-    /// The statements' wallets, this file's among them: never advised.
-    statements: &'a HashSet<Uuid>,
-    since: Option<NaiveDate>,
-}
-
-impl Unchecked<'_> {
-    /// For each wallet that is neither the statement's, nor checked, nor any
-    /// statement's, the new rows that matched nothing and would match an
-    /// entry there as a duplicate in a wallet also checked would: no claim
-    /// or move naming it, the money moving the row's way, at most 3 days
-    /// away, from 3 days before the start day on. The most such rows first.
-    fn lookalikes(
-        &self,
-        planned: &[Planned],
-        pool: &Pool<'_>,
-        overrides: &Overrides<'_>,
-    ) -> Vec<StatementLookalike> {
-        let mut counts: HashMap<Uuid, u32> = HashMap::new();
-        for item in planned {
-            let left_out = overrides.get(&item.row.line).is_some_and(|user| user.skip);
-            if !seeks_duplicate(item) || item.row.existing.is_some() || left_out {
-                continue;
-            }
-            let (Some(at), Some(out)) = (item.row.occurred_at, item.row.kind.and_then(moves_out))
-            else {
-                continue;
-            };
-            let mut found = HashSet::new();
-            for &tx in pool.by_amount.get(&item.row.amount).into_iter().flatten() {
-                let candidate = &pool.candidates[tx];
-                let Some(id) = candidate.view.wallet_id else {
-                    continue;
-                };
-                let day = candidate.view.occurred_at.date_naive();
-                let unchecked = !self.also.contains(&id) && !self.statements.contains(&id);
-                if unchecked
-                    && !candidate.claimed
-                    && moves_out(candidate.view.kind) == Some(out)
-                    && (at.date_naive() - day).num_days().abs() <= DUPLICATE_DAYS
-                    && self
-                        .since
-                        .is_none_or(|since| (since - day).num_days() <= DUPLICATE_DAYS)
-                    && found.insert(id)
-                {
-                    *counts.entry(id).or_default() += 1;
-                }
-            }
-        }
-        let mut lookalikes: Vec<StatementLookalike> = counts
-            .into_iter()
-            .map(|(wallet_id, rows)| StatementLookalike { wallet_id, rows })
-            .collect();
-        lookalikes.sort_by(|a, b| b.rows.cmp(&a.rows).then(a.wallet_id.cmp(&b.wallet_id)));
-        lookalikes
-    }
-}
-
 /// A transaction a row may match.
 struct Candidate {
     view: TransactionView,
@@ -435,6 +337,12 @@ struct Edge {
     found: Found,
     /// Calendar days between the row and the transaction.
     days: i64,
+    hints: Hints,
+}
+
+/// What a fitting transaction says about the default, beside the days.
+#[derive(Clone, Copy, Debug, Default)]
+struct Hints {
     /// The transaction stands for a row of another export and sits near the
     /// first or last day of the file: the row is imported by default.
     near_edge: bool,
@@ -452,15 +360,6 @@ struct Edge {
     /// The transaction is dated before [`StatementOptions::since`]: never
     /// replaced by default.
     before_start: bool,
-}
-
-/// What a fitting transaction says about the default, beside the days.
-#[derive(Clone, Copy, Default)]
-struct Hints {
-    near_edge: bool,
-    other_row: bool,
-    in_also: bool,
-    statement_row: bool,
 }
 
 impl Hints {
@@ -489,10 +388,7 @@ impl Fit<'_> {
     /// The transactions among `txs` (positions in `candidates`) that may
     /// stand for `item`, closest first, seen from the row's own wallet.
     fn edges(&self, item: &Planned, txs: &[usize], candidates: &[Candidate]) -> Vec<Edge> {
-        let Some(wallet) = item.row.wallet_id else {
-            return Vec::new();
-        };
-        let Some(at) = item.row.occurred_at else {
+        let (Some(wallet), Some(at)) = (item.row.wallet_id, item.row.occurred_at) else {
             return Vec::new();
         };
         let mut edges: Vec<(Edge, i64, Uuid)> = Vec::new();
@@ -518,18 +414,15 @@ impl Fit<'_> {
                     .flatten()
                     .map(|hints| (Found::Replace, hints))
             };
-            if let Some((found, hints)) = fit {
+            if let Some((found, mut hints)) = fit {
+                hints.before_start = self.since.is_some_and(|since| then.date_naive() < since);
                 let seconds = (at.timestamp() - then.timestamp()).abs();
                 let edge = Edge {
                     tx: local,
                     cost: days * DAY_COST + seconds * 3 + found.rank(),
                     found,
                     days,
-                    near_edge: hints.near_edge,
-                    other_row: hints.other_row,
-                    in_also: hints.in_also,
-                    statement_row: hints.statement_row,
-                    before_start: self.since.is_some_and(|since| then.date_naive() < since),
+                    hints,
                 };
                 edges.push((edge, then.timestamp(), candidate.view.id));
             }
@@ -597,10 +490,10 @@ impl Fit<'_> {
                 let other_row = tx.claimed || tx.imported;
                 let in_also = self.also.contains(&id);
                 Hints {
-                    near_edge: false,
                     other_row,
                     in_also,
                     statement_row: other_row && !in_also && self.statements.contains(&id),
+                    ..Hints::default()
                 }
             }),
             Some(id) if id == wallet && way == out => self
@@ -631,6 +524,57 @@ impl Fit<'_> {
         let day = tx.occurred_at.date_naive();
         (first <= day && day <= last)
             .then(|| (day - first).num_days() <= margin || (last - day).num_days() <= margin)
+    }
+
+    /// For each wallet that is neither the statement's, nor checked, nor any
+    /// statement's, the new rows that matched nothing and would match an
+    /// entry there as a duplicate in a wallet also checked would: no claim
+    /// or move naming it, the money moving the row's way, at most 3 days
+    /// away, from 3 days before the start day on. The most such rows first.
+    fn lookalikes(
+        &self,
+        planned: &[Planned],
+        candidates: &[Candidate],
+        by_amount: &HashMap<i64, Vec<usize>>,
+        overrides: &Overrides<'_>,
+    ) -> Vec<StatementLookalike> {
+        let mut counts: HashMap<Uuid, u32> = HashMap::new();
+        for item in planned {
+            let left_out = overrides.get(&item.row.line).is_some_and(|user| user.skip);
+            if !seeks_duplicate(item) || item.row.existing.is_some() || left_out {
+                continue;
+            }
+            let (Some(at), Some(out)) = (item.row.occurred_at, item.row.kind.and_then(moves_out))
+            else {
+                continue;
+            };
+            let mut found = HashSet::new();
+            for &tx in by_amount.get(&item.row.amount).into_iter().flatten() {
+                let candidate = &candidates[tx];
+                let Some(id) = candidate.view.wallet_id else {
+                    continue;
+                };
+                let day = candidate.view.occurred_at.date_naive();
+                let unchecked = !self.also.contains(&id) && !self.statements.contains(&id);
+                if unchecked
+                    && !candidate.claimed
+                    && moves_out(candidate.view.kind) == Some(out)
+                    && (at.date_naive() - day).num_days().abs() <= DUPLICATE_DAYS
+                    && self
+                        .since
+                        .is_none_or(|since| (since - day).num_days() <= DUPLICATE_DAYS)
+                    && found.insert(id)
+                {
+                    *counts.entry(id).or_default() += 1;
+                }
+            }
+        }
+        let mut lookalikes: Vec<StatementLookalike> = counts
+            .into_iter()
+            .map(|(wallet_id, rows)| StatementLookalike { wallet_id, rows })
+            .collect();
+        lookalikes.sort_by(|a, b| b.rows.cmp(&a.rows).then(a.wallet_id.cmp(&b.wallet_id)));
+        lookalikes
     }
 }
 
@@ -805,15 +749,14 @@ fn settle(
     edge: Edge,
     user: Option<&StatementRowOverride>,
 ) {
-    // Seekers all have a wallet; the nil id matches no transaction.
-    let wallet = item.row.wallet_id.unwrap_or_default();
     let found = edge.found;
     let asked = user.and_then(|user| user.on_match);
-    let movable = found == Found::Duplicate && tx.wallet_id != Some(wallet);
+    // A seeker always has a wallet.
+    let movable = found == Found::Duplicate && tx.wallet_id != item.row.wallet_id;
     let (default, choice) = if found == Found::Replace {
         (replace_choice(edge, None), replace_choice(edge, asked))
     } else {
-        let default = if edge.near_edge {
+        let default = if edge.hints.near_edge {
             StatementMatchChoice::ImportAnyway
         } else if movable {
             StatementMatchChoice::MoveExisting
@@ -833,7 +776,7 @@ fn settle(
     item.row.existing = Some(tx.clone());
     item.row.match_choice = Some(choice);
     item.row.default_choice = Some(default);
-    item.replaces_other_row = found == Found::Replace && edge.other_row;
+    item.replaces_other_row = found == Found::Replace && edge.hints.other_row;
     if user.is_some_and(|user| user.skip) {
         item.row.status = super::plan::skipped_by_you();
         item.command = None;
@@ -851,7 +794,7 @@ fn settle(
     item.row.status = match found {
         Found::Transfer => {
             item.row.kind = Some(TransactionKind::TransferWallet);
-            item.row.counter_wallet_id = if tx.from_id == Some(wallet) {
+            item.row.counter_wallet_id = if tx.from_id == item.row.wallet_id {
                 tx.to_id
             } else {
                 tx.from_id
@@ -875,11 +818,12 @@ fn settle(
 /// on). Never one dated before the start day, nor near the file's edges:
 /// the row is imported beside it.
 fn replace_choice(edge: Edge, asked: Option<StatementMatchChoice>) -> StatementMatchChoice {
-    let likely = edge.statement_row || (edge.days <= 1 && !edge.in_also);
+    let hints = edge.hints;
+    let likely = hints.statement_row || (edge.days <= 1 && !hints.in_also);
     match asked {
         Some(StatementMatchChoice::ReplaceExisting) => StatementMatchChoice::ReplaceExisting,
         Some(_) => StatementMatchChoice::ImportAnyway,
-        None if likely && !edge.near_edge && !edge.before_start => {
+        None if likely && !hints.near_edge && !hints.before_start => {
             StatementMatchChoice::ReplaceExisting
         }
         None => StatementMatchChoice::ImportAnyway,
@@ -1033,11 +977,7 @@ mod tests {
             cost: days * DAY_COST,
             found: Found::Duplicate,
             days,
-            near_edge: false,
-            other_row: false,
-            in_also: false,
-            statement_row: false,
-            before_start: false,
+            hints: Hints::default(),
         }
     }
 
