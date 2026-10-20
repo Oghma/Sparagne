@@ -12,8 +12,8 @@ use uuid::Uuid;
 use super::{check_amount, require_active_flow};
 
 use crate::{
-    CommandEnvelope, DomainError, Result, TransactionKind, TransactionPatch,
-    command::explicit_person,
+    CommandEnvelope, DomainError, Result, TargetKind, TransactionKind, TransactionPatch,
+    command::explicit_person, query::LEGS_SQL,
 };
 
 pub(super) fn update_transaction(
@@ -41,10 +41,10 @@ pub(super) fn update_transaction(
             entry_legs(tx, env, patch, &row, &old_legs, amount)?
         }
         TransactionKind::TransferWallet => {
-            transfer_legs(tx, env, patch, &row, &old_legs, Target::Wallet, amount)?
+            transfer_legs(tx, env, patch, &row, &old_legs, TargetKind::Wallet, amount)?
         }
         TransactionKind::TransferFlow => {
-            transfer_legs(tx, env, patch, &row, &old_legs, Target::Flow, amount)?
+            transfer_legs(tx, env, patch, &row, &old_legs, TargetKind::Flow, amount)?
         }
     };
 
@@ -83,24 +83,7 @@ pub(super) fn update_transaction(
         "DELETE FROM legs WHERE transaction_id = ?1",
         params![transaction_id],
     )?;
-    let [first, second] = new_legs;
-    super::insert_leg(
-        tx,
-        transaction_id,
-        0,
-        first.kind.as_str(),
-        first.id,
-        first.amount,
-    )?;
-    super::insert_leg(
-        tx,
-        transaction_id,
-        1,
-        second.kind.as_str(),
-        second.id,
-        second.amount,
-    )?;
-    Ok(())
+    super::insert_legs(tx, transaction_id, &new_legs)
 }
 
 // ---------------------------------------------------------------------------
@@ -124,11 +107,11 @@ fn entry_legs(
     }
     let wallet_id = match patch.wallet_id {
         Some(id) => id,
-        None => single_target(old_legs, Target::Wallet)?,
+        None => single_target(old_legs, TargetKind::Wallet)?,
     };
     let flow_id = match patch.flow_id {
         Some(id) => id,
-        None => single_target(old_legs, Target::Flow)?,
+        None => single_target(old_legs, TargetKind::Flow)?,
     };
     super::resolve_wallet(tx, env.vault_id, Some(wallet_id))?;
     require_active_flow(tx, env.vault_id, flow_id)?;
@@ -141,13 +124,7 @@ fn entry_legs(
     } else {
         amount
     };
-    Ok((
-        [
-            Leg::new(Target::Wallet, wallet_id, signed),
-            Leg::new(Target::Flow, flow_id, signed),
-        ],
-        category_id,
-    ))
+    Ok((Leg::entry(wallet_id, flow_id, signed), category_id))
 }
 
 /// Source leg (ordinal 0) and destination leg (ordinal 1) of a transfer. The
@@ -158,7 +135,7 @@ fn transfer_legs(
     patch: &TransactionPatch,
     row: &Row,
     old_legs: &[Leg],
-    kind: Target,
+    kind: TargetKind,
     amount: i64,
 ) -> Result<([Leg; 2], Uuid)> {
     if patch.category.is_some() || patch.wallet_id.is_some() || patch.flow_id.is_some() {
@@ -183,16 +160,13 @@ fn transfer_legs(
     }
     for id in [from, to] {
         match kind {
-            Target::Wallet => {
+            TargetKind::Wallet => {
                 super::resolve_wallet(tx, env.vault_id, Some(id))?;
             }
-            Target::Flow => require_active_flow(tx, env.vault_id, id)?,
+            TargetKind::Flow => require_active_flow(tx, env.vault_id, id)?,
         }
     }
-    Ok((
-        [Leg::new(kind, from, -amount), Leg::new(kind, to, amount)],
-        row.category_id,
-    ))
+    Ok((Leg::transfer(kind, from, to, amount), row.category_id))
 }
 
 // ---------------------------------------------------------------------------
@@ -208,7 +182,7 @@ fn apply_balance_changes(
     old: &[Leg],
     new: &[Leg],
 ) -> Result<()> {
-    let mut targets: Vec<(Target, Uuid)> = Vec::new();
+    let mut targets: Vec<(TargetKind, Uuid)> = Vec::new();
     for leg in old.iter().chain(new) {
         if !targets.contains(&(leg.kind, leg.id)) {
             targets.push((leg.kind, leg.id));
@@ -217,22 +191,14 @@ fn apply_balance_changes(
     for (kind, id) in targets {
         let before = amount_on(old, kind, id);
         let after = amount_on(new, kind, id);
-        if before == after {
-            continue;
-        }
-        match kind {
-            Target::Wallet => super::adjust_wallet(tx, id, after - before)?,
-            Target::Flow => {
-                let mut flow = super::load_flow(tx, vault_id, id)?;
-                flow.apply_leg_change(before, after)?;
-                super::save_flow(tx, &flow)?;
-            }
+        if before != after {
+            super::move_leg(tx, vault_id, kind, id, before, after)?;
         }
     }
     Ok(())
 }
 
-fn amount_on(legs: &[Leg], kind: Target, id: Uuid) -> i64 {
+fn amount_on(legs: &[Leg], kind: TargetKind, id: Uuid) -> i64 {
     legs.iter()
         .filter(|leg| leg.kind == kind && leg.id == id)
         .map(|leg| leg.amount)
@@ -243,15 +209,9 @@ fn amount_on(legs: &[Leg], kind: Target, id: Uuid) -> i64 {
 // Rows
 // ---------------------------------------------------------------------------
 
-/// What a leg points at.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Target {
-    Wallet,
-    Flow,
-}
-
-impl Target {
-    const fn as_str(self) -> &'static str {
+impl TargetKind {
+    /// `legs.target_kind` of this side.
+    pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::Wallet => "wallet",
             Self::Flow => "flow",
@@ -269,17 +229,46 @@ impl Target {
     }
 }
 
+/// One side of a transaction: a signed amount on a wallet or a flow.
 #[derive(Clone, Copy)]
-struct Leg {
-    kind: Target,
-    id: Uuid,
-    /// Signed.
-    amount: i64,
+pub(super) struct Leg {
+    pub(super) kind: TargetKind,
+    pub(super) id: Uuid,
+    pub(super) amount: i64,
 }
 
 impl Leg {
-    const fn new(kind: Target, id: Uuid, amount: i64) -> Self {
-        Self { kind, id, amount }
+    /// An entry's wallet leg (ordinal 0) and flow leg (1), the same signed
+    /// amount on both.
+    pub(super) const fn entry(wallet_id: Uuid, flow_id: Uuid, signed: i64) -> [Self; 2] {
+        [
+            Self {
+                kind: TargetKind::Wallet,
+                id: wallet_id,
+                amount: signed,
+            },
+            Self {
+                kind: TargetKind::Flow,
+                id: flow_id,
+                amount: signed,
+            },
+        ]
+    }
+
+    /// A transfer's source leg (ordinal 0) and destination leg (1).
+    pub(super) const fn transfer(kind: TargetKind, from: Uuid, to: Uuid, amount: i64) -> [Self; 2] {
+        [
+            Self {
+                kind,
+                id: from,
+                amount: -amount,
+            },
+            Self {
+                kind,
+                id: to,
+                amount,
+            },
+        ]
     }
 }
 
@@ -343,22 +332,26 @@ fn load_transaction(tx: &Transaction<'_>, vault_id: Uuid, id: Uuid) -> Result<Ro
     })
 }
 
-fn load_legs(tx: &Transaction<'_>, transaction_id: Uuid) -> Result<Vec<Leg>> {
-    let mut stmt = tx.prepare(
-        "SELECT target_kind, target_id, amount FROM legs WHERE transaction_id = ?1 ORDER BY ordinal",
-    )?;
+pub(super) fn load_legs(tx: &Transaction<'_>, transaction_id: Uuid) -> Result<Vec<Leg>> {
+    let mut stmt = tx.prepare(LEGS_SQL)?;
     let rows: Vec<(String, Uuid, i64)> = stmt
         .query_map(params![transaction_id], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?))
         })?
         .collect::<std::result::Result<_, _>>()?;
     rows.into_iter()
-        .map(|(kind, id, amount)| Ok(Leg::new(Target::parse(&kind)?, id, amount)))
+        .map(|(kind, id, amount)| {
+            Ok(Leg {
+                kind: TargetKind::parse(&kind)?,
+                id,
+                amount,
+            })
+        })
         .collect()
 }
 
 /// The only leg of that kind; entries have exactly one wallet and one flow.
-fn single_target(legs: &[Leg], kind: Target) -> Result<Uuid> {
+fn single_target(legs: &[Leg], kind: TargetKind) -> Result<Uuid> {
     let mut found = legs.iter().filter(|leg| leg.kind == kind);
     match (found.next(), found.next()) {
         (Some(leg), None) => Ok(leg.id),
@@ -370,7 +363,7 @@ fn single_target(legs: &[Leg], kind: Target) -> Result<Uuid> {
 }
 
 /// Source and destination of a transfer, in ordinal order.
-fn endpoints(legs: &[Leg], kind: Target) -> Result<(Uuid, Uuid)> {
+fn endpoints(legs: &[Leg], kind: TargetKind) -> Result<(Uuid, Uuid)> {
     match legs {
         [from, to] if from.kind == kind && to.kind == kind => Ok((from.id, to.id)),
         _ => Err(DomainError::Storage(

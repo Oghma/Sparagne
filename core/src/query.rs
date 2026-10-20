@@ -196,12 +196,14 @@ pub(crate) fn transaction_view(r: &rusqlite::Row<'_>) -> rusqlite::Result<Transa
     })
 }
 
+/// The legs of the transaction `?1`, in ordinal order.
+pub(crate) const LEGS_SQL: &str =
+    "SELECT target_kind, target_id, amount FROM legs WHERE transaction_id = ?1 ORDER BY ordinal";
+
 /// Fills in the legs of `views` and the ids [`leg_shape`] sorts out of them,
 /// with one prepared statement for the whole list.
 pub(crate) fn load_legs(conn: &rusqlite::Connection, views: &mut [TransactionView]) -> Result<()> {
-    let mut stmt = conn.prepare(
-        "SELECT target_kind, target_id, amount FROM legs WHERE transaction_id = ?1 ORDER BY ordinal",
-    )?;
+    let mut stmt = conn.prepare(LEGS_SQL)?;
     for view in views {
         view.legs = stmt
             .query_map(params![view.id], |r| {

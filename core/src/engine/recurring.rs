@@ -14,7 +14,7 @@ use uuid::Uuid;
 use super::{check_amount, encode_schedule, invalid, parse_date, require_active_flow};
 
 use crate::{
-    CommandEnvelope, Core, DomainError, RecurringPatch, Result, TransactionKind,
+    CommandEnvelope, Core, DomainError, Entry, RecurringPatch, Result, TransactionKind,
     command::explicit_person,
     normalize_category_key,
     recurring::{PendingRecurring, RecurringRunView, RecurringView, RunOutcome, Schedule},
@@ -187,45 +187,30 @@ pub(super) fn restore_recurring(
     Ok(())
 }
 
-/// Returns the id of the created transaction (the command id). `person` is
-/// already resolved: the one the command names, else its author, never the
-/// template's owner (see `Command::ExecuteRecurring`).
+/// Posts the template as the entry the command would be, then records the
+/// run. Returns the id of the created transaction (the command id). `person`
+/// is the command's, never the template's owner (see
+/// `Command::ExecuteRecurring`).
 pub(super) fn execute_recurring(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
     recurring_id: Uuid,
     period_date: NaiveDate,
     occurred_at: DateTime<FixedOffset>,
-    person: &str,
+    person: Option<&str>,
     now: i64,
 ) -> Result<Uuid> {
     let template = due_template(tx, env.vault_id, recurring_id, period_date)?;
-    let wallet_id = super::resolve_wallet(tx, env.vault_id, template.wallet_id)?;
-    let flow_id = match template.flow_id {
-        None => super::unallocated_id(tx, env.vault_id)?,
-        Some(id) => {
-            check_flow(tx, env.vault_id, Some(id))?;
-            id
-        }
-    };
-    let category_id = super::resolve_category(tx, env, template.category.as_deref())?;
-    let signed = match template.kind {
-        TransactionKind::Expense => -template.amount,
-        _ => template.amount,
-    };
-    super::post_entry(
-        tx,
-        env,
-        env.id,
-        template.kind,
-        signed,
-        wallet_id,
-        flow_id,
-        category_id,
-        template.note,
+    let entry = Entry {
+        amount: template.amount,
+        wallet_id: template.wallet_id,
+        flow_id: template.flow_id,
+        category: template.category,
+        note: template.note,
         occurred_at,
-        person,
-    )?;
+        person: person.map(str::to_string),
+    };
+    super::entry(tx, env, template.kind, &entry)?;
     insert_run(
         tx,
         env,
@@ -526,4 +511,94 @@ fn normalize_category(input: Option<&str>) -> Result<Option<String>> {
     };
     normalize_category_key(raw)?;
     Ok(Some(raw.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use chrono::TimeZone;
+
+    use super::*;
+    use crate::{Command, Currency, FlowMode, TransactionView, recurring::Frequency};
+
+    /// An executed period is the entry its template describes: the same row
+    /// and legs as an expense typed with the template's fields, for the
+    /// person the command names.
+    #[test]
+    fn an_execution_posts_the_entry_of_its_template() {
+        let mut core = Core::open_in_memory().unwrap();
+        let vault = core
+            .execute(CommandEnvelope::create_vault(
+                "alice",
+                "Casa",
+                Currency::Eur,
+            ))
+            .unwrap()
+            .command_id;
+        let mut run = |command| {
+            core.execute(CommandEnvelope::new(vault, "alice", command))
+                .unwrap()
+                .result_id
+                .unwrap()
+        };
+        let at = FixedOffset::east_opt(3600)
+            .unwrap()
+            .with_ymd_and_hms(2026, 1, 1, 9, 0, 0)
+            .unwrap();
+        let wallet = run(Command::CreateWallet {
+            name: "Cash".to_string(),
+            opening_balance: 10_000,
+            occurred_at: at,
+        });
+        let flow = run(Command::CreateFlow {
+            name: "Home".to_string(),
+            mode: FlowMode::Unlimited,
+            allow_negative: false,
+            opening_allocation: 5_000,
+            occurred_at: at,
+        });
+        let entry = Entry {
+            amount: 2_500,
+            wallet_id: Some(wallet),
+            flow_id: Some(flow),
+            category: Some(" Rent ".to_string()),
+            note: Some(" monthly ".to_string()),
+            occurred_at: at,
+            person: Some("bob".to_string()),
+        };
+        let template = run(Command::CreateRecurring {
+            transaction_kind: TransactionKind::Expense,
+            amount: entry.amount,
+            wallet_id: entry.wallet_id,
+            flow_id: entry.flow_id,
+            category: entry.category.clone(),
+            note: entry.note.clone(),
+            schedule: Schedule {
+                frequency: Frequency::Monthly { day: 1 },
+                interval: 1,
+                start_date: at.date_naive(),
+                end_date: None,
+            },
+            owner: None,
+        });
+        let executed = run(Command::ExecuteRecurring {
+            recurring_id: template,
+            period_date: at.date_naive(),
+            occurred_at: at,
+            person: entry.person.clone(),
+        });
+        let typed = run(Command::Expense(entry));
+
+        let executed = core.transaction(vault, executed).unwrap();
+        let typed = core.transaction(vault, typed).unwrap();
+        assert_eq!(
+            TransactionView {
+                id: typed.id,
+                ..executed
+            },
+            typed
+        );
+        assert_eq!(typed.person, "bob");
+    }
 }
