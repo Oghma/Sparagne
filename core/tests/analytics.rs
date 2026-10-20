@@ -113,6 +113,7 @@ fn flow_person_totals_splits_by_envelope_and_person_with_net_expense() {
 #[test]
 fn flow_person_totals_ignores_transfers_and_voided_and_rows_outside_the_range() {
     let mut s = shared_month();
+    let w = Some(s.fx.wallet);
     let vault = s.fx.vault;
 
     // A flow transfer between the two envelopes must not show up as spending.
@@ -126,13 +127,7 @@ fn flow_person_totals_ignores_transfers_and_voided_and_rows_outside_the_range() 
     // A row well past the window.
     s.fx.run_as(
         "elisa",
-        Command::Expense(entry(
-            777,
-            Some(s.fx.wallet),
-            Some(s.cash),
-            Some("Fuori"),
-            T0 + 90 * DAY,
-        )),
+        Command::Expense(entry(777, w, Some(s.cash), Some("Fuori"), T0 + 90 * DAY)),
     );
 
     let rows =
@@ -160,15 +155,10 @@ fn flow_person_totals_rejects_an_inverted_range() {
 #[test]
 fn every_aggregation_follows_the_person_not_who_recorded_the_row() {
     let mut s = shared_month();
+    let w = Some(s.fx.wallet);
     let vault = s.fx.vault;
     // matteo records elisa's dinner on varie: hers in every view.
-    let mut dinner = entry(
-        40,
-        Some(s.fx.wallet),
-        Some(s.varie),
-        Some("Ristoranti"),
-        T0 + 5 * DAY,
-    );
+    let mut dinner = entry(40, w, Some(s.varie), Some("Ristoranti"), T0 + 5 * DAY);
     dinner.person = Some("elisa".to_string());
     s.fx.run_as("matteo", Command::Expense(dinner));
     let (from, to) = (utc(T0 - DAY), utc(T0 + 30 * DAY));
@@ -420,6 +410,7 @@ fn year_breakdown_puts_wallet_openings_in_their_own_column() {
 #[test]
 fn year_breakdown_splits_expenses_by_cap_and_nets_refunds_inside_the_group() {
     let s = year_fx();
+    let w = Some(s.fx.wallet);
     let rows = s.fx.core.year_breakdown(s.fx.vault, year_bounds()).unwrap();
     let elisa = rows
         .iter()
@@ -436,13 +427,7 @@ fn year_breakdown_splits_expenses_by_cap_and_nets_refunds_inside_the_group() {
     let mut s = s;
     s.fx.run_as(
         "elisa",
-        Command::Refund(entry(
-            70,
-            Some(s.fx.wallet),
-            Some(s.fondo),
-            Some("Casa"),
-            T0 + 12 * DAY,
-        )),
+        Command::Refund(entry(70, w, Some(s.fondo), Some("Casa"), T0 + 12 * DAY)),
     );
     let rows = s.fx.core.year_breakdown(s.fx.vault, year_bounds()).unwrap();
     let late = rows
@@ -527,6 +512,7 @@ fn category_bucket_totals_put_a_row_on_a_boundary_in_the_later_bucket() {
 #[test]
 fn category_bucket_totals_net_refunds_inside_the_bucket_and_floor_at_zero() {
     let mut s = shared_month();
+    let w = Some(s.fx.wallet);
     let bounds = vec![utc(T0), utc(T0 + 30 * DAY)];
     let rows =
         s.fx.core
@@ -541,13 +527,7 @@ fn category_bucket_totals_net_refunds_inside_the_bucket_and_floor_at_zero() {
     // A refund larger than what Svago spent floors it at zero, still counted.
     s.fx.run_as(
         "matteo",
-        Command::Refund(entry(
-            40,
-            Some(s.fx.wallet),
-            Some(s.varie),
-            Some("Svago"),
-            T0 + 5 * DAY,
-        )),
+        Command::Refund(entry(40, w, Some(s.varie), Some("Svago"), T0 + 5 * DAY)),
     );
     let rows =
         s.fx.core

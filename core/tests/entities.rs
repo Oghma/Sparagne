@@ -448,14 +448,9 @@ fn rename_wallet_trims_and_keeps_names_unique() {
 #[test]
 fn wallet_archive_requires_a_zero_balance_and_refuses_new_legs() {
     let mut fx = setup();
+    let w = Some(fx.wallet);
     let spare = fx.id(wallet_cmd("Spare", 0));
-    fx.run(Command::Income(entry(
-        1000,
-        Some(fx.wallet),
-        None,
-        None,
-        T0,
-    )));
+    fx.run(Command::Income(entry(1000, w, None, None, T0)));
 
     let err = fx
         .try_run(Command::ArchiveWallet {

@@ -64,14 +64,9 @@ fn transaction_returns_legs_and_voided_flag_and_notfound_on_missing_or_wrong_vau
 #[test]
 fn listed_rows_carry_their_shape() {
     let mut fx = setup();
+    let w = Some(fx.wallet);
     let bank = fx.id(wallet_cmd("Bank", 1000));
-    let expense = fx.id(Command::Expense(entry(
-        100,
-        Some(fx.wallet),
-        None,
-        Some("Food"),
-        T0 + 1,
-    )));
+    let expense = fx.id(Command::Expense(entry(100, w, None, Some("Food"), T0 + 1)));
     let transfer = fx.id(Command::TransferWallet {
         amount: 50,
         from_wallet_id: fx.wallet,
@@ -109,22 +104,17 @@ fn listed_rows_carry_their_shape() {
 #[test]
 fn recent_usage_orders_by_last_use_respects_limit_and_ignores_voided_and_transfers() {
     let mut fx = setup();
+    let w = Some(fx.wallet);
     let bank = fx.id(wallet_cmd("Bank", 0));
     let fun = fx.id(flow_cmd("Fun", FlowMode::Unlimited, true, 0));
     let trips = fx.id(flow_cmd("Trips", FlowMode::Unlimited, true, 0));
 
     // Salary: Cash / Unallocated, oldest.
-    fx.run(Command::Income(entry(
-        1000,
-        Some(fx.wallet),
-        None,
-        Some("Salary"),
-        T0,
-    )));
+    fx.run(Command::Income(entry(1000, w, None, Some("Salary"), T0)));
     // Food: Cash / Fun.
     fx.run(Command::Expense(entry(
         10,
-        Some(fx.wallet),
+        w,
         Some(fun),
         Some("Food"),
         T0 + 1,
@@ -140,7 +130,7 @@ fn recent_usage_orders_by_last_use_respects_limit_and_ignores_voided_and_transfe
     // Old: Cash / Fun, newer than Food but voided, so must not count.
     let old = fx.id(Command::Expense(entry(
         5,
-        Some(fx.wallet),
+        w,
         Some(fun),
         Some("Old"),
         T0 + 3,
@@ -175,21 +165,10 @@ fn recent_usage_orders_by_last_use_respects_limit_and_ignores_voided_and_transfe
 #[test]
 fn recent_usage_excludes_system_category_even_when_most_recent() {
     let mut fx = setup();
-    fx.run(Command::Expense(entry(
-        1,
-        Some(fx.wallet),
-        None,
-        Some("Food"),
-        T0,
-    )));
+    let w = Some(fx.wallet);
+    fx.run(Command::Expense(entry(1, w, None, Some("Food"), T0)));
     // Blank category -> system "Uncategorized", most recent of the two.
-    fx.run(Command::Expense(entry(
-        1,
-        Some(fx.wallet),
-        None,
-        None,
-        T0 + 1,
-    )));
+    fx.run(Command::Expense(entry(1, w, None, None, T0 + 1)));
 
     let usage = fx.core.recent_usage(fx.vault, utc(T0), 10).unwrap();
     assert_eq!(usage.categories, vec![category_id(&fx, "Food")]);

@@ -120,17 +120,12 @@ fn flow(fx: &mut Fx, name: &str) -> Uuid {
 #[test]
 fn update_transaction_updates_balances() {
     let mut fx = setup();
+    let w = Some(fx.wallet);
     let vacanze = flow(&mut fx, "Vacanze");
-    fx.run(Command::Income(entry(
-        1000,
-        Some(fx.wallet),
-        Some(vacanze),
-        None,
-        T0 + 1,
-    )));
+    fx.run(Command::Income(entry(1000, w, Some(vacanze), None, T0 + 1)));
     let expense = fx.id(Command::Expense(entry(
         100,
-        Some(fx.wallet),
+        w,
         Some(vacanze),
         Some("food"),
         T0 + 2,
@@ -185,22 +180,11 @@ fn update_income_can_retarget_wallet_and_flow_and_keeps_metadata_when_omitted() 
 #[test]
 fn update_expense_retarget_flow_fails_if_insufficient_and_is_atomic() {
     let mut fx = setup();
+    let w = Some(fx.wallet);
     let f1 = flow(&mut fx, "F1");
     let f2 = flow(&mut fx, "F2");
-    fx.run(Command::Income(entry(
-        100,
-        Some(fx.wallet),
-        Some(f1),
-        None,
-        T0 + 1,
-    )));
-    let expense = fx.id(Command::Expense(entry(
-        80,
-        Some(fx.wallet),
-        Some(f1),
-        None,
-        T0 + 2,
-    )));
+    fx.run(Command::Income(entry(100, w, Some(f1), None, T0 + 1)));
+    let expense = fx.id(Command::Expense(entry(80, w, Some(f1), None, T0 + 2)));
     let log_before = fx.core.commands_since(fx.vault, 0).unwrap().len();
 
     let err = fx.try_run(patch(expense).flow_id(f2).cmd()).unwrap_err();
@@ -224,15 +208,10 @@ fn update_expense_retarget_flow_fails_if_insufficient_and_is_atomic() {
 #[test]
 fn update_transfer_wallet_can_change_endpoints_and_amount() {
     let mut fx = setup();
+    let w = Some(fx.wallet);
     let bank = fx.id(wallet_cmd("Bank", 0));
     let card = fx.id(wallet_cmd("Card", 0));
-    fx.run(Command::Income(entry(
-        100,
-        Some(fx.wallet),
-        None,
-        None,
-        T0 + 1,
-    )));
+    fx.run(Command::Income(entry(100, w, None, None, T0 + 1)));
     let tx = fx.id(Command::TransferWallet {
         amount: 50,
         from_wallet_id: fx.wallet,
@@ -269,13 +248,8 @@ fn update_transfer_wallet_can_change_endpoints_and_amount() {
 #[test]
 fn update_transfer_flow_can_change_endpoints_and_amount() {
     let mut fx = setup();
-    fx.run(Command::Income(entry(
-        100,
-        Some(fx.wallet),
-        None,
-        None,
-        T0 + 1,
-    )));
+    let w = Some(fx.wallet);
+    fx.run(Command::Income(entry(100, w, None, None, T0 + 1)));
     let f1 = flow(&mut fx, "F1");
     let f2 = flow(&mut fx, "F2");
     let f3 = flow(&mut fx, "F3");
@@ -310,13 +284,8 @@ fn update_transfer_flow_can_change_endpoints_and_amount() {
 #[test]
 fn voided_transactions_cannot_be_updated() {
     let mut fx = setup();
-    let tx = fx.id(Command::Income(entry(
-        100,
-        Some(fx.wallet),
-        None,
-        None,
-        T0 + 1,
-    )));
+    let w = Some(fx.wallet);
+    let tx = fx.id(Command::Income(entry(100, w, None, None, T0 + 1)));
     fx.run(Command::VoidTransaction { transaction_id: tx });
 
     let err = fx.try_run(patch(tx).amount(200).cmd()).unwrap_err();
@@ -331,14 +300,9 @@ fn voided_transactions_cannot_be_updated() {
 #[test]
 fn update_rejects_invalid_patches() {
     let mut fx = setup();
+    let w = Some(fx.wallet);
     let bank = fx.id(wallet_cmd("Bank", 0));
-    let tx = fx.id(Command::Income(entry(
-        100,
-        Some(fx.wallet),
-        None,
-        None,
-        T0 + 1,
-    )));
+    let tx = fx.id(Command::Income(entry(100, w, None, None, T0 + 1)));
     let transfer = fx.id(Command::TransferWallet {
         amount: 40,
         from_wallet_id: fx.wallet,
@@ -377,15 +341,10 @@ fn update_rejects_invalid_patches() {
 #[test]
 fn fields_that_do_not_belong_to_the_kind_are_refused() {
     let mut fx = setup();
+    let w = Some(fx.wallet);
     let bank = fx.id(wallet_cmd("Bank", 0));
     let f1 = flow(&mut fx, "F1");
-    let entry_tx = fx.id(Command::Income(entry(
-        100,
-        Some(fx.wallet),
-        Some(f1),
-        None,
-        T0 + 1,
-    )));
+    let entry_tx = fx.id(Command::Income(entry(100, w, Some(f1), None, T0 + 1)));
     let transfer = fx.id(Command::TransferWallet {
         amount: 40,
         from_wallet_id: fx.wallet,
@@ -421,17 +380,12 @@ fn fields_that_do_not_belong_to_the_kind_are_refused() {
 #[test]
 fn archived_targets_are_refused() {
     let mut fx = setup();
+    let w = Some(fx.wallet);
     let bank = fx.id(wallet_cmd("Bank", 0));
     let spare = flow(&mut fx, "Spare");
     fx.run(Command::ArchiveWallet { wallet_id: bank });
     fx.run(Command::ArchiveFlow { flow_id: spare });
-    let tx = fx.id(Command::Income(entry(
-        100,
-        Some(fx.wallet),
-        None,
-        None,
-        T0 + 1,
-    )));
+    let tx = fx.id(Command::Income(entry(100, w, None, None, T0 + 1)));
 
     assert_eq!(
         fx.try_run(patch(tx).wallet_id(bank).cmd()).unwrap_err(),
@@ -458,19 +412,14 @@ fn archived_targets_are_refused() {
 #[test]
 fn income_capped_flow_caps_the_new_amount_and_frees_room_when_lowered() {
     let mut fx = setup();
+    let w = Some(fx.wallet);
     let capped = fx.id(flow_cmd(
         "Capped",
         FlowMode::IncomeCapped { cap: 1000 },
         false,
         0,
     ));
-    let tx = fx.id(Command::Income(entry(
-        400,
-        Some(fx.wallet),
-        Some(capped),
-        None,
-        T0 + 1,
-    )));
+    let tx = fx.id(Command::Income(entry(400, w, Some(capped), None, T0 + 1)));
     assert_eq!(income_total(&fx, capped), Some(400));
 
     assert_eq!(
@@ -485,13 +434,7 @@ fn income_capped_flow_caps_the_new_amount_and_frees_room_when_lowered() {
     assert_eq!(flow_balance(&fx.core, fx.vault, capped), 200);
 
     // The room freed by lowering the amount is usable again.
-    fx.run(Command::Income(entry(
-        800,
-        Some(fx.wallet),
-        Some(capped),
-        None,
-        T0 + 2,
-    )));
+    fx.run(Command::Income(entry(800, w, Some(capped), None, T0 + 2)));
     assert_eq!(income_total(&fx, capped), Some(1000));
     assert_balanced(&fx);
 }
@@ -499,6 +442,7 @@ fn income_capped_flow_caps_the_new_amount_and_frees_room_when_lowered() {
 #[test]
 fn net_capped_flow_rejects_a_retarget_over_its_cap() {
     let mut fx = setup();
+    let w = Some(fx.wallet);
     let wide = flow(&mut fx, "Wide");
     let small = fx.id(flow_cmd(
         "Small",
@@ -506,13 +450,7 @@ fn net_capped_flow_rejects_a_retarget_over_its_cap() {
         false,
         0,
     ));
-    let tx = fx.id(Command::Income(entry(
-        500,
-        Some(fx.wallet),
-        Some(wide),
-        None,
-        T0 + 1,
-    )));
+    let tx = fx.id(Command::Income(entry(500, w, Some(wide), None, T0 + 1)));
 
     assert_eq!(
         fx.try_run(patch(tx).flow_id(small).cmd()).unwrap_err(),
@@ -531,13 +469,8 @@ fn net_capped_flow_rejects_a_retarget_over_its_cap() {
 #[test]
 fn transfer_flow_endpoints_can_be_swapped() {
     let mut fx = setup();
-    fx.run(Command::Income(entry(
-        300,
-        Some(fx.wallet),
-        None,
-        None,
-        T0 + 1,
-    )));
+    let w = Some(fx.wallet);
+    fx.run(Command::Income(entry(300, w, None, None, T0 + 1)));
     let f1 = flow(&mut fx, "F1");
     let f2 = flow(&mut fx, "F2");
     for (amount, to) in [(150, f1), (80, f2)] {
@@ -574,13 +507,8 @@ fn transfer_flow_endpoints_can_be_swapped() {
 #[test]
 fn blank_category_falls_back_to_uncategorized() {
     let mut fx = setup();
-    let tx = fx.id(Command::Income(entry(
-        100,
-        Some(fx.wallet),
-        None,
-        Some("Salary"),
-        T0 + 1,
-    )));
+    let w = Some(fx.wallet);
+    let tx = fx.id(Command::Income(entry(100, w, None, Some("Salary"), T0 + 1)));
     assert_eq!(view(&fx, tx).category, "Salary");
 
     fx.run(patch(tx).category("   ").cmd());
@@ -591,15 +519,10 @@ fn blank_category_falls_back_to_uncategorized() {
 #[test]
 fn list_transactions_shows_the_updated_row() {
     let mut fx = setup();
+    let w = Some(fx.wallet);
     let bank = fx.id(wallet_cmd("Bank", 0));
     let f1 = flow(&mut fx, "F1");
-    let tx = fx.id(Command::Income(entry(
-        100,
-        Some(fx.wallet),
-        None,
-        Some("salary"),
-        T0 + 1,
-    )));
+    let tx = fx.id(Command::Income(entry(100, w, None, Some("salary"), T0 + 1)));
 
     fx.run(
         patch(tx)

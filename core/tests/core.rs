@@ -104,14 +104,9 @@ fn refund_increases_balances_and_amount_is_positive() {
 #[test]
 fn transfer_wallet_does_not_touch_flows() {
     let mut fx = setup();
+    let w = Some(fx.wallet);
     let bank = fx.id(wallet_cmd("Bank", 0));
-    fx.run(Command::Income(entry(
-        1000,
-        Some(fx.wallet),
-        None,
-        None,
-        T0,
-    )));
+    fx.run(Command::Income(entry(1000, w, None, None, T0)));
     fx.run(Command::TransferWallet {
         amount: 400,
         from_wallet_id: fx.wallet,
