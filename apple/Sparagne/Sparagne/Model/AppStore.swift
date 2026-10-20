@@ -77,23 +77,13 @@ struct AppError: Identifiable, Equatable, Sendable, LocalizedError {
     }
 }
 
-/// A void that has been hidden from the table but not yet applied.
-///
-/// The rows disappear immediately and a toast counts down; `undo()` cancels,
-/// and the window elapsing (or another destructive action, or quitting)
-/// commits one `VoidTransaction` per row.
-struct PendingUndo: Identifiable, Equatable, Sendable {
-    /// The toast's own identity: a new void is a new toast, even for a row
-    /// that was voided, undone and voided again.
-    let id = UUID()
-    /// The transactions being voided: one for a row, several for a selection.
-    let ids: [Uuid]
-    /// The vault the rows live in. Not necessarily the one on screen by the
-    /// time the window elapses: the user can switch, and a pull can delete it.
-    let vaultId: Uuid
-    let startedAt: Date
-    let duration: Duration
+/// The window an undo toast counts down.
+protocol UndoCountdown {
+    var startedAt: Date { get }
+    var duration: Duration { get }
+}
 
+extension UndoCountdown {
     var seconds: Double {
         let components = duration.components
         return Double(components.seconds) + Double(components.attoseconds) * 1e-18
@@ -108,8 +98,26 @@ struct PendingUndo: Identifiable, Equatable, Sendable {
     }
 }
 
-/// One recurring period waiting for a decision: a template and the day it
-/// fell due.
+/// A void that has been hidden from the table but not yet applied.
+///
+/// The rows disappear immediately and a toast counts down; `undo()` cancels,
+/// and the window elapsing (or another destructive action, or quitting)
+/// commits one `VoidTransaction` per row.
+struct PendingUndo: Identifiable, Equatable, Sendable, UndoCountdown {
+    /// The toast's own identity: a new void is a new toast, even for a row
+    /// that was voided, undone and voided again.
+    let id = UUID()
+    /// The transactions being voided: one for a row, several for a selection.
+    let ids: [Uuid]
+    /// The vault the rows live in. Not necessarily the one on screen by the
+    /// time the window elapses: the user can switch, and a pull can delete it.
+    let vaultId: Uuid
+    let startedAt: Date
+    let duration: Duration
+}
+
+/// One recurring period: a template and the day it fell due, waiting for a
+/// decision.
 struct DuePeriod: Identifiable, Hashable, Sendable {
     let template: RecurringView
     let date: NaiveDate
@@ -117,15 +125,10 @@ struct DuePeriod: Identifiable, Hashable, Sendable {
     var id: String { "\(template.id)/\(date)" }
 }
 
-/// One recurring period still ahead: a template and a day it will fall due,
-/// from `scheduleOccurrences`. What the Ricorrenze tab's agenda lists; never
-/// executed from there, since a period only becomes actionable once due.
-struct UpcomingPeriod: Identifiable, Hashable, Sendable {
-    let template: RecurringView
-    let date: NaiveDate
-
-    var id: String { "\(template.id)/\(date)" }
-}
+/// A period still ahead, from `scheduleOccurrences`: what the Ricorrenze
+/// tab's agenda lists, never executed from there, since a period only
+/// becomes actionable once due.
+typealias UpcomingPeriod = DuePeriod
 
 extension TransactionPatch {
     /// A patch that carries no field changes nothing, so it is never sent

@@ -10,27 +10,41 @@ struct FundGauge: Identifiable, Hashable, Sendable {
     /// The balance for a net cap, the cumulative income for an income cap.
     let filled: Int64
     /// What the cap is measured on, named in the card's tag.
-    let kind: Kind
+    var kind = Kind.balance
 
+    /// `FlowMode` without its amount, for the modes that have a cap.
     enum Kind: Hashable, Sendable {
         /// The cap is on the balance: spending frees room.
         case balance
         /// The cap is on the cumulative income: spending does not.
         case income
-    }
 
-    init(id: Uuid, name: String, cap: Int64, filled: Int64, kind: Kind = .balance) {
-        self.id = id
-        self.name = name
-        self.cap = cap
-        self.filled = filled
-        self.kind = kind
+        /// `nil` for an envelope without a cap.
+        init?(_ mode: FlowMode) {
+            switch mode {
+            case .unlimited: return nil
+            case .netCapped: self = .balance
+            case .incomeCapped: self = .income
+            }
+        }
     }
 
     /// 0...1.
     var fraction: Double {
         guard cap > 0 else { return 0 }
         return min(max(Double(filled) / Double(cap), 0), 1)
+    }
+}
+
+extension FundGauge {
+    /// An envelope's gauge, `nil` without a cap. Spending does not free room
+    /// on an income cap, so what fills that bar is the cumulative income.
+    init?(id: Uuid, name: String, mode: FlowMode, balance: Int64, incomeTotal: Int64?) {
+        switch mode {
+        case .unlimited: return nil
+        case .netCapped(let cap): self.init(id: id, name: name, cap: cap, filled: balance, kind: .balance)
+        case .incomeCapped(let cap): self.init(id: id, name: name, cap: cap, filled: incomeTotal ?? balance, kind: .income)
+        }
     }
 }
 
@@ -555,19 +569,9 @@ struct YearSummary: Sendable {
     /// fact of the vault rather than a name.
     private static func funds(in flows: [FlowView]) -> [FundGauge] {
         flows.compactMap { flow in
-            guard !flow.archived else { return nil }
-            switch flow.mode {
-            case .unlimited:
-                return nil
-            case .netCapped(let cap):
-                return FundGauge(id: flow.id, name: flow.name, cap: cap, filled: flow.balance, kind: .balance)
-            case .incomeCapped(let cap):
-                // Spending does not free room on an income cap, so what fills
-                // the bar is the cumulative income.
-                return FundGauge(
-                    id: flow.id, name: flow.name, cap: cap, filled: flow.incomeTotal ?? flow.balance, kind: .income
-                )
-            }
+            flow.archived
+                ? nil
+                : FundGauge(id: flow.id, name: flow.name, mode: flow.mode, balance: flow.balance, incomeTotal: flow.incomeTotal)
         }
     }
 }

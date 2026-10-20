@@ -93,7 +93,7 @@ enum AllocationWarning: Hashable {
                 warnings.append(.archived(flowId: line.flowId))
                 continue
             }
-            if line.rule == .fillToCap, EnvelopeCapKind.cap(of: flow.mode) == nil {
+            if line.rule == .fillToCap, FundGauge.Kind(flow.mode) == nil {
                 warnings.append(.noCap(flowId: line.flowId))
             }
         }
@@ -130,7 +130,7 @@ enum AllocationPreviewMatch {
 /// reopens. The command is applied already, so undoing it is a command of its
 /// own (`ReopenAllocation`), unlike the void's toast, which holds the write
 /// back.
-struct AllocationUndo: Identifiable, Equatable, Sendable {
+struct AllocationUndo: Identifiable, Equatable, Sendable, UndoCountdown {
     let id = UUID()
     let vaultId: Uuid
     let planId: Uuid
@@ -139,17 +139,4 @@ struct AllocationUndo: Identifiable, Equatable, Sendable {
     let distributed: Int64
     let startedAt: Date
     let duration: Duration
-
-    var seconds: Double {
-        let components = duration.components
-        return Double(components.seconds) + Double(components.attoseconds) * 1e-18
-    }
-
-    var deadline: Date { startedAt.addingTimeInterval(seconds) }
-
-    /// `0...1`, how much of the window has elapsed.
-    func progress(at now: Date) -> Double {
-        guard seconds > 0 else { return 1 }
-        return min(max(now.timeIntervalSince(startedAt) / seconds, 0), 1)
-    }
 }
