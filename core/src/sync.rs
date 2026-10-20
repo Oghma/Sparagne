@@ -1,9 +1,8 @@
-//! Sync protocol: wire types shared with the server and the client-side
-//! algorithm (outbox, push results, pull integration with rebase).
-//!
-//! The wire types are plain serde JSON; the client
-//! never serializes commands itself, it asks the core for the push body and
-//! hands the server's responses back to it.
+//! Sync protocol: the serde JSON wire types shared with the server, the
+//! server side a core can play (tests, a local fake server) and the client
+//! side (outbox, push results, pull integration with rebase). The client never
+//! serializes commands itself: it asks the core for the push body and hands
+//! the server's responses back to it.
 
 use std::collections::{HashMap, HashSet};
 
@@ -16,10 +15,6 @@ use crate::{
     engine::{LogRow, apply_envelope, log_row, try_apply_envelope},
     query::log_records,
 };
-
-// ---------------------------------------------------------------------------
-// Wire types
-// ---------------------------------------------------------------------------
 
 /// Body of `POST /vaults/{vault_id}/push`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -199,76 +194,6 @@ pub struct ErrorDetail {
     pub message: String,
 }
 
-// ---------------------------------------------------------------------------
-// Server side
-// ---------------------------------------------------------------------------
-
-impl Core {
-    /// The server side of a push: apply in order, one outcome per command. A
-    /// domain failure rejects that command and the batch goes on; a storage
-    /// failure aborts. Idempotent: a known command id answers `applied` with
-    /// its original seq.
-    pub fn serve_push(&mut self, vault_id: Uuid, request: &PushRequest) -> Result<PushResponse> {
-        if let Some(stray) = request
-            .commands
-            .iter()
-            .find(|envelope| envelope.vault_id != vault_id)
-        {
-            return Err(DomainError::InvalidCommand(format!(
-                "push: command {} belongs to vault {}",
-                stray.id, stray.vault_id
-            )));
-        }
-        let mut results = Vec::with_capacity(request.commands.len());
-        for envelope in &request.commands {
-            results.push(PushResult {
-                command_id: envelope.id,
-                outcome: PushOutcome::of(self.execute(envelope.clone()))?,
-            });
-        }
-        Ok(PushResponse {
-            results,
-            last_seq: self.last_seq(vault_id)?,
-        })
-    }
-
-    /// The receipt [`Core::execute`] answers for a command already in the log,
-    /// `None` for one the log does not hold. A server that refuses commands
-    /// for reasons the log does not record (who is a member) asks first, so
-    /// that pushing the same command twice keeps answering the same seq.
-    pub fn receipt(&self, command_id: Uuid) -> Result<Option<Receipt>> {
-        crate::engine::existing_receipt(&self.conn, command_id)
-    }
-
-    /// The server side of a pull: applied commands with `seq > since`, at
-    /// most `limit`, plus the vault's last seq.
-    pub fn serve_pull(&self, vault_id: Uuid, since: i64, limit: usize) -> Result<PullResponse> {
-        let mut records = self.commands_since(vault_id, since)?;
-        records.truncate(limit);
-        Ok(PullResponse {
-            commands: records.into_iter().map(SyncRecord::from).collect(),
-            last_seq: self.last_seq(vault_id)?,
-        })
-    }
-
-    pub fn serve_push_json(&mut self, vault_id: Uuid, json: &str) -> Result<String> {
-        let request: PushRequest = from_json(json, "push request")?;
-        Ok(serde_json::to_string(
-            &self.serve_push(vault_id, &request)?,
-        )?)
-    }
-
-    pub fn serve_pull_json(&self, vault_id: Uuid, since: i64, limit: usize) -> Result<String> {
-        Ok(serde_json::to_string(
-            &self.serve_pull(vault_id, since, limit)?,
-        )?)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Client side
-// ---------------------------------------------------------------------------
-
 /// Where a vault stands with respect to the server.
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct SyncState {
@@ -314,6 +239,57 @@ pub struct SyncReport {
 }
 
 impl Core {
+    /// The server side of a push: apply in order, one outcome per command. A
+    /// domain failure rejects that command and the batch goes on; a storage
+    /// failure aborts. Idempotent: a known command id answers `applied` with
+    /// its original seq.
+    pub fn serve_push(&mut self, vault_id: Uuid, request: &PushRequest) -> Result<PushResponse> {
+        check_vault(vault_id, "push", request.commands.iter())?;
+        let mut results = Vec::with_capacity(request.commands.len());
+        for envelope in &request.commands {
+            results.push(PushResult {
+                command_id: envelope.id,
+                outcome: PushOutcome::of(self.execute(envelope.clone()))?,
+            });
+        }
+        Ok(PushResponse {
+            results,
+            last_seq: self.last_seq(vault_id)?,
+        })
+    }
+
+    /// The receipt [`Core::execute`] answers for a command already in the log,
+    /// `None` for one the log does not hold. A server that refuses commands
+    /// for reasons the log does not record (who is a member) asks first, so
+    /// that pushing the same command twice keeps answering the same seq.
+    pub fn receipt(&self, command_id: Uuid) -> Result<Option<Receipt>> {
+        crate::engine::existing_receipt(&self.conn, command_id)
+    }
+
+    /// The server side of a pull: applied commands with `seq > since`, at
+    /// most `limit`, plus the vault's last seq.
+    pub fn serve_pull(&self, vault_id: Uuid, since: i64, limit: usize) -> Result<PullResponse> {
+        let mut records = self.commands_since(vault_id, since)?;
+        records.truncate(limit);
+        Ok(PullResponse {
+            commands: records.into_iter().map(SyncRecord::from).collect(),
+            last_seq: self.last_seq(vault_id)?,
+        })
+    }
+
+    pub fn serve_push_json(&mut self, vault_id: Uuid, json: &str) -> Result<String> {
+        let request: PushRequest = from_json(json, "push request")?;
+        Ok(serde_json::to_string(
+            &self.serve_push(vault_id, &request)?,
+        )?)
+    }
+
+    pub fn serve_pull_json(&self, vault_id: Uuid, since: i64, limit: usize) -> Result<String> {
+        Ok(serde_json::to_string(
+            &self.serve_pull(vault_id, since, limit)?,
+        )?)
+    }
+
     /// Highest applied seq in the vault's local log; 0 for an unknown vault.
     pub fn last_seq(&self, vault_id: Uuid) -> Result<i64> {
         Ok(self.conn.query_row(
@@ -400,7 +376,7 @@ impl Core {
     ) -> Result<SyncReport> {
         let tx = self.conn.transaction()?;
         let mut report = SyncReport::default();
-        let mut refused: Vec<(Uuid, Reason)> = Vec::new();
+        let mut rejections: Vec<(Uuid, Reason)> = Vec::new();
         for result in &response.results {
             match &result.outcome {
                 PushOutcome::Applied { seq, .. } => {
@@ -418,26 +394,38 @@ impl Core {
                     code,
                     message,
                     detail,
-                } => {
-                    if is_outbox(&tx, vault_id, result.command_id)? {
-                        let reason = Reason {
-                            code: code.clone(),
-                            message: message.clone(),
-                            detail: detail.clone(),
-                        };
-                        refused.push((result.command_id, reason));
-                    }
-                }
+                } => rejections.push((
+                    result.command_id,
+                    Reason {
+                        code: code.clone(),
+                        message: message.clone(),
+                        detail: detail.clone(),
+                    },
+                )),
             }
         }
+        let outbox = if rejections.is_empty() {
+            Vec::new()
+        } else {
+            outbox_records(&tx, vault_id)?
+        };
+        let refused: Vec<(&CommandRecord, Reason)> = rejections
+            .into_iter()
+            .filter_map(|(id, reason)| {
+                let record = outbox.iter().find(|record| record.envelope.id == id)?;
+                Some((record, reason))
+            })
+            .collect();
         if refused.is_empty() {
             tx.commit()?;
             return self.stamp(vault_id, report, response.last_seq);
         }
 
-        let dropped: HashSet<Uuid> = refused.iter().map(|(id, _)| *id).collect();
+        let dropped: HashSet<Uuid> = refused
+            .iter()
+            .map(|(record, _)| record.envelope.id)
+            .collect();
         let ordered = planned(confirmed_records(&tx, vault_id)?);
-        let outbox = outbox_records(&tx, vault_id)?;
         let retry: Vec<Planned> = outbox
             .iter()
             .filter(|record| !dropped.contains(&record.envelope.id))
@@ -448,10 +436,7 @@ impl Core {
             })
             .collect();
         let mut keep = rejected_rows(&tx, vault_id)?;
-        for (id, reason) in refused {
-            let Some(record) = outbox.iter().find(|record| record.envelope.id == id) else {
-                continue;
-            };
+        for (record, reason) in refused {
             keep.push(RejectedRow {
                 envelope: record.envelope.clone(),
                 created_at: record.created_at,
@@ -459,7 +444,7 @@ impl Core {
             });
             report
                 .rejected
-                .push(reason.rejected(id, record.envelope.command.kind_name()));
+                .push(reason.rejected(record.envelope.id, record.envelope.command.kind_name()));
         }
 
         report
@@ -493,15 +478,11 @@ impl Core {
         if incoming.is_empty() {
             return self.stamp(vault_id, SyncReport::default(), response.last_seq);
         }
-        if let Some(stray) = incoming
-            .iter()
-            .find(|record| record.envelope.vault_id != vault_id)
-        {
-            return Err(DomainError::InvalidCommand(format!(
-                "pull: command {} belongs to vault {}",
-                stray.envelope.id, stray.envelope.vault_id
-            )));
-        }
+        check_vault(
+            vault_id,
+            "pull",
+            incoming.iter().map(|record| &record.envelope),
+        )?;
 
         let outbox = self.outbox(vault_id)?;
         if incoming.len() <= outbox.len()
@@ -519,7 +500,7 @@ impl Core {
             }
             tx.commit()?;
             let report = SyncReport {
-                confirmed: count_usize(incoming.len()),
+                confirmed: count(incoming.len()),
                 ..SyncReport::default()
             };
             return self.stamp(vault_id, report, response.last_seq);
@@ -621,27 +602,50 @@ impl Core {
         Ok(())
     }
 
+    /// Turns every command still in the outbox into a rejected row with
+    /// `code` and `message`, as if the server had refused each of them, and
+    /// rebuilds the projection without them. The app calls it when a push
+    /// comes back `403` (a viewer wrote locally), so the vault can keep
+    /// pulling instead of retrying forever.
+    ///
+    /// It is [`Self::apply_push_response`] on a response that refuses every
+    /// outbox command, so the report and the rebuild are the ones a real
+    /// refusal gives. The response carries the highest server seq this
+    /// database knows as the server's last seq; with an empty outbox nothing
+    /// changes and the report only carries that seq.
+    pub fn reject_outbox(
+        &mut self,
+        vault_id: Uuid,
+        code: &str,
+        message: &str,
+    ) -> Result<SyncReport> {
+        let results = outbox_records(&self.conn, vault_id)?
+            .into_iter()
+            .map(|record| PushResult {
+                command_id: record.envelope.id,
+                outcome: PushOutcome::Rejected {
+                    code: code.to_string(),
+                    message: message.to_string(),
+                    detail: None,
+                },
+            })
+            .collect();
+        let response = PushResponse {
+            results,
+            last_seq: known_server_seq(&self.conn, vault_id)?,
+        };
+        self.apply_push_response(vault_id, &response)
+    }
+
     /// Commands the server (or a rebase) refused, oldest first.
     pub fn rejected_commands(&self, vault_id: Uuid) -> Result<Vec<RejectedCommand>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, kind, rejection FROM commands
-             WHERE vault_id = ?1 AND status = 'rejected' ORDER BY seq",
-        )?;
-        let rows = stmt.query_map(params![vault_id], |r| {
-            Ok((
-                r.get::<_, Uuid>(0)?,
-                r.get::<_, String>(1)?,
-                r.get::<_, Option<String>>(2)?,
-            ))
-        })?;
-        let mut out = Vec::new();
-        for row in rows {
-            let (command_id, kind, rejection) = row?;
-            out.push(
-                Reason::parse(rejection.as_deref().unwrap_or_default()).rejected(command_id, &kind),
-            );
-        }
-        Ok(out)
+        Ok(rejected_rows(&self.conn, vault_id)?
+            .into_iter()
+            .map(|row| {
+                Reason::parse(&row.reason)
+                    .rejected(row.envelope.id, row.envelope.command.kind_name())
+            })
+            .collect())
     }
 
     /// Forgets one rejected command. Nothing happens when it is already gone.
@@ -652,8 +656,6 @@ impl Core {
         )?;
         Ok(())
     }
-
-    // -- JSON entry points, for the FFI -------------------------------------
 
     /// [`Self::push_request`] as the JSON body to POST.
     pub fn push_request_json(&self, vault_id: Uuid, limit: usize) -> Result<String> {
@@ -670,10 +672,6 @@ impl Core {
         self.integrate_pull(vault_id, &from_json(json, "pull response")?)
     }
 }
-
-// ---------------------------------------------------------------------------
-// Rebase
-// ---------------------------------------------------------------------------
 
 /// One command with the position a rebuild will give it.
 #[derive(Clone, Debug)]
@@ -693,8 +691,7 @@ struct RejectedRow {
     reason: String,
 }
 
-/// Why a command was refused, as a rejected row keeps it in the log's
-/// `rejection` column and hands it back as a [`RejectedCommand`].
+/// Why a command was refused, as the log's `rejection` column keeps it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct Reason {
     code: String,
@@ -814,10 +811,6 @@ fn rebuild(
     Ok(fresh)
 }
 
-// ---------------------------------------------------------------------------
-// Log reads
-// ---------------------------------------------------------------------------
-
 /// How far the vault is synced: the highest server seq for which this database
 /// holds every earlier one too.
 ///
@@ -840,7 +833,6 @@ fn last_server_seq(conn: &Connection, vault_id: Uuid) -> Result<i64> {
     Ok(watermark)
 }
 
-/// Confirmed commands in server order.
 fn confirmed_records(conn: &Connection, vault_id: Uuid) -> Result<Vec<CommandRecord>> {
     let mut records = log_records(
         conn,
@@ -887,56 +879,6 @@ fn rejected_rows(conn: &Connection, vault_id: Uuid) -> Result<Vec<RejectedRow>> 
     .collect())
 }
 
-fn is_outbox(conn: &Connection, vault_id: Uuid, command_id: Uuid) -> Result<bool> {
-    Ok(conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM commands
-         WHERE id = ?1 AND vault_id = ?2 AND status = 'applied' AND server_seq IS NULL)",
-        params![command_id, vault_id],
-        |r| r.get(0),
-    )?)
-}
-
-// ---------------------------------------------------------------------------
-// Refusing the whole outbox
-// ---------------------------------------------------------------------------
-
-impl Core {
-    /// Turns every command still in the outbox into a rejected row with
-    /// `code` and `message`, as if the server had refused each of them, and
-    /// rebuilds the projection without them. The app calls it when a push
-    /// comes back `403` (a viewer wrote locally), so the vault can keep
-    /// pulling instead of retrying forever.
-    ///
-    /// It is [`Self::apply_push_response`] on a response that refuses every
-    /// outbox command, so the report and the rebuild are the ones a real
-    /// refusal gives. The response carries the highest server seq this
-    /// database knows as the server's last seq; with an empty outbox nothing
-    /// changes and the report only carries that seq.
-    pub fn reject_outbox(
-        &mut self,
-        vault_id: Uuid,
-        code: &str,
-        message: &str,
-    ) -> Result<SyncReport> {
-        let results = outbox_records(&self.conn, vault_id)?
-            .into_iter()
-            .map(|record| PushResult {
-                command_id: record.envelope.id,
-                outcome: PushOutcome::Rejected {
-                    code: code.to_string(),
-                    message: message.to_string(),
-                    detail: None,
-                },
-            })
-            .collect();
-        let response = PushResponse {
-            results,
-            last_seq: known_server_seq(&self.conn, vault_id)?,
-        };
-        self.apply_push_response(vault_id, &response)
-    }
-}
-
 /// The highest server seq the log holds for the vault, holes or not: the last
 /// seq the server is known to have reached. 0 when never synced.
 fn known_server_seq(conn: &Connection, vault_id: Uuid) -> Result<i64> {
@@ -947,10 +889,6 @@ fn known_server_seq(conn: &Connection, vault_id: Uuid) -> Result<i64> {
         |r| r.get(0),
     )?)
 }
-
-// ---------------------------------------------------------------------------
-// Small helpers
-// ---------------------------------------------------------------------------
 
 fn planned(records: Vec<CommandRecord>) -> Vec<Planned> {
     records
@@ -968,6 +906,21 @@ fn from_json<T: serde::de::DeserializeOwned>(json: &str, what: &str) -> Result<T
         .map_err(|err| DomainError::InvalidCommand(format!("malformed {what}: {err}")))
 }
 
+/// Refuses a `push` or `pull` batch that carries a command of another vault.
+fn check_vault<'a>(
+    vault_id: Uuid,
+    what: &str,
+    mut envelopes: impl Iterator<Item = &'a CommandEnvelope>,
+) -> Result<()> {
+    match envelopes.find(|envelope| envelope.vault_id != vault_id) {
+        Some(stray) => Err(DomainError::InvalidCommand(format!(
+            "{what}: command {} belongs to vault {}",
+            stray.id, stray.vault_id
+        ))),
+        None => Ok(()),
+    }
+}
+
 /// Splits a stored `<code>: <message>` reason.
 fn split_reason(reason: &str) -> (String, String) {
     reason.split_once(": ").map_or_else(
@@ -977,12 +930,8 @@ fn split_reason(reason: &str) -> (String, String) {
 }
 
 /// Counts never overflow in practice; saturate rather than panic if they do.
-fn count(value: i64) -> u32 {
-    u32::try_from(value).unwrap_or(u32::MAX)
-}
-
-fn count_usize(value: usize) -> u32 {
-    u32::try_from(value).unwrap_or(u32::MAX)
+fn count(value: impl TryInto<u32>) -> u32 {
+    value.try_into().unwrap_or(u32::MAX)
 }
 
 #[cfg(test)]
