@@ -218,7 +218,6 @@ fn resolve_quick_add_error_converts_to_domain_error() {
     assert_eq!(domain.code(), "invalid_command");
 }
 
-/// Who the app lets a row be for in these tests.
 fn people() -> Vec<String> {
     names(&["elisa", "matteo", "marta", "ann", "anna"])
 }

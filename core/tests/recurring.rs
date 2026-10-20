@@ -98,70 +98,35 @@ fn create_lists_the_template_with_its_schedule() {
 
 #[test]
 fn create_rejects_bad_kind_amount_schedule_and_targets() {
+    use TransactionKind::{Income, Refund, TransferWallet};
     let mut fx = setup();
+    let old = fx.id(flow_cmd("Old", FlowMode::Unlimited, false, 0));
+    fx.run(Command::ArchiveFlow { flow_id: old });
     let good = monthly(1, day(2026, 1, 1), None);
+    let every_zero_months = Schedule {
+        interval: 0,
+        ..good
+    };
+    let mut create = |kind, amount, flow, schedule| {
+        fx.try_run(recurring_cmd(kind, amount, flow, None, schedule))
+    };
 
+    for refused in [
+        create(TransferWallet, 100, None, good),
+        create(Refund, 100, None, good),
+        create(Income, 100, None, every_zero_months),
+        create(Income, 100, Some(old), good),
+    ] {
+        assert!(matches!(refused, Err(DomainError::InvalidCommand(_))));
+    }
     assert!(matches!(
-        fx.try_run(recurring_cmd(
-            TransactionKind::TransferWallet,
-            100,
-            None,
-            None,
-            good
-        )),
-        Err(DomainError::InvalidCommand(_))
-    ));
-    assert!(matches!(
-        fx.try_run(recurring_cmd(
-            TransactionKind::Refund,
-            100,
-            None,
-            None,
-            good
-        )),
-        Err(DomainError::InvalidCommand(_))
-    ));
-    assert!(matches!(
-        fx.try_run(recurring_cmd(TransactionKind::Income, 0, None, None, good)),
+        create(Income, 0, None, good),
         Err(DomainError::InvalidAmount(_))
     ));
-    assert!(matches!(
-        fx.try_run(recurring_cmd(
-            TransactionKind::Income,
-            100,
-            None,
-            None,
-            Schedule {
-                interval: 0,
-                ..good
-            },
-        )),
-        Err(DomainError::InvalidCommand(_))
-    ));
     assert_eq!(
-        fx.try_run(recurring_cmd(
-            TransactionKind::Income,
-            100,
-            Some(Uuid::now_v7()),
-            None,
-            good
-        ))
-        .unwrap_err(),
+        create(Income, 100, Some(Uuid::now_v7()), good).unwrap_err(),
         DomainError::NotFound("flow".to_string())
     );
-
-    let flow = fx.id(flow_cmd("Old", FlowMode::Unlimited, false, 0));
-    fx.run(Command::ArchiveFlow { flow_id: flow });
-    assert!(matches!(
-        fx.try_run(recurring_cmd(
-            TransactionKind::Income,
-            100,
-            Some(flow),
-            None,
-            good
-        )),
-        Err(DomainError::InvalidCommand(_))
-    ));
     assert!(fx.core.list_recurring(fx.vault, true).unwrap().is_empty());
 }
 

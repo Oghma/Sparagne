@@ -34,7 +34,6 @@ fn setup() -> Fx {
     setup_on(Core::open_in_memory().unwrap())
 }
 
-/// [`setup`] on a given database.
 fn setup_on(mut core: Core) -> Fx {
     let vault = create_vault(&mut core, "matteo", "Casa");
     let mut fx = Fx {
@@ -52,7 +51,6 @@ fn setup_on(mut core: Core) -> Fx {
 }
 
 impl Fx {
-    /// Runs `command` as `author` and returns the id it created, if any.
     fn run(&mut self, author: &str, command: Command) -> Uuid {
         self.try_run(author, command)
             .unwrap_or_else(|e| panic!("{e}"))
