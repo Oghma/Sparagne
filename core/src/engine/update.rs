@@ -9,7 +9,7 @@
 use rusqlite::{OptionalExtension, Transaction, params};
 use uuid::Uuid;
 
-use super::require_active_flow;
+use super::{check_amount, require_active_flow};
 
 use crate::{
     CommandEnvelope, DomainError, Result, TransactionKind, TransactionPatch,
@@ -33,9 +33,7 @@ pub(super) fn update_transaction(
         return Err(DomainError::InvalidCommand("nothing to update".to_string()));
     }
     let amount = patch.amount.unwrap_or(row.amount);
-    if amount <= 0 {
-        return Err(DomainError::InvalidAmount("amount must be > 0".to_string()));
-    }
+    check_amount(amount)?;
 
     let old_legs = load_legs(tx, transaction_id)?;
     let (new_legs, category_id) = match row.kind {

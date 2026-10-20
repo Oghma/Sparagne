@@ -11,7 +11,7 @@ use chrono::{DateTime, FixedOffset, NaiveDate};
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use uuid::Uuid;
 
-use super::check_amount;
+use super::{check_amount, encode_schedule, invalid, parse_date, require_active_flow};
 
 use crate::{
     CommandEnvelope, Core, DomainError, RecurringPatch, Result, TransactionKind,
@@ -512,12 +512,10 @@ fn check_wallet(tx: &Transaction<'_>, vault_id: Uuid, wallet_id: Option<Uuid>) -
 
 /// A flow given on a template must exist in the vault and be active.
 fn check_flow(tx: &Transaction<'_>, vault_id: Uuid, flow_id: Option<Uuid>) -> Result<()> {
-    if let Some(id) = flow_id
-        && super::load_flow(tx, vault_id, id)?.archived
-    {
-        return Err(invalid("flow is archived"));
+    match flow_id {
+        Some(id) => require_active_flow(tx, vault_id, id),
+        None => Ok(()),
     }
-    Ok(())
 }
 
 /// Category text kept as typed; only its normalized key is checked here, the
@@ -528,18 +526,4 @@ fn normalize_category(input: Option<&str>) -> Result<Option<String>> {
     };
     normalize_category_key(raw)?;
     Ok(Some(raw.to_string()))
-}
-
-fn encode_schedule(schedule: &Schedule) -> Result<String> {
-    Ok(serde_json::to_string(schedule)?)
-}
-
-fn parse_date(value: &str) -> Result<NaiveDate> {
-    value
-        .parse()
-        .map_err(|_| DomainError::Storage(format!("invalid period date '{value}'")))
-}
-
-fn invalid(message: &str) -> DomainError {
-    DomainError::InvalidCommand(message.to_string())
 }

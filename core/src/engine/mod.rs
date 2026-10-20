@@ -8,7 +8,7 @@ pub(crate) mod entities;
 mod recurring;
 mod update;
 
-use chrono::{DateTime, FixedOffset, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDate, Utc};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use uuid::Uuid;
 
@@ -18,6 +18,7 @@ use crate::{
     category::{OPENING_KEY, UNCATEGORIZED_KEY, normalize_category_key, validate_category_name},
     command::explicit_person,
     flow::UNALLOCATED_NAME,
+    recurring::Schedule,
 };
 
 impl Core {
@@ -121,6 +122,21 @@ pub(crate) fn require_active_flow(
         return Err(DomainError::InvalidCommand("flow is archived".to_string()));
     }
     Ok(())
+}
+
+fn encode_schedule(schedule: &Schedule) -> Result<String> {
+    Ok(serde_json::to_string(schedule)?)
+}
+
+/// A run's `period_date` as stored.
+fn parse_date(value: &str) -> Result<NaiveDate> {
+    value
+        .parse()
+        .map_err(|_| DomainError::Storage(format!("invalid period date '{value}'")))
+}
+
+fn invalid(message: &str) -> DomainError {
+    DomainError::InvalidCommand(message.to_string())
 }
 
 /// Next free local position in a vault's log. Rejected rows count: seq is a
@@ -619,17 +635,12 @@ fn entry(
     e: &Entry,
 ) -> Result<Uuid> {
     require_vault(tx, env.vault_id)?;
-    if e.amount <= 0 {
-        return Err(DomainError::InvalidAmount("amount must be > 0".to_string()));
-    }
+    check_amount(e.amount)?;
     let wallet_id = resolve_wallet(tx, env.vault_id, e.wallet_id)?;
     let flow_id = match e.flow_id {
         None => unallocated_id(tx, env.vault_id)?,
         Some(id) => {
-            let flow = load_flow(tx, env.vault_id, id)?;
-            if flow.archived {
-                return Err(DomainError::InvalidCommand("flow is archived".to_string()));
-            }
+            require_active_flow(tx, env.vault_id, id)?;
             id
         }
     };
@@ -936,8 +947,8 @@ fn system_category_id(tx: &Transaction<'_>, vault_id: Uuid, key: &str) -> Result
     .ok_or_else(|| DomainError::NotFound(format!("system category '{key}'")))
 }
 
-fn unallocated_id(tx: &Transaction<'_>, vault_id: Uuid) -> Result<Uuid> {
-    tx.query_row(
+fn unallocated_id(conn: &Connection, vault_id: Uuid) -> Result<Uuid> {
+    conn.query_row(
         "SELECT id FROM flows WHERE vault_id = ?1 AND system_kind = 'unallocated'",
         params![vault_id],
         |r| r.get(0),

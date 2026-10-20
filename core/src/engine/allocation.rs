@@ -21,6 +21,7 @@ use chrono::{DateTime, FixedOffset, NaiveDate};
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use uuid::Uuid;
 
+use super::{check_amount, encode_schedule, invalid, parse_date};
 use crate::{
     CommandEnvelope, Core, DomainError, Result, TransactionKind, TransactionView,
     allocation::{
@@ -287,7 +288,7 @@ impl Core {
             Some(run) => Some(command_seq(&self.conn, run.command_id)?),
             None => None,
         };
-        let unallocated = unallocated_flow(&self.conn, vault_id)?;
+        let unallocated = super::unallocated_id(&self.conn, vault_id)?;
         let mut stmt = self.conn.prepare(&base_sql())?;
         let mut incomes: Vec<TransactionView> = stmt
             .query_map(
@@ -429,17 +430,6 @@ const LIVE_MOVES_SQL: &str = "
     SELECT id FROM transactions
     WHERE vault_id = ?1 AND command_id = ?2 AND voided_at IS NULL
     ORDER BY rowid";
-
-/// The id of the vault's Unallocated.
-fn unallocated_flow(conn: &Connection, vault_id: Uuid) -> Result<Uuid> {
-    conn.query_row(
-        "SELECT id FROM flows WHERE vault_id = ?1 AND system_kind = 'unallocated'",
-        params![vault_id],
-        |r| r.get(0),
-    )
-    .optional()?
-    .ok_or_else(|| DomainError::InvalidFlow("missing Unallocated flow".to_string()))
-}
 
 const PLAN_COLUMNS: &str = "id, schedule, lines, enabled, created_by";
 
@@ -616,9 +606,7 @@ fn check_lines(tx: &Transaction<'_>, vault_id: Uuid, lines: &[AllocationLine]) -
 
 fn check_rule(rule: AllocationRule) -> Result<()> {
     match rule {
-        AllocationRule::Fixed { amount } if amount <= 0 => {
-            Err(DomainError::InvalidAmount("amount must be > 0".to_string()))
-        }
+        AllocationRule::Fixed { amount } => check_amount(amount),
         AllocationRule::Percent { basis_points }
             if !(1..=FULL_PERCENT_BP).contains(&basis_points) =>
         {
@@ -626,7 +614,7 @@ fn check_rule(rule: AllocationRule) -> Result<()> {
                 "percent must be 1..={FULL_PERCENT_BP} basis points"
             )))
         }
-        _ => Ok(()),
+        AllocationRule::Percent { .. } | AllocationRule::FillToCap => Ok(()),
     }
 }
 
@@ -646,9 +634,7 @@ fn check_moves(moves: &[AllocationMove], unallocated: Uuid) -> Result<()> {
         if !seen.insert(movement.flow_id) {
             return Err(invalid("an envelope appears twice in the moves"));
         }
-        if movement.amount <= 0 {
-            return Err(DomainError::InvalidAmount("amount must be > 0".to_string()));
-        }
+        check_amount(movement.amount)?;
     }
     Ok(())
 }
@@ -674,23 +660,9 @@ fn move_id(command_id: Uuid, flow_id: Uuid) -> Uuid {
     super::derived_id(command_id, &format!("allocation:{flow_id}"))
 }
 
-fn encode_schedule(schedule: &Schedule) -> Result<String> {
-    Ok(serde_json::to_string(schedule)?)
-}
-
 /// The same JSON as the command's `lines`.
 fn encode_lines(lines: &[AllocationLine]) -> Result<String> {
     Ok(serde_json::to_string(lines)?)
-}
-
-fn parse_date(value: &str) -> Result<NaiveDate> {
-    value
-        .parse()
-        .map_err(|_| DomainError::Storage(format!("invalid period date '{value}'")))
-}
-
-fn invalid(message: &str) -> DomainError {
-    DomainError::InvalidCommand(message.to_string())
 }
 
 #[cfg(test)]
