@@ -50,12 +50,6 @@ pub struct ServerDb {
     conn: Connection,
 }
 
-impl std::fmt::Debug for ServerDb {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ServerDb").finish_non_exhaustive()
-    }
-}
-
 impl ServerDb {
     /// Open (or create) the file and migrate it.
     pub fn open(path: impl AsRef<Path>) -> ApiResult<Self> {
@@ -173,10 +167,7 @@ impl ServerDb {
             .optional()?;
         match row {
             Some((id, username, expires_at)) if expires_at > now => Ok(Some(User { id, username })),
-            Some(_) => {
-                self.delete_token(token_hash)?;
-                Ok(None)
-            }
+            Some(_) => self.delete_token(token_hash).map(|()| None),
             None => Ok(None),
         }
     }

@@ -40,14 +40,6 @@ pub struct AppState {
     inner: Arc<Inner>,
 }
 
-impl std::fmt::Debug for AppState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AppState")
-            .field("config", &self.inner.config)
-            .finish_non_exhaustive()
-    }
-}
-
 impl AppState {
     /// Opens `vaults.sqlite` and `server.sqlite` under `data_dir`, creating
     /// the directory when missing.
