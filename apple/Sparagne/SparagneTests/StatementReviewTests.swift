@@ -648,6 +648,96 @@ struct StatementReviewTests {
         #expect(!model.availableChoices(for: spend).contains(.replaceExisting))
     }
 
+    // MARK: - Direction and routes
+
+    /// A new row as the core plans it, every field but those named empty:
+    /// half of a move between two accounts when it has a `pairedLine`.
+    private static func planned(
+        line: UInt32,
+        kind: TransactionKind? = .expense,
+        action: StatementAction = .bySign,
+        outflow: Bool = true,
+        walletId: Uuid? = nil,
+        account: String? = nil,
+        pairedLine: UInt32? = nil
+    ) -> StatementRow {
+        StatementRow(
+            line: line, commandId: "command-\(line)", status: .new, kind: kind, occurredAt: nil,
+            amount: 1_000, rounded: false, payee: "", bankCategory: nil, matchedCategory: nil,
+            counterWalletId: nil, original: nil, action: action, outflow: outflow, note: "",
+            category: nil, descriptionRule: nil, existing: nil, matchChoice: nil,
+            walletId: walletId, account: account, transferLeg: pairedLine != nil, pairedLine: pairedLine
+        )
+    }
+
+    @Test("An expense is signed minus and an income or a refund plus; a transfer goes by what the row is taken for, else by the file's sign")
+    func signedAmounts() {
+        #expect(StatementImportModel.signedAmount(Self.planned(line: 2, kind: .expense, outflow: false)) == -1_000)
+        #expect(StatementImportModel.signedAmount(Self.planned(line: 2, kind: .income)) == 1_000)
+        #expect(StatementImportModel.signedAmount(Self.planned(line: 2, kind: .refund)) == 1_000)
+        func transfer(_ action: StatementAction, outflow: Bool) -> Int64 {
+            StatementImportModel.signedAmount(Self.planned(line: 2, kind: .transferWallet, action: action, outflow: outflow))
+        }
+        #expect(transfer(.transferOut(toWalletId: nil), outflow: false) == -1_000)
+        #expect(transfer(.expense, outflow: false) == -1_000)
+        #expect(transfer(.transferIn(fromWalletId: nil), outflow: true) == 1_000)
+        #expect(transfer(.income, outflow: true) == 1_000)
+        #expect(transfer(.refund, outflow: true) == 1_000)
+        #expect(transfer(.bySign, outflow: true) == -1_000)
+        #expect(transfer(.skip, outflow: false) == 1_000)
+    }
+
+    @Test("A move between two accounts reads from the money-out half's wallet to the other's on both halves, or between its accounts within one wallet")
+    func pairedRoutes() async throws {
+        let (store, card, bank, _) = try await Self.vault()
+        let names = NameBook(snapshot: store.snapshot)
+        let rows = [
+            Self.planned(line: 2, kind: .transferWallet, outflow: false, walletId: card, account: "Revolut", pairedLine: 3),
+            Self.planned(line: 3, kind: .income, outflow: true, walletId: bank, account: "BBVA", pairedLine: 2),
+            Self.planned(line: 4, kind: .transferWallet, outflow: true, walletId: bank, account: "BBVA", pairedLine: 5),
+            Self.planned(line: 5, kind: .income, outflow: false, walletId: bank, account: "Conto", pairedLine: 4),
+            // Its other half is not in the file, and a row of its own is no move.
+            Self.planned(line: 6, kind: .transferWallet, walletId: bank, pairedLine: 9),
+            Self.planned(line: 7, walletId: card),
+        ]
+
+        let routes = StatementImportModel.pairedRoutes(rows, names: names)
+
+        // Line 3 says it took money out, so line 2 is the other end.
+        #expect(routes[2] == String(localized: "from \("Bank") to \("Card")"))
+        #expect(routes[3] == routes[2])
+        #expect(routes[4] == String(localized: "from \("BBVA") to \("Conto")"))
+        #expect(routes[5] == routes[4])
+        #expect(routes[6] == nil)
+        #expect(routes[7] == nil)
+        #expect(!StatementImportModel.isPairedHalf(rows[5]))
+    }
+
+    @Test("The kind menu ticks a By sign row as the income or expense it resolved to, nothing for one its match made a transfer, and the user's kind once there is one")
+    func kindChoices() async throws {
+        let (store, _, _, _) = try await Self.vault()
+        let model = StatementImportModel(store: store, mappings: try StatementMappingStore(defaults: Self.defaults()))
+
+        #expect(model.kindChoice(for: Self.planned(line: 2, kind: .expense, outflow: true)) == .expense)
+        #expect(model.kindChoice(for: Self.planned(line: 2, kind: .income, outflow: false)) == .income)
+        #expect(model.kindChoice(for: Self.planned(line: 2, kind: .transferWallet)) == .bySign)
+        #expect(model.kindChoice(for: Self.planned(line: 2, action: .refund)) == .refund)
+
+        let row = Self.planned(line: 3, kind: .expense, outflow: true)
+        model.setAction(.transferOut(toWalletId: nil), for: row)
+        #expect(model.kindChoice(for: row) == .transferOut)
+    }
+
+    @Test("The import has something to write with a new or replacing row, a move or a match to record, and nothing with only skips")
+    func countsThatWrite() {
+        #expect(!StatementImportModel.Counts(alreadyImported: 2, skipped: 3, invalid: 1, rounded: 1).writesAnything)
+        #expect(StatementImportModel.Counts(new: 1).writesAnything)
+        #expect(StatementImportModel.Counts(replaces: 1).writesAnything)
+        #expect(StatementImportModel.Counts(moves: 1).writesAnything)
+        #expect(StatementImportModel.Counts(possibleDuplicates: 1).writesAnything)
+        #expect(StatementImportModel.Counts(matchedTransfers: 1).writesAnything)
+    }
+
     // MARK: - Words
 
     @Test("Every choice over a match, every new status and every kind of a row has words of its own")
