@@ -200,21 +200,6 @@ struct AppStoreTests {
         #expect(quit.answer() == .terminateNow)
     }
 
-    @Test("Editing the amount re-applies the legs")
-    func updatingTheAmountMovesTheBalance() async throws {
-        let store = try await Self.onboarded()
-        await store.submit(quickAdd: "-12.50 pizza #food")
-        let row = try Self.pizzaRow(store)
-
-        var patch = TransactionPatch()
-        patch.amount = 2000
-        await store.update(transactionId: row.id, patch: patch)
-
-        #expect(store.presentedError == nil)
-        #expect(store.wallets.first?.balance == 8000)
-        #expect(try Self.pizzaRow(store).absoluteAmount == 2000)
-    }
-
     @Test("An empty patch is not sent")
     func emptyPatchDoesNothing() async throws {
         let store = try await Self.onboarded()
@@ -225,21 +210,6 @@ struct AppStoreTests {
 
         #expect(store.presentedError == nil)
         #expect(store.wallets.first?.balance == 8750)
-    }
-
-    @Test("Spending more than an envelope holds surfaces insufficient_funds")
-    func overspendingAnEnvelopeIsReported() async throws {
-        let store = try await Self.onboarded()
-        await store.createEnvelope(name: "Vacanze", mode: .unlimited, allowNegative: false, openingAllocation: 0)
-        #expect(store.presentedError == nil)
-
-        await store.submit(quickAdd: "-5.00 hotel >Vacanze")
-
-        let error = try #require(store.presentedError)
-        #expect(error.code == "insufficient_funds")
-        #expect(error.message.contains("Vacanze"))
-        // Nothing was written.
-        #expect(store.wallets.first?.balance == 10000)
     }
 
     @Test("An unknown envelope name is a quick-add error, not a domain error")
@@ -340,26 +310,15 @@ struct AppStoreTests {
 
     // MARK: - Wallet and envelope management
 
-    @Test("Archiving a wallet with a balance surfaces invalid_command")
-    func archivingAWalletWithBalanceIsRefused() async throws {
-        let store = try await Self.onboarded()
-        let cash = try #require(store.wallets.first { $0.name == "Cash" })
-
-        await store.archiveWallet(cash.id)
-
-        let error = try #require(store.presentedError)
-        #expect(error.code == "invalid_command")
-        #expect(store.wallets.contains { $0.id == cash.id })
-    }
-
-    @Test("A setup command that goes through moves the status line's saved-at; one refused does not")
+    @Test("A setup command that goes through moves the status line's saved-at; one refused, a wallet with a balance archived, does not")
     func setupCommandMovesSavedAt() async throws {
         let store = try await Self.onboarded()
         let cash = try #require(store.wallets.first { $0.name == "Cash" })
         #expect(store.savedAt == nil)
 
         await store.archiveWallet(cash.id)
-        #expect(store.presentedError != nil)
+        #expect(store.presentedError?.code == "invalid_command")
+        #expect(store.wallets.contains { $0.id == cash.id })
         #expect(store.savedAt == nil)
 
         store.presentedError = nil

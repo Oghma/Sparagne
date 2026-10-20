@@ -75,6 +75,7 @@ struct CoreActorTests {
         #expect(store.rows.contains { $0.note == "first" })
         #expect(!store.rows.contains { $0.note == "second" })
         #expect(store.presentedError?.code == "insufficient_funds")
+        #expect(store.presentedError?.message.contains("Food") == true)
         #expect(store.flows.first { $0.name == "Food" }?.balance == 1_000)
     }
 
