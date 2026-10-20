@@ -3,8 +3,7 @@ import Observation
 import Security
 import SparagneCore
 
-/// Where the session token lives. The app keeps it in the Keychain; the tests
-/// keep it in memory.
+/// Where the session token lives: the Keychain in the app, memory in the tests.
 protocol TokenStore: Sendable {
     func token(for account: String) -> String?
     /// Throws when the token could not be stored: the session still works,
@@ -23,13 +22,7 @@ struct KeychainError: Error, Equatable, Sendable, CustomStringConvertible {
     }
 }
 
-/// Generic-password items under the service `it.oghma.sparagne`, one per
-/// username, in the legacy file-based keychain: the data-protection keychain
-/// needs a team identifier, which an ad-hoc signed build does not have.
-///
-/// Reads and deletes are best effort. A save reports its failure, because a
-/// token the Keychain refused only lives until the app quits and Settings
-/// says so (`AccountStore.tokenSaveFailure`).
+/// One generic password per username in the file-based keychain: the other one needs a team id.
 struct KeychainTokenStore: TokenStore {
     static let service = "it.oghma.sparagne"
     /// What Keychain Access shows for the item.
@@ -79,21 +72,12 @@ struct KeychainTokenStore: TokenStore {
     }
 }
 
-/// The server this app talks to and who it talks as.
-///
-/// The URL, the username and the token's expiry are preferences; the token is
-/// a secret and lives only in the Keychain, never in a file or in the
-/// defaults. The username is also the `author` of every command,
-/// which is why `SyncEngine` relabels the outbox as
-/// soon as a login succeeds.
-///
-/// It also remembers what the server said about the account's vaults — the
-/// roles of the last `GET /vaults`, the vaults it lost access to and who is
-/// a member of each — so a viewer's vault is read-only from the first frame
-/// after a relaunch, even offline, and a row can be put on another member
-/// before the first sync of the session.
+/// The server, the account and what the server last said about its vaults, across launches.
 @Observable
 final class AccountStore {
+    // The token lives only in the Keychain. The roles, lost vaults and members remembered
+    // keep a viewer's vault read-only from the first frame after a relaunch, even offline.
+
     static let serverURLKey = "syncServerURL"
     static let usernameKey = "syncUsername"
     static let expiresAtKey = "syncTokenExpiresAt"

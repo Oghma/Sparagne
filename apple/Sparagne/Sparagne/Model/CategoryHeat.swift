@@ -15,9 +15,7 @@ struct CategoryHeatRow: Identifiable, Hashable, Sendable {
     var id: String { categoryId ?? "other" }
 }
 
-/// The RIEPILOGO's months x categories grid: the same lines as the year's
-/// category list, each month's net expense in a cell shaded against the
-/// heaviest cell of the grid.
+/// The RIEPILOGO's months x categories grid, each cell shaded against the heaviest.
 struct CategoryHeat: Hashable, Sendable {
     /// In the order of the category list.
     let rows: [CategoryHeatRow]

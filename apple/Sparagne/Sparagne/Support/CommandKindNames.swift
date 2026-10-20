@@ -1,11 +1,6 @@
 import Foundation
 
-/// What a command did, in words, for the list of refused changes.
-///
-/// The core names a command by its snake_case tag (`Command::kind_name()` in
-/// `core/src/command.rs`), which is what `RejectedCommand.kind` carries. A
-/// tag this table does not know yet — a newer core — is shown as it is
-/// rather than hidden.
+/// What a refused command did, in words; a tag a newer core sends and this lacks shows as it is.
 enum CommandKindNames {
     static func name(for kind: String) -> String {
         switch kind {

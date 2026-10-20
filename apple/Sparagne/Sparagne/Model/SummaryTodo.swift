@@ -1,8 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// One thing waiting on the RIEPILOGO's strip, with the tab that deals
-/// with it.
+/// One thing waiting on the RIEPILOGO's strip, with the tab that deals with it.
 struct SummaryTodoItem: Identifiable, Hashable, Sendable {
     enum Kind: Hashable, Sendable {
         /// Recurring periods waiting for a decision, over every template.

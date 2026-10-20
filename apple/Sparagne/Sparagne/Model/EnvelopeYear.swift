@@ -1,9 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// One active envelope as the RIEPILOGO's "Buste" table reads it: where it
-/// stands at the end of the month on screen, and what the year put in and
-/// took out of it, by person.
+/// One envelope of the "Buste" table: its balance at the month's end and its year by person.
 struct EnvelopeYearRow: Identifiable, Hashable, Sendable {
     let id: Uuid
     let name: String

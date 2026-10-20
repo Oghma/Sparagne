@@ -1,10 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// What the Mastro reads off the store beyond its rows: the lines of the grid
-/// with the due periods among them, the status line's figures, and the names
-/// a recurring template's ids stand for. Computed only:
-/// nothing here is stored or written.
+/// What the Mastro reads off the store beyond its rows; computed only.
 extension AppStore {
     /// What the grid's lines are made of: the rows on screen and the periods
     /// due this month, to be slotted in at their date (`LedgerLines`). While a

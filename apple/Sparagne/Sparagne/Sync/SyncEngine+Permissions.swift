@@ -1,10 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// What the account may do to a vault, from the roles the server listed
-/// (remembered across launches in `AccountStore.vaultRoles`). The menus, the
-/// palette and the management sheet offer an action only when it would go
-/// through: the core and the server refuse the rest anyway.
+/// What the account may do to a vault, from the roles the server listed: only what would go through.
 extension SyncEngine {
     /// Rename is a write: allowed when the role can write, or when the
     /// server does not list the vault (local-only, not pushed yet). Never on
@@ -31,15 +28,11 @@ extension SyncEngine {
     }
 }
 
-/// What the vault on screen allows, for the three places that offer the
-/// vault's life cycle: the Vault menu, the top bar's vault selector and the
-/// command palette. One set of rules, so the three
-/// never disagree about an entry.
-///
-/// Without an engine (a demo database) nothing is on a server: the core
-/// alone decides, so rename and delete are offered and leave and share are
-/// not.
+/// What the vault on screen allows, one rule set for the Vault menu, the vault selector and the palette.
 struct VaultPermissions: Equatable {
+    // Without an engine (a demo database) the core alone decides: rename and delete are
+    // offered, leave and share are not.
+
     var mayRename = false
     var mayDelete = false
     var mayLeave = false

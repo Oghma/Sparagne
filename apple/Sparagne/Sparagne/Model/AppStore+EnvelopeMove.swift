@@ -1,8 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// "Move between envelopes", the one-off sheet of the Riparto tab
-/// (`EnvelopeMoveSheet`).
+/// "Move between envelopes", the Riparto tab's one-off sheet (`EnvelopeMoveSheet`).
 extension AppStore {
     /// What every envelope holds at the end of `day` and how low and how
     /// high it goes from then on, by envelope: the figures a move dated that

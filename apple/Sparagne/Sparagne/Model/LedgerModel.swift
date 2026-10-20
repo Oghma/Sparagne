@@ -1,11 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// One calendar month, the unit the ledger reads and writes in.
-///
-/// All the range arithmetic lives here, in the system calendar, so the core
-/// only ever receives two UTC instants and never has to know about months,
-/// leap years or DST.
+/// One calendar month; its range arithmetic is here, so the core only gets UTC instants.
 struct MonthKey: Hashable, Sendable, Identifiable {
     let year: Int
     /// 1...12.
@@ -69,10 +65,7 @@ struct MonthKey: Hashable, Sendable, Identifiable {
     }
 }
 
-/// The `USCITE / ENTRATE` switch of the ledger header.
-///
-/// Transfers are in neither: they move money without earning or spending it.
-/// The View menu can add them to the list (`showTransfers`) for the rare check.
+/// The USCITE / ENTRATE switch; transfers are in neither, and the View menu can add them.
 enum LedgerDirection: String, CaseIterable, Identifiable, Sendable {
     case expenses
     case income
@@ -104,12 +97,7 @@ enum LedgerDirection: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// The rows picked with ⌘-click, ⇧-click and ⌘A, for the bulk actions of the
-/// selection bar. Apart from editing: a plain click still opens one row, and
-/// clears this.
-///
-/// A value with no SwiftUI in it, so the gestures can be tested without a
-/// window (`SparagneTests/SelectionTests.swift`).
+/// The rows picked with ⌘-click, ⇧-click and ⌘A for the selection bar.
 struct RowSelection: Equatable, Sendable {
     private(set) var ids: Set<Uuid> = []
     /// Where a ⇧-click extends from: the last row ⌘-clicked.
@@ -166,14 +154,7 @@ struct RowSelection: Equatable, Sendable {
     }
 }
 
-/// What ⌫ and ⌦ delete while no cell has the caret (`LedgerGrid.selectionKeys`).
-/// "Delete" is the window's word: the core voids the row (`VoidTransaction`),
-/// since its log is append-only and synced, and the row stays in the history.
-///
-/// The rows picked come first, as they always have; with none picked, the row
-/// under the pointer, the one whose trash icon is showing. A value with no
-/// SwiftUI in it, so the choice is tested without a window
-/// (`SparagneTests/DeleteTargetTests.swift`).
+/// What ⌫ and ⌦ void with no cell open: the picked rows, else the row under the pointer.
 enum DeleteTarget: Equatable, Sendable {
     /// The selection, in the order on screen. The store passes over what a
     /// bulk action skips, deleted rows and transfers (`AppStore.bulkTargets`).
@@ -227,8 +208,7 @@ enum DeleteTarget: Equatable, Sendable {
     }
 }
 
-/// The sheets of the tab bar at the bottom of the window, in the bar's
-/// order, which is also ⌘1 to ⌘5; the window opens on the first.
+/// The tab bar's sheets in its order, which is also ⌘1 to ⌘5.
 enum LedgerTab: String, CaseIterable, Identifiable, Sendable {
     case summary
     case ledger
@@ -266,9 +246,7 @@ enum LedgerTab: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// Everything the ledger's summary panel draws, loaded together so the
-/// numbers on screen always describe one month. The RIEPILOGO view has its
-/// own model (`YearSummary`).
+/// Everything the ledger's summary panel draws, loaded together so it describes one month.
 struct LedgerSummary: Sendable {
     /// The month these figures cover.
     let month: MonthKey

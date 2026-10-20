@@ -1,9 +1,6 @@
 import Foundation
 
-/// The refusals of the plan's decisions a household actually meets: two
-/// people, or two Macs, deciding the same period. The core's own words name
-/// the rule ("already exists", "not the latest period"); these say what
-/// happened. Anything else keeps the core's message.
+/// The decision refusals a household meets (two people deciding one period), in its own words.
 enum AllocationRefusal {
     /// Distribuisci or Salta on a period someone decided first.
     static func decision(_ error: AppError) -> AppError? {

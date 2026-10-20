@@ -3,10 +3,7 @@ import SwiftUI
 import SparagneCore
 import UniformTypeIdentifiers
 
-/// The two files the File menu writes besides the ledger's CSV: a backup of
-/// the whole database and every transaction of the vault on screen. The work
-/// is here, free of any view, so the tests run it; `VaultExportHandlers`
-/// only asks where to save.
+/// The database backup and the all-transactions export, free of any view so the tests run them.
 nonisolated enum VaultExporter {
     /// Transactions per call to the core while exporting: the ledger's own
     /// page size, so a vault of a few years takes a handful of calls.
@@ -86,10 +83,7 @@ nonisolated enum VaultExporter {
     }
 }
 
-/// The File menu's Back Up Database… and Export All Transactions… (and the
-/// palette's same actions): listens for their notifications, asks where to
-/// save with a save panel, and hands the work to `VaultExporter`. Failures
-/// go through the window's error alert.
+/// Back Up Database… and Export All Transactions…: asks where to save, then `VaultExporter` writes.
 struct VaultExportHandlers: ViewModifier {
     let store: AppStore
 

@@ -1,8 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// A capped envelope as the RIEPILOGO's fund cards show it: how full it is
-/// against its cap.
+/// A capped envelope as the fund cards show it: how full it is against its cap.
 struct FundGauge: Identifiable, Hashable, Sendable {
     let id: Uuid
     let name: String
@@ -48,8 +47,7 @@ extension FundGauge {
     }
 }
 
-/// One person's share of one month, the four figures the table and the
-/// per-person card read.
+/// One person's share of one month.
 struct PersonMonth: Hashable, Sendable {
     /// Income other than opening balances.
     let income: Int64
@@ -63,8 +61,7 @@ struct PersonMonth: Hashable, Sendable {
     var savings: Int64 { income - cashExpense }
 }
 
-/// One line of the RIEPILOGO's month table, everybody
-/// together, plus the running total of each person.
+/// One month of the RIEPILOGO's table, everybody together, with each person's figures.
 struct YearMonth: Hashable, Sendable {
     let month: MonthKey
     /// After the month on screen, in the year on screen: drawn blank.
@@ -98,8 +95,7 @@ struct YearMonth: Hashable, Sendable {
     }
 }
 
-/// Where the year would end at the pace of its finished months: only for
-/// the month of today, since a month gone by is a fact, not a forecast.
+/// Where the year would end at the pace of its finished months, for the month of today only.
 struct Projection: Hashable, Sendable {
     /// The finished months the pace is read from.
     let finishedMonths: Int
@@ -130,8 +126,7 @@ struct PersonYear: Hashable, Sendable {
     var rate: Double? { income > 0 ? Double(savings) / Double(income) : nil }
 }
 
-/// One wallet's column of the month table: its balance at the end of every
-/// month. Drawn only when the vault has two or more wallets in the year.
+/// One wallet's month-end balances, a column drawn only with two or more wallets in the year.
 struct WalletYearColumn: Identifiable, Hashable, Sendable {
     let id: Uuid
     let name: String
@@ -143,9 +138,7 @@ struct WalletYearColumn: Identifiable, Hashable, Sendable {
     let balances: [Int64]
 }
 
-/// One line of the RIEPILOGO's table. A `nil` figure is an empty cell: the
-/// opening row has only TOTALE, the sum has no FONDO CASSA, a future month
-/// has nothing at all.
+/// One line of the RIEPILOGO's table; a `nil` figure is an empty cell.
 struct YearTableRow: Hashable, Sendable {
     enum Kind: Hashable, Sendable {
         /// "Inizio anno": the fund the year starts with.
@@ -178,13 +171,7 @@ struct YearTableRow: Hashable, Sendable {
     let totalByPerson: [Int64]
 }
 
-/// The four numbers of the month on screen, with the
-/// month before and the year so far for their sub-lines. Plain figures, so
-/// the deltas the cards print are checked without a window.
-///
-/// They come from the same `YearMonth`s as the table under them, so a card
-/// and its row never disagree: expenses are USCITE (envelopes without a cap),
-/// not the Mastro's net expense on every envelope.
+/// The month's cards and their sub-lines, from the table's own months so a card and its row agree.
 struct MonthKPIs: Hashable, Sendable {
     let income: Int64
     let expenses: Int64

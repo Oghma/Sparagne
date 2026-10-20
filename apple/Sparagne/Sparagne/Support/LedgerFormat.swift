@@ -1,12 +1,6 @@
 import Foundation
 
-/// Money as the ledger writes it: the symbol in front,
-/// `.` between thousands and `,` before the cents.
-///
-/// Unlike `MoneyFormatter`, which follows the user's locale, this one is fixed:
-/// the mockups are a designed surface where the column widths and the decimal
-/// alignment are part of the layout. Amounts are still `Int64` minor units and
-/// still go through `Decimal`; no float ever appears.
+/// Money as the ledger writes it (`€2.448,53`), fixed whatever the locale: the layout depends on it.
 enum LedgerMoney {
     private static let formatter: NumberFormatter = {
         let formatter = NumberFormatter()
@@ -65,9 +59,7 @@ enum LedgerMoney {
     }
 }
 
-/// Dates as the ledger writes them: `01 ago` in the DATA column, `AGOSTO 2026`
-/// in the header. Month names come from the user's locale, so the Italian of
-/// the mockups and an English run both read naturally.
+/// Dates as the ledger writes them (`01 ago`, `AGOSTO 2026`), in the user's locale.
 enum LedgerDate {
     /// `"01 ago"`.
     static func day(_ date: Date, calendar: Calendar = .current, locale: Locale = .autoupdatingCurrent) -> String {
@@ -89,10 +81,7 @@ enum LedgerDate {
         monthName(month, style: .standalone, locale: locale).uppercased()
     }
 
-    /// Which of the Gregorian calendar's names: as a date writes it
-    /// (`.format`, "5 settembre"), on its own (`.standalone`, a heading), or
-    /// abbreviated on its own (`.shortStandalone`, a column). They differ in
-    /// the languages that inflect a month inside a date.
+    /// A name in a date (`.format`), on its own (`.standalone`), or abbreviated on its own.
     enum NameStyle {
         case format, standalone, shortStandalone
     }

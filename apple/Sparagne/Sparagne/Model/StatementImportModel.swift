@@ -2,14 +2,7 @@ import Foundation
 import Observation
 import SparagneCore
 
-/// What the statement import sheet is doing, step by step: read a file,
-/// map its columns, preview every row, import (`core/src/statement/mod.rs`).
-///
-/// The core decides what becomes of each row; the model only holds what the
-/// user chose (mapping, target, and per row its kind, note, category,
-/// envelope, what becomes of a match, or that it is ticked off) and turns it
-/// into the core's `StatementMapping`, `StatementOptions` and
-/// `StatementRowOverride`s. Nothing is written before `runImport()`.
+/// The statement import sheet, step by step; the core decides each row, `runImport()` writes.
 @Observable
 final class StatementImportModel {
     /// The pages of the sheet, in order.
@@ -30,10 +23,7 @@ final class StatementImportModel {
         case blank
     }
 
-    /// The preview's counts, with the rows ticked off in the review moved
-    /// from new to skipped, as the import will count them. A flagged row the
-    /// user imports anyway comes back from the core as new, and counts as
-    /// one.
+    /// The preview's counts with the rows ticked off moved from new to skipped, as the import counts.
     struct Counts: Equatable {
         var new = 0
         var alreadyImported = 0
@@ -68,8 +58,7 @@ final class StatementImportModel {
     /// Runs one sync round and says how it went (`syncRound(on:)`).
     typealias SyncRound = @MainActor @Sendable () async -> SyncResult
 
-    /// Everything a preview depends on. The sheet re-runs the preview when
-    /// it changes (`.task(id:)`).
+    /// Everything a preview depends on; the sheet re-runs it when this changes.
     struct PreviewInput: Hashable {
         let mapping: StatementMapping
         let options: StatementOptions
@@ -79,8 +68,6 @@ final class StatementImportModel {
         /// them itself, so a click or a keystroke never re-reads the file.
         let rowChoices: [StatementRowOverride]
     }
-
-    // MARK: Dependencies
 
     @ObservationIgnored let store: AppStore
     @ObservationIgnored private let mappings: StatementMappingStore
@@ -1399,8 +1386,7 @@ enum StatementFileError: Error, Equatable {
     case noHeader
 }
 
-/// A problem the import sheet shows under its own buttons: an alert on the
-/// window would wait behind the sheet.
+/// A problem shown under the sheet's own buttons: an alert would wait behind the sheet.
 struct StatementImportProblem: Equatable, Sendable {
     let headline: String
     /// The core's English message, or the system's; may be empty.
@@ -1425,8 +1411,7 @@ struct StatementImportProblem: Equatable, Sendable {
     }
 }
 
-/// A `StatementAction` as one flat choice of a picker; the wallet of a
-/// transfer is picked beside it.
+/// A `StatementAction` as a picker's flat choice; a transfer's wallet is picked beside it.
 enum StatementActionChoice: String, CaseIterable, Identifiable {
     case expense
     case income

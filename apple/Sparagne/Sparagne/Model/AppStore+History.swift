@@ -1,15 +1,12 @@
 import Foundation
 import SparagneCore
 
-/// Edit ▸ Undo and Redo for the ledger (`LedgerHistory`): the step each write
-/// records, and the inverse it is built from.
-///
-/// An inverse is made of what the core stores, never of what the grid shows:
-/// the stored category name, or `""` for Uncategorized (its localized label
-/// typed back would create a category of that name), `""` for no note, the
-/// original `occurred_at` with its own offset, `""` for a row that was its
-/// recorder's own.
+/// Edit ▸ Undo and Redo for the ledger: the step each write records, and its inverse.
 extension AppStore {
+    // An inverse is what the core stores, never what the grid shows: the stored category,
+    // `""` for Uncategorized (its label typed back would create a category), `""` for no
+    // note and for a row that was its recorder's own.
+
     /// The window's undo manager, handed over by `LedgerWindow`.
     func attach(undoManager: UndoManager?) {
         history.attach(undoManager)

@@ -1,19 +1,11 @@
 import Foundation
 import SparagneCore
 
-/// Remembers the mapping a statement was last imported with, and where it
-/// went (`StatementImportTarget`), so the next export from the same bank
-/// opens already mapped and aimed at its wallet.
-///
-/// One mapping per vault and header: the same card exported into two vaults
-/// may go to different wallets, and a bank that changes its columns is a new
-/// file to map. The mapping is kept as the core's own JSON
-/// (`encodeStatementMapping`), all of them in one dictionary under
-/// `defaultsKey`. A stored mapping that no longer decodes (the core changed
-/// its shape) reads as nothing remembered. The target (`StatementImportTarget`)
-/// sits beside it under `targetsKey`, keyed the same way, so a mapping saved
-/// before targets were remembered still reads back on its own.
+/// The mapping and target a statement was last imported with, per vault and header.
 struct StatementMappingStore {
+    // The mapping is the core's own JSON (`encodeStatementMapping`): one that no longer
+    // decodes reads as nothing remembered. Targets sit apart under `targetsKey`.
+
     static let defaultsKey = "statementMappings"
     static let targetsKey = "statementImportOptions"
 
@@ -86,17 +78,11 @@ struct StatementMappingStore {
     }
 }
 
-/// Where a statement was imported: the wallet, the envelope, the start day,
-/// and, for an export holding several accounts, where each account went
-/// other than the file's wallet. Every field may be missing from what was
-/// stored, and a field this version does not know is ignored, so a target
-/// written by another version of the app still reads.
-///
-/// The wallets also searched for duplicates are not part of it on purpose:
-/// they serve the move from typing by hand into one wallet to importing the
-/// banks, and left ticked they would keep moving real cash spends into the
-/// bank. Every import starts with none.
+/// Where a statement was imported: wallet, envelope, start day, each account's wallet; any may be missing.
 nonisolated struct StatementImportTarget: Codable, Equatable, Sendable {
+    // The wallets also searched for duplicates are left out on purpose: left ticked, they
+    // would keep moving cash spends into the bank.
+
     var walletId: Uuid?
     /// `nil` is Unallocated.
     var flowId: Uuid?

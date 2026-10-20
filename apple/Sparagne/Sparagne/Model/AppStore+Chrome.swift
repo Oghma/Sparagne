@@ -1,8 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// What the window's chrome reads off the store: the top bar's due pill and
-/// the Ricorrenze tab's count.
+/// What the window's chrome reads off the store, and the reveals the RIEPILOGO asks for.
 extension AppStore {
     /// Every period waiting for a decision, over all the templates: a
     /// template three months behind counts three times, since each period is

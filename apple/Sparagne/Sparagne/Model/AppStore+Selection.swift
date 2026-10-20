@@ -1,12 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// Row selection and the bulk actions over it: ⌘-click, ⇧-click and ⌘A pick
-/// rows of the ledger, the selection bar voids them, files them under one
-/// category or moves them to one envelope.
-///
-/// The gestures only say which rows; the grid decides which gesture a click
-/// was (`LedgerGrid.open`), so everything here runs without a window.
+/// Row selection and the bulk actions over it; the grid tells the gestures apart.
 extension AppStore {
     /// The selected rows, in the order on screen.
     var selectedRows: [TransactionRow] { rows.filter { selection.contains($0.id) } }

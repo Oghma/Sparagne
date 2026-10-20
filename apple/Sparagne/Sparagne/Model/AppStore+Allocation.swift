@@ -1,15 +1,11 @@
 import Foundation
 import SparagneCore
 
-/// The Riparto tab's commands and the lists it loads itself. The plan, the
-/// period due and the base come with every `reload()`; the decided periods
-/// (`allocationRuns`) are loaded by the tab and again after every decision.
-///
-/// Every command goes through `apply`, one command as a batch of one: the
-/// read-only refusal, the alert, "saved at" and the reload are the same as
-/// any other write's. None of them is a step of Edit ▸ Undo: Distribuisci is
-/// undone by its own toast and by the history's Annulla, as a command.
+/// The Riparto tab's commands, each through `apply`, and the decided periods it loads.
 extension AppStore {
+    // None is a step of Edit ▸ Undo: Distribuisci is undone by its toast and the history's
+    // Annulla, as a command.
+
     /// How many decided periods the history lists.
     static let allocationRunsLimit: UInt32 = 24
     /// How long the toast after Distribuisci offers Annulla.

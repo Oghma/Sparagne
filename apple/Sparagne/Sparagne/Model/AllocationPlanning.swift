@@ -1,9 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// The list operations of the plan's table: the order of the lines is their
-/// priority, and every edit sends the whole list (`UpdateAllocationPlan`
-/// replaces it), so they are worked out here, apart from the view.
+/// The plan table's list operations: the order is the priority, and every edit sends the whole list.
 enum AllocationLines {
     /// `lines` with the one at `index` moved `offset` places (−1 up, +1
     /// down), or `nil` when it would leave the list.
@@ -25,9 +23,7 @@ enum AllocationLines {
     }
 }
 
-/// What Distribuisci sends for a preview: one move per line that gets
-/// something, in the plan's order. A period where no line gets anything is
-/// skipped instead, since the core takes no execution without a move.
+/// What Distribuisci sends: a move per line that gets something, or a skip when none does.
 enum AllocationDecision: Equatable {
     case execute([AllocationMove])
     case skip
@@ -62,9 +58,7 @@ struct AllocationFigures: Equatable {
     }
 }
 
-/// What the plan says that deserves a second look. Never a refusal: the core
-/// takes every one of these, and the preview already gives such a line
-/// nothing, or less.
+/// What the plan says that deserves a second look; never a refusal, the core takes them all.
 enum AllocationWarning: Hashable {
     /// The line's envelope is archived, or gone: it gets nothing.
     case archived(flowId: Uuid)
@@ -113,9 +107,7 @@ enum AllocationWarning: Hashable {
     }
 }
 
-/// The preview line of each of `lines`, by position, when `preview` was
-/// worked out on these very lines; `nil` for a line it does not cover (a
-/// preview still on its way after an edit).
+/// Each line's preview line, by position, when the preview was worked out on these very lines.
 enum AllocationPreviewMatch {
     static func lines(_ lines: [AllocationLine], in preview: AllocationPreview?) -> [PreviewLine?] {
         lines.enumerated().map { index, line in
@@ -126,10 +118,7 @@ enum AllocationPreviewMatch {
     }
 }
 
-/// Distribuisci just went through: what its toast says and what Annulla
-/// reopens. The command is applied already, so undoing it is a command of its
-/// own (`ReopenAllocation`), unlike the void's toast, which holds the write
-/// back.
+/// Distribuisci just went through: what its toast says, and what Annulla reopens with a command.
 struct AllocationUndo: Identifiable, Equatable, Sendable, UndoCountdown {
     let id = UUID()
     let vaultId: Uuid

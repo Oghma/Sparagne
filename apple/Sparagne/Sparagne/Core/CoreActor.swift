@@ -1,27 +1,12 @@
 import Foundation
 import SparagneCore
 
-/// The app's single point of contact with the Rust core, and the only
-/// isolation domain that ever touches it.
-///
-/// Everything the UI does is either a query on `CoreHandle` or a command
-/// wrapped in an envelope minted by the core. Ids are
-/// never invented in Swift: `newEnvelope` and `createVaultEnvelope` produce
-/// them, and the created entity's id comes back on the `Receipt`.
-///
-/// `CoreHandle`'s calls are synchronous and hold a mutex (`core/src/ffi.rs`),
-/// so a long scan would freeze the window if it ran on the main actor. It runs
-/// here instead: `AppStore` and `SyncEngine` await this actor, which serializes
-/// the two of them onto one executor and leaves the main actor free to draw.
-/// Every value crossing back is `Sendable` — the
-/// generated record and enum types already are.
-///
-/// Two FFI functions deliberately stay off it: `parseQuickAdd` and
-/// `parseMoney`. They are free functions over a short string, with no `Core`,
-/// no mutex and no database behind them, and they run while a cell or the ⌘K
-/// line is being typed — a hop per keystroke would buy nothing and cost the
-/// live preview a frame.
+/// The app's one contact with the Rust core, and the only isolation domain that touches it.
 actor CoreActor {
+    // `CoreHandle`'s calls are synchronous under a mutex (`core/src/ffi.rs`): here, a long
+    // scan never freezes the window. `parseQuickAdd` and `parseMoney` stay off it: no
+    // database behind them, and they run on every keystroke.
+
     private let handle: CoreHandle
 
     /// Author recorded on every command in the log. It follows the account:
@@ -72,7 +57,7 @@ actor CoreActor {
         )
     }
 
-    /// An in-memory database, for tests and previews.
+    /// An in-memory database, for the tests.
     static func inMemory(
         author: String = "test",
         probe: (@Sendable () async -> Void)? = nil
@@ -97,11 +82,8 @@ actor CoreActor {
         return directory.appending(path: name, directoryHint: .notDirectory)
     }
 
-    // MARK: - The funnel
-    //
-    // Every method below reaches the handle through `visit`, so the probe and
-    // the "nothing else touches `handle`" rule both hold in one place.
-
+    /// Every method reaches the handle through here, so the probe and the
+    /// "nothing else touches `handle`" rule hold in one place.
     private func visit<T: Sendable>(_ body: (CoreHandle) throws -> T) async rethrows -> T {
         await probe?()
         return try body(handle)
@@ -591,8 +573,7 @@ actor CoreActor {
 
 // MARK: - What a visit returns
 
-/// What `CoreActor.load` needs to know about the window on screen. A plain
-/// value so the whole request crosses to the actor in one piece.
+/// What `CoreActor.load` needs to know about the window on screen, in one value.
 struct VaultLoadRequest: Sendable {
     let vaultId: Uuid
     let filter: TransactionFilter
@@ -663,8 +644,7 @@ struct CategoryManagement: Sendable {
     let aliases: [AliasView]
 }
 
-/// One rejected command with the vault it belongs to, so the sheet can
-/// dismiss it.
+/// One rejected command with the vault it belongs to, so the sheet can dismiss it.
 struct RejectedEntry: Sendable, Equatable {
     let vaultId: Uuid
     let vaultName: String

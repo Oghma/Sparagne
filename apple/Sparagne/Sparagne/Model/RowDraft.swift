@@ -1,22 +1,19 @@
 import Foundation
 import SparagneCore
 
-/// A category the core suggested for a note (`AppStore.suggestedCategory`),
-/// and the note it was for.
+/// A category the core suggested for a note, and the note it was for.
 struct NoteSuggestion: Equatable, Sendable {
     let note: String
     let category: String
 }
 
-/// A cell that refused what was typed. The grid reports `underlying`, which
-/// carries the core's own message, and puts the focus back on `field`.
+/// A cell that refused what was typed: the grid reports `underlying` and focuses `field`.
 struct RowDraftError: Error {
     let field: RowField
     let underlying: Error
 }
 
-/// The fields of a new row as the new line resolved and parsed them
-/// (`RowDraft.entry`), ready for `AppStore.addRow`.
+/// A new row's fields as the new line resolved them, ready for `AppStore.addRow`.
 typealias RowEntry = (
     day: Date,
     flowId: Uuid?,
@@ -28,11 +25,7 @@ typealias RowEntry = (
     person: String?
 )
 
-/// The text in the cells of the row being edited. Everything is a string
-/// until it commits, so a half-typed amount never has to be a number.
-///
-/// Main-actor bound because resolving a name or parsing an amount reads the
-/// store, which owns the core.
+/// The cells of the row being edited, strings until it commits.
 struct RowDraft {
     var day = Date()
     /// Picked from the ENVELOPE cell's list, never typed (`EnvelopeSelectCell`).

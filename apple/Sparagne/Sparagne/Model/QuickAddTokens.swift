@@ -1,10 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// One chip under the ⌘K field: what the line will write, one field at a time.
-/// `label` is the small word in front ("category",
-/// "envelope", "when"); the kind and the amount speak for themselves and have
-/// none.
+/// One chip under the ⌘K field; `label` is the word in front, none for the kind and the amount.
 struct QuickAddToken: Identifiable, Hashable, Sendable {
     enum Role: Hashable, Sendable {
         case kind, amount, category, envelope, wallet, when, who
@@ -21,13 +18,7 @@ struct QuickAddToken: Identifiable, Hashable, Sendable {
     var id: Role { role }
 }
 
-/// The parsed line as chips: `Uscita · 12,50 € · categoria Ristoranti · busta
-/// Cash · quando oggi`. The chips name each field, so a line that parsed into
-/// something unexpected is spotted before ↩.
-///
-/// Parsing belongs to the core (`parseQuickAdd`); this only lays out what came
-/// back. Pure, so it is tested without a window
-/// (`SparagneTests/QuickAddTokensTests.swift`).
+/// The parsed line as chips, so a line that parsed into something unexpected shows before ↩.
 enum QuickAddTokens {
     /// The "who" chip shows the `!name` of the line, and nothing when there
     /// is none: the row is then the author's, like any other. `person`, when

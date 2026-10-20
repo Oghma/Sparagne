@@ -1,7 +1,6 @@
 import Foundation
 
-/// Work run one piece at a time, in the order it was queued: the store's
-/// reloads, the Mastro's cell writes, the undo and redo writes.
+/// Work run one piece at a time, in the order it was queued.
 final class SerialQueue {
     private var tail: Task<Void, Never>?
     /// Tells `settle` whether more was queued while it waited.

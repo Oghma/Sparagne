@@ -150,11 +150,7 @@ struct SparagneApp: App {
     }
 }
 
-/// Menu commands that act on state of the window's own views (a focus, a
-/// sheet, a file panel) reach them through notifications: the menu bar is a
-/// scene, the ledger is a view, and the only thing they need to agree on is
-/// the name of the action. A command that only changes the store (the tab,
-/// the month, Nuova ricorrenza…) calls it directly.
+/// Menu commands that act on the window's own views (a focus, a sheet, a file panel) reach them by name.
 extension Notification.Name {
     /// ⌘K: opens the quick-add line over the grid.
     static let focusQuickAdd = Notification.Name("it.oghma.sparagne.focusQuickAdd")
@@ -186,9 +182,7 @@ extension Notification.Name {
     static let backupDatabase = Notification.Name("it.oghma.sparagne.backupDatabase")
 }
 
-/// The Settings window: the account when the app has a sync engine, a line
-/// about where the data lives when it has none (a demo database). Painted on
-/// the window's sheet ground, title bar included, like the main window.
+/// The Settings window: the account with a sync engine, where the data lives without one.
 private struct SettingsView: View {
     let engine: SyncEngine?
 

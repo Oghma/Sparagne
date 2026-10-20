@@ -1,12 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// A request the server refused, or a network failure.
-///
-/// `code` is the server's stable snake_case code (`ErrorBody`), so
-/// `ErrorMessages` can localize it exactly like a domain error.
-/// A failure below HTTP — no route, timeout, a non-HTTP answer — is
-/// `status == 0` with the code `offline`.
+/// A refusal with the server's snake_case `code`, or a failure below HTTP: status 0, `offline`.
 nonisolated struct ServerError: Error, Equatable, Sendable {
     let status: Int
     let code: String
@@ -124,11 +119,7 @@ private nonisolated struct ErrorBody: Codable, Sendable {
     let error: Detail
 }
 
-/// The server's HTTP API, typed.
-///
-/// Only the small flat wire types are decoded here. Commands, envelopes and
-/// push or pull bodies stay opaque strings that travel between the core and
-/// the server untouched.
+/// The server's HTTP API; commands and push or pull bodies stay opaque strings.
 nonisolated struct ServerAPI: Sendable {
     let transport: SyncTransport
 

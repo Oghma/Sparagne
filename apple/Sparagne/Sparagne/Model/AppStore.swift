@@ -2,15 +2,7 @@ import Foundation
 import Observation
 import SparagneCore
 
-/// A domain error on its way to an alert. `code` is the stable snake_case
-/// code from `ErrorCodes.swift`, so tests and call sites can match on it.
-///
-/// Also thrown as it is, by a check the app makes before the core is asked
-/// (the PERSONA cell's name): it reaches the alert with its own headline.
-///
-/// A `LocalizedError` whose description is `summary`: the window's
-/// `.alert(error:)` takes it as the title, and a sheet that shows a caught
-/// error's `localizedDescription` gets the headline too.
+/// An error on its way to the alert, titled by `summary`, with the core's stable `code`.
 struct AppError: Identifiable, Equatable, Sendable, LocalizedError {
     let id = UUID()
     let code: String
@@ -98,11 +90,7 @@ extension UndoCountdown {
     }
 }
 
-/// A void that has been hidden from the table but not yet applied.
-///
-/// The rows disappear immediately and a toast counts down; `undo()` cancels,
-/// and the window elapsing (or another destructive action, or quitting)
-/// commits one `VoidTransaction` per row.
+/// A void hidden from the table and not yet sent: the toast takes it back, its window elapsing sends it.
 struct PendingUndo: Identifiable, Equatable, Sendable, UndoCountdown {
     /// The toast's own identity: a new void is a new toast, even for a row
     /// that was voided, undone and voided again.
@@ -116,8 +104,7 @@ struct PendingUndo: Identifiable, Equatable, Sendable, UndoCountdown {
     let duration: Duration
 }
 
-/// One recurring period: a template and the day it fell due, waiting for a
-/// decision.
+/// One recurring period: a template and the day it fell due.
 struct DuePeriod: Identifiable, Hashable, Sendable {
     let template: RecurringView
     let date: NaiveDate
@@ -125,9 +112,7 @@ struct DuePeriod: Identifiable, Hashable, Sendable {
     var id: String { "\(template.id)/\(date)" }
 }
 
-/// A period still ahead, from `scheduleOccurrences`: what the Ricorrenze
-/// tab's agenda lists, never executed from there, since a period only
-/// becomes actionable once due.
+/// A period still ahead, which the agenda lists and nothing executes before it falls due.
 typealias UpcomingPeriod = DuePeriod
 
 extension TransactionPatch {
@@ -142,19 +127,12 @@ extension RecurringPatch {
     var isEmpty: Bool { self == RecurringPatch() }
 }
 
-/// Everything the window shows and everything it can do.
-///
-/// The store holds no domain state of its own: `snapshot`, `categories` and
-/// `transactions` are query results, refreshed by `reload()` after every
-/// command.
-///
-/// The state lives on the main actor and is written there; the core lives on
-/// `CoreActor` and is reached only by awaiting it, so a long query costs a
-/// suspension and not a frozen window. Every entry
-/// point that touches the core is therefore `async`: views call them from a
-/// `Task`, tests await them.
+/// Everything the window shows and everything it can do; the domain state is query results.
 @Observable
 final class AppStore {
+    // The core is reached only by awaiting `CoreActor`, so a long query costs a suspension,
+    // not a frozen window: every entry point that touches it is `async`.
+
     /// A month of a personal ledger fits in one page in practice. A month that
     /// does not goes on page by page as the grid scrolls to its end
     /// (`loadMore`), and the export reads every page first (`loadAll`).
@@ -277,14 +255,10 @@ final class AppStore {
     /// back to `nil` itself, and so does another vault.
     var revealedRow: Uuid?
 
-    // MARK: Category management (the SETUP tab)
-
     /// Active and archived categories, for the Categories table;
     /// `categories` above stays active-only, for pickers.
     private(set) var windowCategories: [CategoryView] = []
     private(set) var categoryAliases: [AliasView] = []
-
-    // MARK: Category completion
 
     /// The categories used in the last 90 days, most recent first: the tier
     /// the CATEGORY cells' list puts first (`CategoryCompletion`).
@@ -326,8 +300,6 @@ final class AppStore {
     var allocationReopening = false
     /// The history is asking before a reopen; the toast steps aside meanwhile.
     var allocationConfirmingReopen = false
-
-    // MARK: Setup
 
     /// Rows per category id over the last 12 months, voided excluded: the
     /// usage column of the SETUP categories. Written only by its loader
@@ -451,8 +423,6 @@ final class AppStore {
     /// list being narrowed.
     var searchText = "" { didSet { if searchText != oldValue { selection.clear() } } }
     var quickAddText = ""
-
-    // MARK: Selection
 
     /// The rows picked for a bulk action, with the gestures and the actions
     /// in `AppStore+Selection.swift` (which is why the setter is not private).

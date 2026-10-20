@@ -2,24 +2,13 @@ import Foundation
 import Observation
 import SparagneCore
 
-/// Runs the client half of the sync protocol.
-///
-/// A round first asks the server which vaults the account has and with what
-/// role, then for every local vault pushes what the outbox holds, a batch per
-/// request, and pulls until the core says the server has nothing more; then
-/// it joins whatever vault the server lists and the database does not have
-/// yet. The core does all the reasoning — the engine only moves opaque JSON
-/// between `CoreActor` and `ServerAPI` and keeps the status the window shows.
-/// It shares that one actor with `AppStore`, so the core is never touched
-/// from two isolation domains at once.
-///
-/// Nothing here throws out of the UI: a failure becomes `status`. The account
-/// actions the sheets run (leaving a vault, changing the password) throw, so
-/// the sheet can show why.
+/// The client half of the sync protocol: roles, push and pull per vault, then joins.
 @Observable
 final class SyncEngine {
-    /// Where the last round stands; the top bar's pill words it
-    /// (`SyncPillState`).
+    // The core does the reasoning; the engine moves its JSON over the shared `CoreActor`.
+    // A failure becomes `status`; only the account actions the sheets run throw.
+
+    /// Where the last round stands, as the top bar's pill words it (`SyncPillState`).
     enum Status: Equatable, Sendable {
         case idle
         case syncing
@@ -51,8 +40,6 @@ final class SyncEngine {
     static var noLongerSharedMessage: String {
         String(localized: "This vault is no longer shared with you.")
     }
-
-    // MARK: Dependencies
 
     @ObservationIgnored private let core: CoreActor
     /// Not private: the permission checks read the local vaults' owners.
@@ -476,8 +463,6 @@ final class SyncEngine {
         serverVaults.removeAll { $0.id == vaultId }
         publishMembers()
     }
-
-    // MARK: - Rejections
 
     func dismiss(_ change: RejectedChange) async {
         await core.dismissAllRejected([change])

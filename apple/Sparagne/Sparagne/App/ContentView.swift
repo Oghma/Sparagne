@@ -1,9 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// Opens the database, then hands the window over to `MainWindow`. Owns the
-/// store through a binding so `SparagneApp` can share the same instance
-/// with its menu commands, the Settings scene and the app delegate.
+/// Opens the database and hands the window to `MainWindow`; the store is shared with the menus, Settings and the app delegate.
 struct ContentView: View {
     @Binding var store: AppStore?
     @Binding var engine: SyncEngine?
@@ -52,8 +50,7 @@ struct ContentView: View {
     }
 }
 
-/// The single window: the sheet tabs, plus the modal sheets, the alerts and
-/// the undo toasts.
+/// The single window: the sheet tabs, the modal sheets, the alerts and the undo toasts.
 struct MainWindow: View {
     @Bindable var store: AppStore
     /// `nil` only before the database is open.
@@ -63,8 +60,7 @@ struct MainWindow: View {
     @State private var openedLaunchSheet = false
     @Environment(\.openSettings) private var openSettings
 
-    /// The sheets the window can present. Associated values seed the sheet
-    /// with the entity being renamed or edited.
+    /// The sheets the window presents, seeded with the vault they are about.
     enum SheetKind: Identifiable {
         case vault
         case renameVault(VaultView)

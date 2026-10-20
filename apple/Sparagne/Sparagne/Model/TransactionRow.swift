@@ -1,10 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// Resolves the ids on a transaction's legs to display names.
-///
-/// The core returns legs, not names (`TransactionView.legs`), so the table
-/// joins them against the vault snapshot it already loaded.
+/// The display names of a snapshot's wallets and envelopes, which the legs only name by id.
 nonisolated struct NameBook: Sendable {
     private var wallets: [Uuid: String] = [:]
     private var flows: [Uuid: String] = [:]
@@ -25,8 +22,7 @@ nonisolated struct NameBook: Sendable {
     func flow(_ id: Uuid?) -> String? { id.flatMap { flows[$0] } }
 }
 
-/// One row of the transactions table: a `TransactionView` with its ids
-/// resolved to names and its amount signed for display.
+/// A `TransactionView` with its ids resolved to names, as a table row.
 nonisolated struct TransactionRow: Identifiable, Hashable, Sendable {
     static let placeholder = "—"
 

@@ -1,11 +1,6 @@
 import Foundation
 
-/// Where the sync stands, as the top bar's pill and its popover say it, and
-/// as the Settings window words it: one place for the wording.
-///
-/// Pure: built from the few `SyncEngine` fields it reads, so every state and
-/// the order they win in can be tested without an engine or a window
-/// (`SparagneTests/SyncPillStateTests.swift`).
+/// Where the sync stands, in the words of the top bar's pill, its popover and Settings.
 enum SyncPillState: Equatable, Sendable {
     /// Logged in, nothing waiting, the last round went through.
     case synced

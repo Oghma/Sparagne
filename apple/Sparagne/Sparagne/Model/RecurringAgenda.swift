@@ -1,26 +1,17 @@
 import Foundation
 import SparagneCore
 
-/// `scheduleOccurrences(schedule:from:limit:)`, the core's list of a
-/// schedule's next dates, passed in rather than called directly so the
-/// agenda and the inspector's preview can be tested on a schedule of their
-/// own making.
+/// The core's `scheduleOccurrences`, passed in so tests can give schedules of their own.
 typealias ScheduleOccurrences = (Schedule, NaiveDate, UInt32) throws -> [NaiveDate]
 
-/// The core's `scheduleOccurrences`, in the shape `ScheduleOccurrences` takes
-/// (the generated function has argument labels). Pure arithmetic with no
-/// database behind it, so it is called on the main actor directly rather
-/// than through `CoreActor`.
+/// The core's `scheduleOccurrences`, pure arithmetic, so called on the main actor.
 enum CoreSchedule {
     static func occurrences(_ schedule: Schedule, _ from: NaiveDate, _ limit: UInt32) throws -> [NaiveDate] {
         try scheduleOccurrences(schedule: schedule, from: from, limit: limit)
     }
 }
 
-/// Day arithmetic on the core's `yyyy-MM-dd` dates. A `NaiveDate` has no time
-/// zone, so the arithmetic must not have one either: a Gregorian calendar in
-/// UTC, where a day is always 24 hours and a daylight-saving change never
-/// moves midnight onto the day before.
+/// Day arithmetic on `yyyy-MM-dd` in UTC, where a day is always 24 hours.
 enum NaiveDay {
     private static var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -58,13 +49,7 @@ enum NaiveDay {
     }
 }
 
-/// The Ricorrenze tab's "Prossimi 30 giorni": every
-/// period of the templates that run, from tomorrow to `days` days from today,
-/// with what they add up to on each side.
-///
-/// It starts tomorrow because today belongs to "Da confermare": a period of
-/// today is either due, and listed there, or already recorded or skipped. A
-/// day is never counted in both cards.
+/// "Prossimi 30 giorni": the running templates' periods from tomorrow, today being due's.
 struct RecurringAgenda: Equatable {
     /// Soonest first; on the same day, by the template's title.
     let tiles: [UpcomingPeriod]
@@ -115,9 +100,7 @@ struct RecurringAgenda: Equatable {
     }
 }
 
-/// What a template is called on screen: its note, or its category when it has
-/// no note, as the canvas names "mutuo" and "Netflix". Neither is required,
-/// so the last resort is the placeholder dash.
+/// A template's name on screen: its note, else its category, else the placeholder dash.
 enum RecurringTitle {
     static func of(_ template: RecurringView) -> String {
         if let note = template.note?.trimmingCharacters(in: .whitespaces), !note.isEmpty { return note }

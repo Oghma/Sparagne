@@ -1,11 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// The category hint's rules for a parsed quick-add line: when the ⌘K panel
-/// asks the core for a category, and how ⇥ writes the one it suggests. The
-/// parsed line itself is drawn as chips (`QuickAddTokens`).
-///
-/// Parsing itself belongs to the core (`parseQuickAdd`).
+/// When the ⌘K panel asks the core for a category, and how ⇥ writes the one it suggests.
 enum QuickAddSummary {
     /// The note worth asking the core a category for: an entry's, when the
     /// line has no `#category` of its own. `nil` for a transfer, which has no

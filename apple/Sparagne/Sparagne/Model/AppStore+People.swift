@@ -1,8 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// Who a row may be for (the PERSONA column): the names the person
-/// cells, the quick-add line's `!name` and the owner picker choose among.
+/// Who a row may be for: what the PERSONA cells, the `!name` and the owner picker offer.
 extension AppStore {
     /// The members of the vault on screen, when the sync engine has heard
     /// them from the server: the server refuses a row or a template put on

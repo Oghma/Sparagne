@@ -1,8 +1,6 @@
 import Foundation
 
-/// The local filter of the Ricorrenze and Setup tables, typed in the top
-/// bar's search field (`AppStore.tabFilter`). Pure, so what matches is
-/// tested without a view.
+/// The Ricorrenze and Setup tables' filter, typed in the top bar's search field.
 enum TableFilter {
     /// Whether any of `fields` contains `query`, ignoring case and accents
     /// ("caffe" finds "Caffè"). A blank query matches everything.
