@@ -1,9 +1,8 @@
 //! How a statement writes its dates and amounts, read from the values of the
-//! columns the user picked, for a mapping that starts blank.
-//!
-//! A format is guessed only when it reads every value: one value it refuses
-//! and the guess says nothing, so the user's own choice, or the default, is
-//! what the preview shows.
+//! columns the user picked, for a mapping that starts blank. A format is
+//! guessed only when it reads every value: one value it refuses and the guess
+//! says nothing, so the user's own choice, or the default, is what the
+//! preview shows.
 
 use chrono_tz::Tz;
 
@@ -12,7 +11,6 @@ use super::csv;
 use super::dates::parse_date;
 use super::{StatementDateFormat, StatementFormatGuess, plan};
 
-/// Data rows a guess reads.
 const GUESS_ROWS: usize = 50;
 
 /// The date format and the decimal mark that read every non-empty value of

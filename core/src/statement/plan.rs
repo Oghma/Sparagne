@@ -1,12 +1,9 @@
 //! From a statement and a mapping to one planned row per record: what the row
-//! is, the id its command gets and, when it is new, the command itself.
-//!
-//! Every row is read on its own first ([`Context::read`]); a second pass over
-//! the file numbers the rows with the same key, turns keys into ids, looks
-//! the ids up in the log and decides each row with the user's override
-//! ([`Context::decide`]). The rows are then matched against what the vault
-//! already holds ([`matching::claim`]), and last the user's `skip` leaves out
-//! the rows still new.
+//! is, the id its command gets and, when it is new, the command itself. Each
+//! row is read on its own ([`Context::read`]), given its id, looked up in the
+//! log and decided with the user's override ([`Context::decide`]); the rows
+//! are then matched against the vault ([`matching::claim`]), and last the
+//! user's `skip` leaves out the rows still new.
 
 use std::collections::{HashMap, HashSet};
 
@@ -789,7 +786,6 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Whether the money of `amount` goes out.
     fn outflow(&self, amount: &Amount) -> bool {
         match self.mapping.amount_sign {
             AmountSign::OutflowPositive => amount.minor > 0,
@@ -1000,7 +996,6 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// The rule for the type value, else the default action.
     fn action(&self, type_value: Option<&str>) -> &'a StatementAction {
         type_value
             .and_then(|value| {
@@ -1130,7 +1125,6 @@ fn kind_of(action: &StatementAction, outflow: bool) -> Option<TransactionKind> {
     }
 }
 
-/// The other wallet a transfer action names.
 fn counter_wallet(action: &StatementAction) -> Option<Uuid> {
     match action {
         StatementAction::TransferIn { from_wallet_id } => *from_wallet_id,

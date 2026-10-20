@@ -28,7 +28,6 @@ mod presets;
 /// statement duplicate every row.
 pub const STATEMENT_NAMESPACE: Uuid = Uuid::from_u128(0xe21a_7afd_0f46_4de7_8a8f_5524_1a97_b9f5);
 
-/// Data rows [`detect`] returns in [`StatementDetection::sample`].
 const SAMPLE_ROWS: usize = 5;
 
 /// How the columns of a statement map to a transaction.
@@ -422,8 +421,8 @@ pub struct StatementPreview {
     /// Wallets not checked for rows typed by hand, nor any statement's (a
     /// claim or a move names it, or [`StatementOptions::statement_wallets`]
     /// holds it), where new rows that matched nothing look like entries
-    /// already there,
-    /// the most such rows first. Advice only: matching does not use them.
+    /// already there, the most such rows first. Advice only: matching does
+    /// not use them.
     #[uniffi(default = [])]
     pub lookalikes: Vec<StatementLookalike>,
 }
@@ -634,7 +633,6 @@ impl Core {
     ) -> Result<StatementReport> {
         let planned = plan::plan(self, vault_id, text, mapping, options, overrides)?.rows;
         let mut report = StatementReport::default();
-        // Each row goes to its own wallet: its account's, else the options'.
         let wallet_of = |row: &StatementRow| row.wallet_id.unwrap_or(options.wallet_id);
         // Each new row's batch, with the claim of a lone transfer's own side
         // to write once it is in.

@@ -1,32 +1,10 @@
 //! Statement rows against what the vault already holds: the other side of a
-//! transfer between wallets that another statement (or the user) already
-//! recorded, as a transfer or as an entry, and the rows the user entered by
-//! hand.
-//!
-//! Every preview matches again; what a match decided is kept in the log, by
-//! the claims, moves and replacements an import writes (see
-//! [`super::plan::claim_id`], [`super::plan::move_id`] and
-//! [`super::plan::replace_id`]), so re-importing a statement finds the same
-//! transactions and writes nothing new. A transaction that stands for a row
-//! of one export is a candidate for a row of another only within that file's
-//! own days, and near their first or last the row is imported by default.
-//!
-//! The vault is read once per preview, around the rows' dates: the live
-//! incomes, expenses, refunds and transfers between wallets with a leg on
-//! the statement's wallet, on one of [`StatementOptions::also_check_wallets`]
-//! or on a wallet a transfer row names, opening balances left out, as are,
-//! dated before [`StatementOptions::since`], the entries of the wallets also
-//! checked and the transfers with them; and the claims and moves of the log.
-//! The transactions that stand for the rows already imported (their own,
-//! the one their claim, move or replacement names, and the transfer that
-//! took the place of an entry they named) match nothing.
-//!
-//! A row and a transaction are as many days apart as their calendar dates,
-//! each in its own offset. Each amount is paired on its own, in one pass for
-//! every kind of match: as many rows as can be get a transaction, and among
-//! the ways to pair that many, the one closest in all (fewest days apart
-//! summed, then fewest seconds; on a tie a transfer, then an entry of the
-//! row's kind, then an entry standing for a transfer).
+//! transfer another statement (or the user) recorded, as a transfer or as an
+//! entry, and the rows the user typed by hand. Every preview matches again,
+//! from the vault read once around the rows' dates and from the claims,
+//! moves and replacements earlier imports wrote in the log
+//! ([`super::plan::claim_id`]), so a statement imported again finds the same
+//! transactions. The rules and their thresholds are in `docs/STATEMENTS.md`.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -64,12 +42,11 @@ enum Found {
     Duplicate,
     /// An entry standing for the transfer the row is: the other wallet's
     /// side of it, or this one's recorded as an expense or an income;
-    /// [`StatementRowStatus::PossibleDuplicate`], replaced by default.
+    /// [`StatementRowStatus::PossibleDuplicate`].
     Replace,
 }
 
 impl Found {
-    /// The order on a tie.
     fn rank(self) -> i64 {
         match self {
             Self::Transfer => 0,
@@ -107,7 +84,6 @@ pub(super) fn claim(
     let (Some(&earliest), Some(&latest)) = (instants.iter().min(), instants.iter().max()) else {
         return Ok(Vec::new());
     };
-    // The wallets the file's rows go to.
     let own: HashSet<Uuid> = planned
         .iter()
         .filter_map(|item| item.row.wallet_id)
@@ -721,23 +697,11 @@ fn seeks_replace(item: &Planned) -> bool {
 }
 
 /// What becomes of a row `tx` matched: the user's `on_match`, else the
-/// default ([`StatementRow::default_choice`]): import the row anyway when
-/// the match sits near the file's edges and stands for another export's
-/// row, move a duplicate found in a wallet also checked, replace an entry
-/// standing for the transfer when it very likely is its other side (see
-/// [`replace_choice`]), skip any other.
-///
-/// `Skip` on a duplicate found in a wallet also checked reads as
-/// `MoveExisting`: kept there, the entry would leave the statement's wallet
-/// short and be claimed for good. `MoveExisting` reads as `Skip` on any
-/// other duplicate or transfer, `ReplaceExisting` as the default but for an
-/// entry standing for the transfer. Left out by the user (`skip`), the row
-/// is skipped by them like a new one, and nothing is written or claimed for
-/// it; `match_choice` still says what including it would do. Imported
-/// anyway, the row stays what it was, with the match beside it; replacing,
-/// it keeps its transfer to write, flagged.
-///
-/// [`StatementRow::default_choice`]: super::StatementRow::default_choice
+/// default, each read as `docs/STATEMENTS.md` §4 says. Left out by the user
+/// (`skip`), the row is skipped by them like a new one, and nothing is
+/// written or claimed for it; `match_choice` still says what including it
+/// would do. Imported anyway, the row stays what it was, with the match
+/// beside it; replacing, it keeps its transfer to write, flagged.
 fn settle(
     item: &mut Planned,
     tx: &TransactionView,
@@ -801,17 +765,10 @@ fn settle(
 }
 
 /// What becomes of a row whose match is an entry standing for its transfer.
-/// Keeping the entry instead of the row makes no sense here (the transfer
-/// would be missing), so `Skip` and `MoveExisting` read as `ImportAnyway`.
-/// By default the entry is replaced only when it very likely is the
-/// transfer's other side: the other bank's statement row (an import wrote
-/// it, or a claim or a move names it, in a statement's wallet not also
-/// checked), within the match's 4 days, as a SEPA transfer may take a
-/// weekend to arrive; else an entry dated the row's day or a day off in no
-/// wallet also checked, where the user's own sheet holds entries of every
-/// kind (an ATM withdrawal is not the dinner a friend paid back two days
-/// on). Never one dated before the start day, nor near the file's edges:
-/// the row is imported beside it.
+/// Keeping the entry instead of the row would leave the transfer missing, so
+/// `Skip` and `MoveExisting` read as `ImportAnyway`; by default the entry is
+/// replaced only when it very likely is the transfer's other side
+/// (`docs/STATEMENTS.md` §4).
 fn replace_choice(edge: Edge, asked: Option<StatementMatchChoice>) -> StatementMatchChoice {
     let hints = edge.hints;
     let likely = hints.statement_row || (edge.days <= 1 && !hints.in_also);
