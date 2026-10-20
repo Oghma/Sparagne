@@ -22,8 +22,6 @@ nonisolated struct ServerError: Error, Equatable, Sendable {
         self.retryAfter = retryAfter
     }
 
-    static let offline = ServerError(status: 0, code: "offline", message: "")
-
     static func offline(detail: String) -> ServerError {
         ServerError(status: 0, code: "offline", message: detail)
     }
@@ -117,10 +115,6 @@ private struct PasswordChange: Codable, Sendable {
     let newPassword: String
 }
 
-private struct MeResponse: Codable, Sendable {
-    let username: String
-}
-
 private nonisolated struct ErrorBody: Codable, Sendable {
     struct Detail: Codable, Sendable {
         let code: String
@@ -140,24 +134,13 @@ nonisolated struct ServerAPI: Sendable {
 
     // MARK: - Auth
 
-    func register(username: String, password: String) async throws -> TokenResponse {
+    /// `POST /auth/register` or `/auth/login`: the same body, the same answer.
+    func authenticate(username: String, password: String, registering: Bool) async throws -> TokenResponse {
         try await decode(
             call(
                 SyncRequest(
                     method: "POST",
-                    path: "/auth/register",
-                    body: try encode(Credentials(username: username, password: password))
-                )
-            )
-        )
-    }
-
-    func login(username: String, password: String) async throws -> TokenResponse {
-        try await decode(
-            call(
-                SyncRequest(
-                    method: "POST",
-                    path: "/auth/login",
+                    path: registering ? "/auth/register" : "/auth/login",
                     body: try encode(Credentials(username: username, password: password))
                 )
             )
@@ -180,11 +163,6 @@ nonisolated struct ServerAPI: Sendable {
                 body: try encode(PasswordChange(currentPassword: currentPassword, newPassword: newPassword))
             )
         )
-    }
-
-    func me(token: String) async throws -> String {
-        let response: MeResponse = try await decode(call(SyncRequest(path: "/me", bearer: token)))
-        return response.username
     }
 
     // MARK: - Vaults

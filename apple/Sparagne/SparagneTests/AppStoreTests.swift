@@ -911,9 +911,7 @@ struct ErrorMessagesTests {
             message: "Elisa is not a member of this vault",
             detail: "Elisa"
         )
-        let change = SyncEngine.RejectedChange(
-            entry: RejectedEntry(vaultId: UUID().uuidString, vaultName: "Casa", command: command)
-        )
+        let change = RejectedEntry(vaultId: UUID().uuidString, vaultName: "Casa", command: command)
         #expect(change.summary == String(localized: "\("Elisa") is not a member of this vault"))
         // No detail (an older server, a row refused before it): the generic
         // headline, whatever the sentence says.
@@ -924,7 +922,7 @@ struct ErrorMessagesTests {
             message: "Elisa is not a member of this vault"
         )
         #expect(
-            SyncEngine.RejectedChange(entry: RejectedEntry(vaultId: UUID().uuidString, vaultName: "Casa", command: older)).summary
+            RejectedEntry(vaultId: UUID().uuidString, vaultName: "Casa", command: older).summary
                 == ErrorMessages.summary(for: "not_a_member")
         )
         #expect(ErrorMessages.summary(for: "not_a_member", detail: " ") == ErrorMessages.summary(for: "not_a_member"))

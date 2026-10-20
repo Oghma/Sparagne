@@ -582,6 +582,7 @@ actor CoreActor {
     func dismissAllRejected(_ entries: [RejectedEntry]) async {
         await visit { handle in
             for entry in entries {
+                // One the core no longer holds has nothing left to dismiss.
                 try? handle.dismissRejected(vaultId: entry.vaultId, commandId: entry.command.commandId)
             }
         }
@@ -668,6 +669,15 @@ struct RejectedEntry: Sendable, Equatable {
     let vaultId: Uuid
     let vaultName: String
     let command: RejectedCommand
+}
+
+extension RejectedEntry: Identifiable {
+    var id: Uuid { command.commandId }
+    /// The localized headline for the server's code, naming the person when
+    /// the row was put on someone outside the vault.
+    var summary: String { ErrorMessages.summary(for: command.code, detail: command.detail) }
+    /// What the refused command did, in words (`CommandKindNames`).
+    var kindName: String { CommandKindNames.name(for: command.kind) }
 }
 
 /// What the core says about the sync of every local vault.

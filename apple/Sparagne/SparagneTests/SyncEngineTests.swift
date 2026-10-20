@@ -112,10 +112,6 @@ actor FakeServerTransport: SyncTransport {
             if let bearer = request.bearer { sessions.removeValue(forKey: bearer) }
             return SyncResponse(status: 204)
         }
-        if request.method == "GET", path == "/me" {
-            guard let user = caller(request) else { return Self.failure(401, "unauthorized") }
-            return try Self.encode(["username": user])
-        }
         if request.method == "GET", path == "/vaults" { return try vaults(request) }
 
         if parts.count == 3, parts[0] == "vaults" {

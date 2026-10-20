@@ -125,7 +125,7 @@ struct AccountTests {
         )
 
         do {
-            _ = try await api.login(username: "alice", password: "supersecret")
+            _ = try await api.authenticate(username: "alice", password: "supersecret", registering: false)
             Issue.record("the login should have been refused")
         } catch let error as ServerError {
             #expect(error.status == 429)
