@@ -33,10 +33,6 @@ const WALLET: &str = include_str!("fixtures/statement/wallet.csv");
 const WALLET_HEADER: &str = "account;category;currency;amount;ref_currency_amount;type;\
     payment_type;note;date;transfer;payee;labels";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 fn card_mapping() -> StatementMapping {
     statement::presets()
         .into_iter()
@@ -159,9 +155,7 @@ fn command_count(core: &Core, vault: Uuid) -> usize {
 
 /// A second wallet with money in it, for top-ups.
 fn bank_wallet(fx: &mut Fx) -> Uuid {
-    run(&mut fx.core, fx.vault, wallet_cmd("Bank", 100_000))
-        .result_id
-        .unwrap()
+    fx.id(wallet_cmd("Bank", 100_000))
 }
 
 const BANK_HEADER: &str = "Data operazione;Data valuta;Descrizione;Importo;Divisa";
@@ -209,16 +203,33 @@ fn import_with(
         .unwrap()
 }
 
+/// A core whose vault and `wallets` have the ids the frozen keys were
+/// computed with: `0199a000-0000-7000-8000-000000000001`, then `…02`, `…03`.
+fn pinned(wallets: &[&str]) -> (Core, Uuid, Vec<Uuid>) {
+    let id = |n: usize| Uuid::parse_str(&format!("0199a000-0000-7000-8000-{n:012}")).unwrap();
+    let mut core = Core::open_in_memory().unwrap();
+    let vault = id(1);
+    let create = Command::CreateVault {
+        name: "Pinned".to_string(),
+        currency: Currency::Eur,
+    };
+    core.execute(CommandEnvelope::with_id(vault, vault, "alice", create))
+        .unwrap();
+    let mut ids = Vec::new();
+    for (at, name) in wallets.iter().enumerate() {
+        let wallet = id(at + 2);
+        let create = wallet_cmd(name, 0);
+        core.execute(CommandEnvelope::with_id(wallet, vault, "alice", create))
+            .unwrap();
+        ids.push(wallet);
+    }
+    (core, vault, ids)
+}
+
 /// A wallet without money, archived.
 fn archived_wallet(fx: &mut Fx, name: &str) -> Uuid {
-    let id = run(&mut fx.core, fx.vault, wallet_cmd(name, 0))
-        .result_id
-        .unwrap();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ArchiveWallet { wallet_id: id },
-    );
+    let id = fx.id(wallet_cmd(name, 0));
+    fx.run(Command::ArchiveWallet { wallet_id: id });
     id
 }
 
@@ -262,7 +273,7 @@ fn typed_on(
         TransactionKind::Refund => Command::Refund(entry),
         _ => Command::Expense(entry),
     };
-    run(&mut fx.core, fx.vault, command).result_id.unwrap()
+    fx.id(command)
 }
 
 /// A transfer typed by hand on `day` September.
@@ -277,28 +288,18 @@ fn transfer_on(
     amount: i64,
     (month, day): (u32, u32),
 ) -> Uuid {
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::TransferWallet {
-            amount,
-            from_wallet_id: from,
-            to_wallet_id: to,
-            note: None,
-            occurred_at: noon_in_rome(month, day),
-        },
-    )
-    .result_id
-    .unwrap()
+    fx.id(Command::TransferWallet {
+        amount,
+        from_wallet_id: from,
+        to_wallet_id: to,
+        note: None,
+        occurred_at: noon_in_rome(month, day),
+    })
 }
 
 /// Two bank wallets without money.
 fn two_banks(fx: &mut Fx) -> (Uuid, Uuid) {
-    let mut open = |name| {
-        run(&mut fx.core, fx.vault, wallet_cmd(name, 0))
-            .result_id
-            .unwrap()
-    };
+    let mut open = |name| fx.id(wallet_cmd(name, 0));
     (open("First Bank"), open("Second Bank"))
 }
 
@@ -346,18 +347,8 @@ fn rule(contains: &str) -> StatementDescriptionRule {
 }
 
 fn new_flow(fx: &mut Fx, name: &str) -> Uuid {
-    run(
-        &mut fx.core,
-        fx.vault,
-        flow_cmd(name, FlowMode::Unlimited, true, 0),
-    )
-    .result_id
-    .unwrap()
+    fx.id(flow_cmd(name, FlowMode::Unlimited, true, 0))
 }
-
-// ---------------------------------------------------------------------------
-// Reading the file
-// ---------------------------------------------------------------------------
 
 #[test]
 fn quoted_fields_keep_commas_doubled_quotes_and_newlines() {
@@ -380,6 +371,7 @@ fn quoted_fields_keep_commas_doubled_quotes_and_newlines() {
 #[test]
 fn a_newline_inside_quotes_moves_the_next_row_down_a_line() {
     let mut fx = setup();
+    let options = options(fx.wallet);
     let text = card_csv(&[
         spend(
             "2026-09-16 08:00:00 UTC",
@@ -389,35 +381,22 @@ fn a_newline_inside_quotes_moves_the_next_row_down_a_line() {
         ),
         spend("2026-09-15 08:00:00 UTC", "EDICOLA", "CLEARED", "2.00"),
     ]);
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            &text,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(&fx, &text, &card_mapping(), &options, &no_overrides());
     assert_eq!(row(&preview, 2).payee, "CAFE CENTRALE");
     assert_eq!(row(&preview, 4).payee, "EDICOLA");
-    let report = fx
-        .core
-        .import_statement(
-            fx.vault,
-            "alice",
-            &text,
-            &card_mapping(),
-            &options(fx.wallet),
-            &[StatementRowOverride {
-                line: 4,
-                category: None,
-                note: None,
-                skip: true,
-                ..Default::default()
-            }],
-        )
-        .unwrap();
+    let report = import_with(
+        &mut fx,
+        &text,
+        &card_mapping(),
+        &options,
+        &[StatementRowOverride {
+            line: 4,
+            category: None,
+            note: None,
+            skip: true,
+            ..Default::default()
+        }],
+    );
     assert_eq!((report.executed, report.skipped), (1, 1));
 }
 
@@ -430,26 +409,20 @@ fn crlf_and_a_bom_read_like_lf() {
     assert_eq!(detection.preset_id.as_deref(), Some("card-transactions"));
     assert_eq!(detection.rows, 9);
 
-    let lf = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
-    let crlf = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            &windows,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let lf = preview_with(
+        &fx,
+        CARD,
+        &card_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
+    let crlf = preview_with(
+        &fx,
+        &windows,
+        &card_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
     assert_eq!(lf, crlf);
 }
 
@@ -462,21 +435,12 @@ fn a_semicolon_bank_export_with_decimal_commas_and_negative_spending() {
     assert_eq!(detection.rows, 4);
     assert_eq!(detection.headers[2], "Descrizione");
 
-    let casa = run(
-        &mut fx.core,
-        fx.vault,
-        flow_cmd("Casa", FlowMode::Unlimited, true, 0),
-    )
-    .result_id
-    .unwrap();
+    let casa = fx.id(flow_cmd("Casa", FlowMode::Unlimited, true, 0));
     let options = StatementOptions {
         flow_id: Some(casa),
         ..options(fx.wallet)
     };
-    let preview = fx
-        .core
-        .preview_statement(fx.vault, BANK, &bank_mapping(), &options, &no_overrides())
-        .unwrap();
+    let preview = preview_with(&fx, BANK, &bank_mapping(), &options, &no_overrides());
     let pos = row(&preview, 2);
     assert_eq!(pos.kind, Some(TransactionKind::Expense));
     assert_eq!(pos.amount, 350);
@@ -493,17 +457,7 @@ fn a_semicolon_bank_export_with_decimal_commas_and_negative_spending() {
         (3, 1, 0)
     );
 
-    let report = fx
-        .core
-        .import_statement(
-            fx.vault,
-            "alice",
-            BANK,
-            &bank_mapping(),
-            &options,
-            &no_overrides(),
-        )
-        .unwrap();
+    let report = import_with(&mut fx, BANK, &bank_mapping(), &options, &no_overrides());
     assert_eq!(report.executed, 3);
     assert_eq!(
         wallet_balance(&fx.core, fx.vault, fx.wallet),
@@ -518,16 +472,13 @@ fn a_semicolon_bank_export_with_decimal_commas_and_negative_spending() {
 #[test]
 fn date_only_rows_sit_at_local_noon() {
     let fx = setup();
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            BANK,
-            &bank_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(
+        &fx,
+        BANK,
+        &bank_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
     let at = row(&preview, 2).occurred_at.unwrap();
     assert_eq!(at.to_rfc3339(), "2026-09-16T12:00:00+02:00");
 }
@@ -535,24 +486,13 @@ fn date_only_rows_sit_at_local_noon() {
 #[test]
 fn a_bank_export_imported_from_another_timezone_is_already_imported() {
     let mut fx = setup();
-    fx.core
-        .import_statement(
-            fx.vault,
-            "alice",
-            BANK,
-            &bank_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let options = options(fx.wallet);
+    import_with(&mut fx, BANK, &bank_mapping(), &options, &no_overrides());
     let abroad = StatementOptions {
         timezone: "America/New_York".to_string(),
-        ..options(fx.wallet)
+        ..options
     };
-    let preview = fx
-        .core
-        .preview_statement(fx.vault, BANK, &bank_mapping(), &abroad, &no_overrides())
-        .unwrap();
+    let preview = preview_with(&fx, BANK, &bank_mapping(), &abroad, &no_overrides());
     assert_eq!((preview.new_rows, preview.already_imported), (0, 3));
     assert_eq!(
         row(&preview, 2).occurred_at.unwrap().to_rfc3339(),
@@ -568,16 +508,13 @@ fn a_ragged_row_is_invalid_and_the_others_are_read() {
         "2026-09-15 08:00:00 UTC,card_spend,TOO SHORT,CLEARED,2.00".to_string(),
         spend("2026-09-14 08:00:00 UTC", "EDICOLA", "CLEARED", "2.00"),
     ]);
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            &text,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(
+        &fx,
+        &text,
+        &card_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
     assert_eq!(invalid_code(row(&preview, 3)), "invalid_row");
     assert_eq!(row(&preview, 3).command_id, Uuid::nil());
     assert_eq!((preview.new_rows, preview.invalid), (2, 1));
@@ -590,16 +527,13 @@ fn a_trailing_delimiter_is_not_a_ragged_row_but_an_extra_value_is() {
                 16/09/2026;BAR;-1,20;EUR;\n\
                 15/09/2026;EDICOLA;-2,00;EUR;;\n\
                 14/09/2026;CINEMA;-9,00;EUR;extra\n";
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            text,
-            &bank_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(
+        &fx,
+        text,
+        &bank_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
     assert_eq!(row(&preview, 2).status, StatementRowStatus::New);
     assert_eq!(row(&preview, 3).status, StatementRowStatus::New);
     assert_eq!(invalid_code(row(&preview, 4)), "invalid_row");
@@ -626,10 +560,6 @@ fn an_empty_statement_is_refused() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// The card preset
-// ---------------------------------------------------------------------------
-
 #[test]
 fn the_card_header_is_recognised_as_the_preset() {
     let detection = statement::detect(CARD).unwrap();
@@ -647,16 +577,13 @@ fn the_card_header_is_recognised_as_the_preset() {
 #[test]
 fn padded_card_descriptions_are_trimmed() {
     let fx = setup();
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(
+        &fx,
+        CARD,
+        &card_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
     assert_eq!(row(&preview, 2).payee, "TRATTORIA DA MARIO");
     assert_eq!(row(&preview, 3).payee, "BOOKS, MAPS & MORE");
     assert_eq!(row(&preview, 4).payee, "SKYLINE AIR");
@@ -671,16 +598,13 @@ fn pending_and_cancelled_rows_are_skipped_and_cleared_ones_are_new() {
         spend("2026-09-16 06:00:00 UTC", "BAR", "declined", "1.40"),
         spend("2026-09-16 05:00:00 UTC", "BAR", "CLEARED", "1.50"),
     ]);
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            &text,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(
+        &fx,
+        &text,
+        &card_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
     assert_eq!(skip_reason(row(&preview, 2)), "status PENDING is skipped");
     assert_eq!(skip_reason(row(&preview, 3)), "status CANCELLED is skipped");
     assert_eq!(skip_reason(row(&preview, 4)), "status declined is skipped");
@@ -695,16 +619,13 @@ fn pending_and_cancelled_rows_are_skipped_and_cleared_ones_are_new() {
 #[test]
 fn the_card_fixture_previews_row_by_row() {
     let fx = setup();
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(
+        &fx,
+        CARD,
+        &card_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
     let kinds: Vec<(u32, Option<TransactionKind>, i64)> = preview
         .rows
         .iter()
@@ -736,17 +657,9 @@ fn the_card_fixture_previews_row_by_row() {
 #[test]
 fn a_topup_waits_for_its_source_wallet_then_becomes_a_transfer() {
     let mut fx = setup();
+    let options = options(fx.wallet);
     let bank = bank_wallet(&mut fx);
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(&fx, CARD, &card_mapping(), &options, &no_overrides());
     let topup = row(&preview, 8);
     assert_eq!(skip_reason(topup), "choose the wallet the money came from");
     assert_eq!(skip_code(topup), "needs_wallet");
@@ -754,32 +667,13 @@ fn a_topup_waits_for_its_source_wallet_then_becomes_a_transfer() {
     assert_eq!(topup.counter_wallet_id, None);
 
     let mapping = card_mapping_with_topups_from(bank);
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            CARD,
-            &mapping,
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(&fx, CARD, &mapping, &options, &no_overrides());
     let topup = row(&preview, 8);
     assert_eq!(topup.status, StatementRowStatus::New);
     assert_eq!(topup.counter_wallet_id, Some(bank));
     assert_eq!(preview.rounded, 1);
 
-    let report = fx
-        .core
-        .import_statement(
-            fx.vault,
-            "alice",
-            CARD,
-            &mapping,
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let report = import_with(&mut fx, CARD, &mapping, &options, &no_overrides());
     assert_eq!((report.executed, report.skipped, report.rounded), (6, 3, 1));
     let transfer = fx.core.transaction(fx.vault, topup.command_id).unwrap();
     assert_eq!(transfer.kind, TransactionKind::TransferWallet);
@@ -796,16 +690,13 @@ fn a_topup_waits_for_its_source_wallet_then_becomes_a_transfer() {
 #[test]
 fn extra_decimals_are_rounded_and_flagged() {
     let fx = setup();
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(
+        &fx,
+        CARD,
+        &card_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
     let topup = row(&preview, 8);
     assert_eq!(topup.amount, 12_602);
     assert!(topup.rounded);
@@ -815,16 +706,13 @@ fn extra_decimals_are_rounded_and_flagged() {
 #[test]
 fn liquid_deposits_are_skipped() {
     let fx = setup();
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(
+        &fx,
+        CARD,
+        &card_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
     let deposit = row(&preview, 9);
     assert_eq!(skip_reason(deposit), "type liquid_deposit is skipped");
     assert_eq!(skip_code(deposit), "skipped_by_rule");
@@ -842,16 +730,13 @@ fn a_row_in_another_currency_is_invalid() {
         "7.45",
         "USD",
     )]);
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            &text,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(
+        &fx,
+        &text,
+        &card_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
     let diner = row(&preview, 2);
     assert_eq!(invalid_code(diner), "currency_mismatch");
     assert_eq!(preview.invalid, 1);
@@ -860,16 +745,8 @@ fn a_row_in_another_currency_is_invalid() {
 #[test]
 fn the_original_amount_goes_into_the_note() {
     let mut fx = setup();
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let options = options(fx.wallet);
+    let preview = preview_with(&fx, CARD, &card_mapping(), &options, &no_overrides());
     let flight = row(&preview, 4);
     assert_eq!(flight.original.as_deref(), Some("12.34 USD"));
     assert_eq!(
@@ -882,16 +759,7 @@ fn the_original_amount_goes_into_the_note() {
         Some("126.017164395008 EURC")
     );
 
-    fx.core
-        .import_statement(
-            fx.vault,
-            "alice",
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    import_with(&mut fx, CARD, &card_mapping(), &options, &no_overrides());
     let tx = fx.core.transaction(fx.vault, flight.command_id).unwrap();
     assert_eq!(tx.note.as_deref(), Some("SKYLINE AIR (12.34 USD)"));
     let books = fx
@@ -912,59 +780,35 @@ fn a_sign_that_contradicts_the_action_keeps_the_action() {
         "24.99",
         "EUR",
     )]);
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            &text,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(
+        &fx,
+        &text,
+        &card_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
     let refund = row(&preview, 2);
     assert_eq!(refund.kind, Some(TransactionKind::Refund));
     assert_eq!(refund.amount, 2499);
     assert_eq!(refund.status, StatementRowStatus::New);
 }
 
-// ---------------------------------------------------------------------------
-// Dates
-// ---------------------------------------------------------------------------
-
 #[test]
 fn a_utc_row_late_at_night_lands_on_the_next_local_day() {
     let mut fx = setup();
+    let options = options(fx.wallet);
     let text = card_csv(&[spend(
         "2026-03-31 23:30:00 UTC",
         "NIGHT BUS",
         "CLEARED",
         "2.00",
     )]);
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            &text,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(&fx, &text, &card_mapping(), &options, &no_overrides());
     let at = row(&preview, 2).occurred_at.unwrap();
     assert_eq!((at.month(), at.day(), at.hour()), (4, 1, 1));
     assert_eq!(at.offset().local_minus_utc(), 2 * 3600);
 
-    fx.core
-        .import_statement(
-            fx.vault,
-            "alice",
-            &text,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    import_with(&mut fx, &text, &card_mapping(), &options, &no_overrides());
     let tx = fx
         .core
         .transaction(fx.vault, row(&preview, 2).command_id)
@@ -979,16 +823,13 @@ fn a_bad_date_or_amount_makes_the_row_invalid() {
         spend("16/09/2026 08:00", "BAR", "CLEARED", "1.20"),
         spend("2026-09-16 08:00:00 UTC", "BAR", "CLEARED", "1.2.0"),
     ]);
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            &text,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(
+        &fx,
+        &text,
+        &card_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
     assert_eq!(invalid_code(row(&preview, 2)), "invalid_date");
     assert_eq!(invalid_code(row(&preview, 3)), "invalid_amount");
 }
@@ -1087,10 +928,6 @@ fn the_wallets_also_checked_must_be_the_vaults() {
     assert_eq!(preview.new_rows, 3);
 }
 
-// ---------------------------------------------------------------------------
-// Guessing the formats of a blank mapping
-// ---------------------------------------------------------------------------
-
 /// The header of a current-account export in Italian, completion time and
 /// all.
 const CURRENT_HEADER: &str = "Tipo,Prodotto,Data di inizio,Data di completamento,Descrizione,\
@@ -1159,16 +996,7 @@ fn a_current_account_export_reads_as_date_times_with_a_decimal_point() {
         currency_column: Some("Valuta".to_string()),
         ..bank_mapping()
     };
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            &text,
-            &mapping,
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(&fx, &text, &mapping, &options(fx.wallet), &no_overrides());
     let paid = row(&preview, 2);
     assert_eq!(paid.status, StatementRowStatus::New);
     assert_eq!(paid.amount, 10_079);
@@ -1292,49 +1120,23 @@ fn only_the_first_fifty_rows_are_read() {
     assert_eq!(guessed_date(&rows), Some(StatementDateFormat::DayMonthYear));
 }
 
-// ---------------------------------------------------------------------------
-// Categories and overrides
-// ---------------------------------------------------------------------------
-
 #[test]
 fn bank_categories_match_only_existing_categories() {
     let mut fx = setup();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::CreateCategory {
-            name: "Bakeries".to_string(),
-        },
-    );
-    let groceries = run(
-        &mut fx.core,
-        fx.vault,
-        Command::CreateCategory {
-            name: "Spesa".to_string(),
-        },
-    )
-    .result_id
-    .unwrap();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::AddAlias {
-            category_id: groceries,
-            alias: "Grocery Stores, Supermarkets".to_string(),
-        },
-    );
+    let options = options(fx.wallet);
+    fx.run(Command::CreateCategory {
+        name: "Bakeries".to_string(),
+    });
+    let groceries = fx.id(Command::CreateCategory {
+        name: "Spesa".to_string(),
+    });
+    fx.run(Command::AddAlias {
+        category_id: groceries,
+        alias: "Grocery Stores, Supermarkets".to_string(),
+    });
     let before = fx.core.categories(fx.vault, true).unwrap().len();
 
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(&fx, CARD, &card_mapping(), &options, &no_overrides());
     let bakery = row(&preview, 5);
     assert_eq!(bakery.bank_category.as_deref(), Some("5462 - Bakeries"));
     assert_eq!(bakery.matched_category.as_deref(), Some("Bakeries"));
@@ -1343,16 +1145,7 @@ fn bank_categories_match_only_existing_categories() {
     assert_eq!(books.bank_category.as_deref(), Some("Book Stores"));
     assert_eq!(books.matched_category, None);
 
-    fx.core
-        .import_statement(
-            fx.vault,
-            "alice",
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    import_with(&mut fx, CARD, &card_mapping(), &options, &no_overrides());
     assert_eq!(fx.core.categories(fx.vault, true).unwrap().len(), before);
     let category = |line| {
         fx.core
@@ -1368,16 +1161,8 @@ fn bank_categories_match_only_existing_categories() {
 #[test]
 fn an_override_category_is_created_and_an_override_note_replaces_the_payee() {
     let mut fx = setup();
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let options = options(fx.wallet);
+    let preview = preview_with(&fx, CARD, &card_mapping(), &options, &no_overrides());
     let overrides = [
         StatementRowOverride {
             line: 3,
@@ -1394,16 +1179,7 @@ fn an_override_category_is_created_and_an_override_note_replaces_the_payee() {
             ..Default::default()
         },
     ];
-    fx.core
-        .import_statement(
-            fx.vault,
-            "alice",
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &overrides,
-        )
-        .unwrap();
+    import_with(&mut fx, CARD, &card_mapping(), &options, &overrides);
     assert!(
         fx.core
             .categories(fx.vault, false)
@@ -1426,33 +1202,21 @@ fn an_override_category_is_created_and_an_override_note_replaces_the_payee() {
 #[test]
 fn an_override_skip_leaves_the_row_out() {
     let mut fx = setup();
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
-    let report = fx
-        .core
-        .import_statement(
-            fx.vault,
-            "alice",
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &[StatementRowOverride {
-                line: 5,
-                category: None,
-                note: None,
-                skip: true,
-                ..Default::default()
-            }],
-        )
-        .unwrap();
+    let options = options(fx.wallet);
+    let preview = preview_with(&fx, CARD, &card_mapping(), &options, &no_overrides());
+    let report = import_with(
+        &mut fx,
+        CARD,
+        &card_mapping(),
+        &options,
+        &[StatementRowOverride {
+            line: 5,
+            category: None,
+            note: None,
+            skip: true,
+            ..Default::default()
+        }],
+    );
     assert_eq!((report.executed, report.skipped), (4, 5));
     assert!(
         fx.core
@@ -1460,16 +1224,7 @@ fn an_override_skip_leaves_the_row_out() {
             .is_err()
     );
     // Skipped by the user, so still new the next time.
-    let again = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let again = preview_with(&fx, CARD, &card_mapping(), &options, &no_overrides());
     assert_eq!(row(&again, 5).status, StatementRowStatus::New);
     assert_eq!(row(&again, 3).status, StatementRowStatus::AlreadyImported);
 }
@@ -1477,39 +1232,30 @@ fn an_override_skip_leaves_the_row_out() {
 #[test]
 fn a_refused_row_is_reported_and_the_others_import() {
     let mut fx = setup();
-    let report = fx
-        .core
-        .import_statement(
-            fx.vault,
-            "alice",
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &[StatementRowOverride {
-                line: 10,
-                category: Some("!!!".to_string()),
-                note: None,
-                skip: false,
-                ..Default::default()
-            }],
-        )
-        .unwrap();
+    let options = options(fx.wallet);
+    let report = import_with(
+        &mut fx,
+        CARD,
+        &card_mapping(),
+        &options,
+        &[StatementRowOverride {
+            line: 10,
+            category: Some("!!!".to_string()),
+            note: None,
+            skip: false,
+            ..Default::default()
+        }],
+    );
     assert_eq!(report.executed, 4);
     assert_eq!(report.rejected.len(), 1);
     assert_eq!(report.rejected[0].line, 10);
     assert_eq!(report.rejected[0].code, "invalid_name");
 }
 
-// ---------------------------------------------------------------------------
-// What the user says a row is
-// ---------------------------------------------------------------------------
-
 #[test]
 fn an_action_override_changes_what_the_row_is_in_the_preview_and_the_import() {
     let mut fx = setup();
-    let savings = run(&mut fx.core, fx.vault, wallet_cmd("Savings", 0))
-        .result_id
-        .unwrap();
+    let savings = fx.id(wallet_cmd("Savings", 0));
     let overrides = [
         StatementRowOverride {
             action: Some(StatementAction::Refund),
@@ -1658,11 +1404,7 @@ fn a_flow_override_picks_the_envelope_and_an_unusable_one_is_ignored() {
     let casa = new_flow(&mut fx, "Casa");
     let viaggi = new_flow(&mut fx, "Viaggi");
     let gone = new_flow(&mut fx, "Gone");
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ArchiveFlow { flow_id: gone },
-    );
+    fx.run(Command::ArchiveFlow { flow_id: gone });
     let text = bank_csv(&[
         bank_row("16/09/2026", "BAR", "-3,50"),
         bank_row("15/09/2026", "STIPENDIO", "1850,00"),
@@ -1710,9 +1452,7 @@ fn a_flow_override_picks_the_envelope_and_an_unusable_one_is_ignored() {
 #[test]
 fn overrides_change_nothing_on_rows_already_imported_or_invalid() {
     let mut fx = setup();
-    let savings = run(&mut fx.core, fx.vault, wallet_cmd("Savings", 0))
-        .result_id
-        .unwrap();
+    let savings = fx.id(wallet_cmd("Savings", 0));
     let text = card_csv(&[
         spend("2026-09-16 08:00:00 UTC", "BAR", "CLEARED", "1.20"),
         spend("16/09/2026 08:00", "BAR", "CLEARED", "1.30"),
@@ -1752,9 +1492,7 @@ fn overrides_change_nothing_on_rows_already_imported_or_invalid() {
 #[test]
 fn a_row_imported_before_stays_imported_whatever_the_user_now_says() {
     let mut fx = setup();
-    let savings = run(&mut fx.core, fx.vault, wallet_cmd("Savings", 0))
-        .result_id
-        .unwrap();
+    let savings = fx.id(wallet_cmd("Savings", 0));
     let options = options(fx.wallet);
     let first = import_with(&mut fx, BANK, &bank_mapping(), &options, &no_overrides());
     assert_eq!(first.executed, 3);
@@ -1776,10 +1514,6 @@ fn a_row_imported_before_stays_imported_whatever_the_user_now_says() {
     assert_eq!((again.executed, again.deduplicated), (0, 3));
     assert_eq!(command_count(&fx.core, fx.vault), commands);
 }
-
-// ---------------------------------------------------------------------------
-// Description rules
-// ---------------------------------------------------------------------------
 
 #[test]
 fn a_description_rule_matches_whatever_the_case_and_the_spaces() {
@@ -1867,13 +1601,9 @@ fn a_rule_without_an_action_keeps_the_type_rule_and_cleans_the_note() {
 #[test]
 fn a_rule_category_is_created_and_the_user_has_the_last_word() {
     let mut fx = setup();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::CreateCategory {
-            name: "Bakeries".to_string(),
-        },
-    );
+    fx.run(Command::CreateCategory {
+        name: "Bakeries".to_string(),
+    });
     let mut mapping = card_mapping();
     mapping.description_rules = vec![
         StatementDescriptionRule {
@@ -2004,9 +1734,7 @@ fn a_rule_naming_the_imported_wallet_an_unknown_one_or_a_bad_category_is_refused
 #[test]
 fn a_row_imported_before_a_rule_existed_stays_imported_after_it() {
     let mut fx = setup();
-    let savings = run(&mut fx.core, fx.vault, wallet_cmd("Savings", 0))
-        .result_id
-        .unwrap();
+    let savings = fx.id(wallet_cmd("Savings", 0));
     let options = options(fx.wallet);
     let before = preview_with(&fx, BANK, &bank_mapping(), &options, &no_overrides());
     import_with(&mut fx, BANK, &bank_mapping(), &options, &no_overrides());
@@ -2069,10 +1797,6 @@ fn a_mapping_saved_before_description_rules_reads_back_and_is_written_as_it_was(
     assert!(json.contains(r#"{"contains":"bar"}"#), "{json}");
     assert_eq!(statement::decode_mapping(&json).unwrap(), ruled);
 }
-
-// ---------------------------------------------------------------------------
-// Rows typed by hand
-// ---------------------------------------------------------------------------
 
 #[test]
 fn a_row_typed_by_hand_two_days_away_flags_the_statement_row() {
@@ -2144,9 +1868,7 @@ fn a_row_imported_anyway_is_imported_beside_its_match() {
 fn only_an_entry_of_the_same_kind_amount_and_wallet_within_three_days_is_a_duplicate() {
     let mut fx = setup();
     let cash = fx.wallet;
-    let other = run(&mut fx.core, fx.vault, wallet_cmd("Other", 0))
-        .result_id
-        .unwrap();
+    let other = fx.id(wallet_cmd("Other", 0));
     // Line 2, an expense of 3,50 on the 16th: none of these.
     by_hand(&mut fx, TransactionKind::Expense, other, 350, 16);
     by_hand(&mut fx, TransactionKind::Refund, cash, 350, 16);
@@ -2201,25 +1923,15 @@ fn rows_and_typed_entries_pair_one_to_one_closest_first() {
 #[test]
 fn voided_rows_and_opening_balances_never_match() {
     let mut fx = setup();
-    let bank = run(
-        &mut fx.core,
-        fx.vault,
-        Command::CreateWallet {
-            name: "Bank".to_string(),
-            opening_balance: 185_000,
-            occurred_at: september(15),
-        },
-    )
-    .result_id
-    .unwrap();
+    let bank = fx.id(Command::CreateWallet {
+        name: "Bank".to_string(),
+        opening_balance: 185_000,
+        occurred_at: september(15),
+    });
     let typed = by_hand(&mut fx, TransactionKind::Expense, bank, 350, 16);
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::VoidTransaction {
-            transaction_id: typed,
-        },
-    );
+    fx.run(Command::VoidTransaction {
+        transaction_id: typed,
+    });
     let preview = preview_with(&fx, BANK, &bank_mapping(), &options(bank), &no_overrides());
     assert_eq!((preview.new_rows, preview.possible_duplicates), (3, 0));
 }
@@ -2325,10 +2037,6 @@ fn a_matched_row_the_user_leaves_out_is_skipped_and_records_nothing() {
     assert_eq!(row(&again, 3).status, StatementRowStatus::MatchedTransfer);
 }
 
-// ---------------------------------------------------------------------------
-// Rows typed into another wallet, moved into the statement's
-// ---------------------------------------------------------------------------
-
 /// The coffee of 3,50 the user typed into `wallet` on the 15th, in `flow`,
 /// filed under Bar: the bank's line 2, a day later.
 fn coffee_typed_into(fx: &mut Fx, wallet: Uuid, flow: Option<Uuid>) -> Uuid {
@@ -2341,9 +2049,7 @@ fn coffee_typed_into(fx: &mut Fx, wallet: Uuid, flow: Option<Uuid>) -> Uuid {
         occurred_at: september(15),
         person: None,
     };
-    run(&mut fx.core, fx.vault, Command::Expense(entry))
-        .result_id
-        .unwrap()
+    fx.id(Command::Expense(entry))
 }
 
 /// The bank's options, also checking `cash`.
@@ -2358,9 +2064,7 @@ fn checking(bank: Uuid, cash: Uuid) -> StatementOptions {
 fn a_row_typed_into_cash_is_moved_into_the_bank_as_it_is() {
     let mut fx = setup();
     let cash = fx.wallet;
-    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
-        .result_id
-        .unwrap();
+    let bank = fx.id(wallet_cmd("Bank", 0));
     let casa = new_flow(&mut fx, "Casa");
     let typed = coffee_typed_into(&mut fx, cash, Some(casa));
     let options = checking(bank, cash);
@@ -2507,9 +2211,7 @@ fn moving_reads_as_skipping_but_for_a_duplicate_in_another_wallet() {
 fn a_refused_move_is_reported_on_its_line() {
     let mut fx = setup();
     let cash = fx.wallet;
-    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
-        .result_id
-        .unwrap();
+    let bank = fx.id(wallet_cmd("Bank", 0));
     let gone = new_flow(&mut fx, "Gone");
     coffee_typed_into(&mut fx, cash, Some(gone));
     // Back to zero, so the envelope can be archived.
@@ -2522,12 +2224,8 @@ fn a_refused_move_is_reported_on_its_line() {
         occurred_at: september(1),
         person: None,
     };
-    run(&mut fx.core, fx.vault, Command::Refund(refund));
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ArchiveFlow { flow_id: gone },
-    );
+    fx.run(Command::Refund(refund));
+    fx.run(Command::ArchiveFlow { flow_id: gone });
     let report = import_with(
         &mut fx,
         BANK,
@@ -2545,16 +2243,10 @@ fn a_refused_move_is_reported_on_its_line() {
 fn a_row_typed_into_an_archived_wallet_still_moves() {
     let mut fx = setup();
     let cash = fx.wallet;
-    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
-        .result_id
-        .unwrap();
+    let bank = fx.id(wallet_cmd("Bank", 0));
     let typed = coffee_typed_into(&mut fx, cash, None);
     by_hand(&mut fx, TransactionKind::Income, cash, 350, 1);
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ArchiveWallet { wallet_id: cash },
-    );
+    fx.run(Command::ArchiveWallet { wallet_id: cash });
     let report = import_with(
         &mut fx,
         BANK,
@@ -2569,16 +2261,10 @@ fn a_row_typed_into_an_archived_wallet_still_moves() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Rows an earlier import wrote
-// ---------------------------------------------------------------------------
-
 #[test]
 fn last_months_coffee_is_not_a_duplicate_of_this_months() {
     let mut fx = setup();
-    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
-        .result_id
-        .unwrap();
+    let bank = fx.id(wallet_cmd("Bank", 0));
     let options = options(bank);
     let september = bank_csv(&[
         bank_row("30/09/2026", "BAR", "-1,20"),
@@ -2616,9 +2302,7 @@ fn last_months_coffee_is_not_a_duplicate_of_this_months() {
 #[test]
 fn a_row_typed_into_the_bank_still_flags_next_to_an_imported_one() {
     let mut fx = setup();
-    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
-        .result_id
-        .unwrap();
+    let bank = fx.id(wallet_cmd("Bank", 0));
     let options = options(bank);
     let september = bank_csv(&[bank_row("30/09/2026", "BAR", "-1,20")]);
     import_with(
@@ -2637,9 +2321,7 @@ fn a_row_typed_into_the_bank_still_flags_next_to_an_imported_one() {
         occurred_at: noon_in_rome(10, 2),
         person: None,
     };
-    let typed = run(&mut fx.core, fx.vault, Command::Expense(entry))
-        .result_id
-        .unwrap();
+    let typed = fx.id(Command::Expense(entry));
     assert_eq!(typed.get_version_num(), 7, "the app mints ids as v7");
     // A day from the imported row on the 30th and from the typed one.
     let october = bank_csv(&[bank_row("01/10/2026", "BAR", "-1,20")]);
@@ -2652,37 +2334,23 @@ fn a_row_typed_into_the_bank_still_flags_next_to_an_imported_one() {
 #[test]
 fn a_recurring_row_recorded_into_the_bank_still_flags_its_bank_row() {
     let mut fx = setup();
-    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
-        .result_id
-        .unwrap();
-    let mortgage = run(
-        &mut fx.core,
-        fx.vault,
-        Command::CreateRecurring {
-            transaction_kind: TransactionKind::Expense,
-            amount: 85_000,
-            wallet_id: Some(bank),
-            flow_id: None,
-            category: Some("Mutuo".to_string()),
-            note: Some("rata mutuo".to_string()),
-            schedule: monthly_from(5, day(2026, 1, 5)),
-            owner: None,
-        },
-    )
-    .result_id
-    .unwrap();
-    let recorded = run(
-        &mut fx.core,
-        fx.vault,
-        Command::ExecuteRecurring {
-            recurring_id: mortgage,
-            period_date: day(2026, 9, 5),
-            occurred_at: september(5),
-            person: None,
-        },
-    )
-    .result_id
-    .unwrap();
+    let bank = fx.id(wallet_cmd("Bank", 0));
+    let mortgage = fx.id(Command::CreateRecurring {
+        transaction_kind: TransactionKind::Expense,
+        amount: 85_000,
+        wallet_id: Some(bank),
+        flow_id: None,
+        category: Some("Mutuo".to_string()),
+        note: Some("rata mutuo".to_string()),
+        schedule: monthly_from(5, day(2026, 1, 5)),
+        owner: None,
+    });
+    let recorded = fx.id(Command::ExecuteRecurring {
+        recurring_id: mortgage,
+        period_date: day(2026, 9, 5),
+        occurred_at: september(5),
+        person: None,
+    });
     let text = bank_csv(&[bank_row("07/09/2026", "ADDEBITO RATA MUTUO", "-850,00")]);
     let preview = preview_with(&fx, &text, &bank_mapping(), &options(bank), &no_overrides());
     let rata = row(&preview, 2);
@@ -2695,9 +2363,7 @@ fn a_recurring_row_recorded_into_the_bank_still_flags_its_bank_row() {
 fn a_row_once_imported_into_cash_is_still_found_moved_and_then_imported() {
     let mut fx = setup();
     let cash = fx.wallet;
-    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
-        .result_id
-        .unwrap();
+    let bank = fx.id(wallet_cmd("Bank", 0));
     // The user's own sheet of cash spending, imported into Cash once.
     let sheet = bank_csv(&[bank_row("15/09/2026", "CAFFE AL BAR", "-3,50")]);
     let cash_options = options(cash);
@@ -2737,14 +2403,8 @@ fn a_row_once_imported_into_cash_is_still_found_moved_and_then_imported() {
     assert_eq!(command_count(&fx.core, fx.vault), commands);
 }
 
-// ---------------------------------------------------------------------------
-// What an import leaves in the log: moves and claims
-// ---------------------------------------------------------------------------
-
 fn new_wallet(fx: &mut Fx, name: &str) -> Uuid {
-    run(&mut fx.core, fx.vault, wallet_cmd(name, 0))
-        .result_id
-        .unwrap()
+    fx.id(wallet_cmd(name, 0))
 }
 
 /// The command of the log whose id is `id`.
@@ -3340,12 +3000,8 @@ fn a_claim_the_engine_refuses_is_reported_on_its_line() {
         occurred_at: september(1),
         person: None,
     };
-    run(&mut fx.core, fx.vault, Command::Refund(refund));
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ArchiveFlow { flow_id: gone },
-    );
+    fx.run(Command::Refund(refund));
+    fx.run(Command::ArchiveFlow { flow_id: gone });
     let report = import_with(
         &mut fx,
         BANK,
@@ -3358,10 +3014,6 @@ fn a_claim_the_engine_refuses_is_reported_on_its_line() {
     assert_eq!(report.rejected[0].line, 2);
     assert_eq!(report.rejected[0].code, "invalid_command");
 }
-
-// ---------------------------------------------------------------------------
-// Near the first and last days of a file
-// ---------------------------------------------------------------------------
 
 /// October in a bank, the 2nd's line given: a salary on the 1st, an
 /// apartment's rent on the 31st.
@@ -3483,10 +3135,6 @@ fn a_payment_next_to_a_transfer_claimed_for_september_is_imported() {
     assert_eq!(paid.kind, TransactionKind::Expense);
 }
 
-// ---------------------------------------------------------------------------
-// The start day and the pools
-// ---------------------------------------------------------------------------
-
 #[test]
 fn a_transfer_from_cash_before_the_start_day_matches_nothing() {
     let mut fx = setup();
@@ -3567,10 +3215,6 @@ fn the_files_own_days_leave_out_the_rows_before_the_start_day() {
     assert_eq!(row(&preview, 3).status, StatementRowStatus::New);
     assert_eq!(row(&preview, 3).existing, None);
 }
-
-// ---------------------------------------------------------------------------
-// A transfer already in as an income, an expense or a refund
-// ---------------------------------------------------------------------------
 
 /// The first bank's export: a bonifico to the second on 1 October.
 fn bonifico_out() -> String {
@@ -4013,11 +3657,7 @@ fn a_refused_replacement_writes_nothing() {
     );
     let income = live(&fx, TransactionKind::Income)[0].id;
     // An archived statement wallet refuses the transfer.
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ArchiveWallet { wallet_id: ing },
-    );
+    fx.run(Command::ArchiveWallet { wallet_id: ing });
     let preview = preview_with(
         &fx,
         &bonifico_out(),
@@ -4143,10 +3783,6 @@ fn replacing_reads_as_the_default_on_any_other_match() {
         Some(StatementMatchChoice::MoveExisting)
     );
 }
-
-// ---------------------------------------------------------------------------
-// The user's own sheet in Cash, and what a row says of itself
-// ---------------------------------------------------------------------------
 
 /// The user's own sheet of cash spending, imported into `cash` once: the
 /// ids of its rows' entries.
@@ -4464,10 +4100,6 @@ fn an_entry_before_the_start_day_is_never_replaced_by_default() {
     assert!(atm.existing.is_some());
     assert_eq!(atm.match_choice, Some(StatementMatchChoice::ImportAnyway));
 }
-
-// ---------------------------------------------------------------------------
-// One export, every account: the BudgetBakers Wallet app's
-// ---------------------------------------------------------------------------
 
 fn wallet_mapping() -> StatementMapping {
     statement::presets()
@@ -4879,29 +4511,8 @@ fn accounts_mapped_to_wallets_later_find_the_rows_imported_into_cash() {
 
 #[test]
 fn the_key_with_an_account_column_is_frozen() {
-    let mut core = Core::open_in_memory().unwrap();
-    let vault = Uuid::parse_str("0199a000-0000-7000-8000-000000000001").unwrap();
-    let wallet = Uuid::parse_str("0199a000-0000-7000-8000-000000000002").unwrap();
-    let other = Uuid::parse_str("0199a000-0000-7000-8000-000000000003").unwrap();
-    core.execute(CommandEnvelope {
-        id: vault,
-        vault_id: vault,
-        author: "alice".to_string(),
-        command: Command::CreateVault {
-            name: "Pinned".to_string(),
-            currency: Currency::Eur,
-        },
-    })
-    .unwrap();
-    for (id, name) in [(wallet, "Cash"), (other, "Revolut")] {
-        core.execute(CommandEnvelope {
-            id,
-            vault_id: vault,
-            author: "alice".to_string(),
-            command: wallet_cmd(name, 0),
-        })
-        .unwrap();
-    }
+    let (core, vault, wallets) = pinned(&["Cash", "Revolut"]);
+    let (wallet, other) = (wallets[0], wallets[1]);
     let text = wallet_csv(&[wallet_row(
         " Revolut ",
         "Expense",
@@ -4941,10 +4552,6 @@ fn a_mapping_with_accounts_round_trips_and_one_without_is_written_as_it_was() {
     assert!(!plain.contains("account_column"), "{plain}");
     assert!(!plain.contains("transfer_column"), "{plain}");
 }
-
-// ---------------------------------------------------------------------------
-// Transfers between the user's banks
-// ---------------------------------------------------------------------------
 
 #[test]
 fn the_other_side_of_an_imported_transfer_is_matched_and_counted_once() {
@@ -5054,9 +4661,7 @@ fn the_transfer_imported_from_the_receiving_bank_first_matches_the_sending_one()
 fn a_transfer_matches_only_the_way_and_the_wallet_the_row_names() {
     let mut fx = setup();
     let (first, second) = two_banks(&mut fx);
-    let third = run(&mut fx.core, fx.vault, wallet_cmd("Third", 0))
-        .result_id
-        .unwrap();
+    let third = fx.id(wallet_cmd("Third", 0));
     let typed = transfer_by_hand(&mut fx, first, second, 30_000, 10);
     let options = options(first);
     let as_action = |action| StatementRowOverride {
@@ -5212,32 +4817,18 @@ fn a_matched_transfer_imported_anyway_is_what_its_action_says() {
     assert_eq!(tx.kind, TransactionKind::Expense);
 }
 
-// ---------------------------------------------------------------------------
-// Deduplication and ids
-// ---------------------------------------------------------------------------
-
 #[test]
 fn reimporting_a_statement_executes_nothing() {
     let mut fx = setup();
-    let import = |core: &mut Core| {
-        core.import_statement(
-            fx.vault,
-            "alice",
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap()
-    };
-    let first = import(&mut fx.core);
+    let (mapping, options) = (card_mapping(), options(fx.wallet));
+    let first = import_with(&mut fx, CARD, &mapping, &options, &no_overrides());
     assert_eq!(
         (first.executed, first.deduplicated, first.skipped),
         (5, 0, 4)
     );
     let commands = command_count(&fx.core, fx.vault);
 
-    let second = import(&mut fx.core);
+    let second = import_with(&mut fx, CARD, &mapping, &options, &no_overrides());
     assert_eq!(
         (second.executed, second.deduplicated, second.skipped),
         (0, 5, 4)
@@ -5245,22 +4836,14 @@ fn reimporting_a_statement_executes_nothing() {
     assert!(second.rejected.is_empty());
     assert_eq!(command_count(&fx.core, fx.vault), commands);
 
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(&fx, CARD, &mapping, &options, &no_overrides());
     assert_eq!((preview.new_rows, preview.already_imported), (0, 5));
 }
 
 #[test]
 fn a_pending_row_that_cleared_is_already_imported() {
     let mut fx = setup();
+    let options = options(fx.wallet);
     let mut mapping = card_mapping();
     mapping.skip_statuses = vec!["CANCELLED".to_string()];
     let first_export = card_csv(&[spend(
@@ -5269,33 +4852,14 @@ fn a_pending_row_that_cleared_is_already_imported() {
         "PENDING",
         "3.20",
     )]);
-    let report = fx
-        .core
-        .import_statement(
-            fx.vault,
-            "alice",
-            &first_export,
-            &mapping,
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let report = import_with(&mut fx, &first_export, &mapping, &options, &no_overrides());
     assert_eq!(report.executed, 1);
 
     let second_export = card_csv(&[
         spend("2026-09-17 09:00:00 UTC", "EDICOLA", "PENDING", "2.00"),
         spend("2026-09-16 08:00:00 UTC", "FORNO BIANCO", "CLEARED", "3.20"),
     ]);
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            &second_export,
-            &mapping,
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(&fx, &second_export, &mapping, &options, &no_overrides());
     assert_eq!(row(&preview, 2).status, StatementRowStatus::New);
     assert_eq!(row(&preview, 3).status, StatementRowStatus::AlreadyImported);
 }
@@ -5303,52 +4867,26 @@ fn a_pending_row_that_cleared_is_already_imported() {
 #[test]
 fn identical_rows_in_the_same_second_both_import() {
     let mut fx = setup();
+    let (mapping, options) = (card_mapping(), options(fx.wallet));
     let coffee = spend("2026-09-16 08:00:00 UTC", "CAFE", "CLEARED", "1.20");
     let text = card_csv(&[coffee.clone(), coffee]);
-    let preview = fx
-        .core
-        .preview_statement(
-            fx.vault,
-            &text,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    let preview = preview_with(&fx, &text, &mapping, &options, &no_overrides());
     assert_eq!(preview.new_rows, 2);
     assert_ne!(row(&preview, 2).command_id, row(&preview, 3).command_id);
 
-    let import = |core: &mut Core| {
-        core.import_statement(
-            fx.vault,
-            "alice",
-            &text,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap()
-    };
-    assert_eq!(import(&mut fx.core).executed, 2);
+    let first = import_with(&mut fx, &text, &mapping, &options, &no_overrides());
+    assert_eq!(first.executed, 2);
     assert_eq!(wallet_balance(&fx.core, fx.vault, fx.wallet), -240);
-    let again = import(&mut fx.core);
+    let again = import_with(&mut fx, &text, &mapping, &options, &no_overrides());
     assert_eq!((again.executed, again.deduplicated), (0, 2));
 }
 
 #[test]
 fn rows_are_imported_oldest_first() {
     let mut fx = setup();
+    let options = options(fx.wallet);
     let since = command_count(&fx.core, fx.vault);
-    fx.core
-        .import_statement(
-            fx.vault,
-            "alice",
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    import_with(&mut fx, CARD, &card_mapping(), &options, &no_overrides());
     let times: Vec<_> = fx
         .core
         .commands_since(fx.vault, 0)
@@ -5368,26 +4906,8 @@ fn the_namespace_and_the_key_format_are_frozen() {
         Uuid::parse_str("e21a7afd-0f46-4de7-8a8f-55241a97b9f5").unwrap()
     );
 
-    let mut core = Core::open_in_memory().unwrap();
-    let vault = Uuid::parse_str("0199a000-0000-7000-8000-000000000001").unwrap();
-    let wallet = Uuid::parse_str("0199a000-0000-7000-8000-000000000002").unwrap();
-    core.execute(CommandEnvelope {
-        id: vault,
-        vault_id: vault,
-        author: "alice".to_string(),
-        command: Command::CreateVault {
-            name: "Pinned".to_string(),
-            currency: Currency::Eur,
-        },
-    })
-    .unwrap();
-    core.execute(CommandEnvelope {
-        id: wallet,
-        vault_id: vault,
-        author: "alice".to_string(),
-        command: wallet_cmd("Card", 0),
-    })
-    .unwrap();
+    let (core, vault, wallets) = pinned(&["Card"]);
+    let wallet = wallets[0];
     let text = card_csv(&[spend(
         "2026-09-16 08:54:40 UTC",
         "FORNO   BIANCO           ",
@@ -5418,26 +4938,8 @@ fn the_namespace_and_the_key_format_are_frozen() {
 /// existed.
 #[test]
 fn the_key_without_a_type_column_is_frozen() {
-    let mut core = Core::open_in_memory().unwrap();
-    let vault = Uuid::parse_str("0199a000-0000-7000-8000-000000000001").unwrap();
-    let wallet = Uuid::parse_str("0199a000-0000-7000-8000-000000000002").unwrap();
-    core.execute(CommandEnvelope {
-        id: vault,
-        vault_id: vault,
-        author: "alice".to_string(),
-        command: Command::CreateVault {
-            name: "Pinned".to_string(),
-            currency: Currency::Eur,
-        },
-    })
-    .unwrap();
-    core.execute(CommandEnvelope {
-        id: wallet,
-        vault_id: vault,
-        author: "alice".to_string(),
-        command: wallet_cmd("Bank", 0),
-    })
-    .unwrap();
+    let (core, vault, wallets) = pinned(&["Bank"]);
+    let wallet = wallets[0];
     let preview = core
         .preview_statement(
             vault,
@@ -5471,23 +4973,17 @@ fn the_key_without_a_type_column_is_frozen() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Validation
-// ---------------------------------------------------------------------------
-
 #[test]
 fn preview_writes_nothing() {
     let fx = setup();
     let before = command_count(&fx.core, fx.vault);
-    fx.core
-        .preview_statement(
-            fx.vault,
-            CARD,
-            &card_mapping(),
-            &options(fx.wallet),
-            &no_overrides(),
-        )
-        .unwrap();
+    preview_with(
+        &fx,
+        CARD,
+        &card_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
     assert_eq!(command_count(&fx.core, fx.vault), before);
 }
 
