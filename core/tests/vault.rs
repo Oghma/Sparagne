@@ -8,7 +8,7 @@ mod common;
 use chrono::NaiveDate;
 use common::{
     T0, all, entry, flow_cmd, replayed, run, setup,
-    sync::{create_vault, exec, rename},
+    sync::{create_vault, exec, rename, vault_of},
     try_run, wallet_cmd,
 };
 use sparagne_core::{
@@ -234,8 +234,7 @@ fn other_vaults_survive_a_deletion() {
 
 #[test]
 fn vaults_lists_duplicate_names_in_stable_order() {
-    let mut core = Core::open_in_memory().unwrap();
-    let casa = create_vault(&mut core, "alice", "Casa");
+    let (mut core, casa) = vault_of("alice", "Casa");
     let banca = create_vault(&mut core, "alice", "Banca");
     let twin = create_vault(&mut core, "alice", "casa");
     let bobs = create_vault(&mut core, "bob", "CASA");
