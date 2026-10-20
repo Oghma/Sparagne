@@ -21,10 +21,13 @@ enum LaunchOptions {
     static let tabKey = "SparagneTab"
     static let sheetKey = "SparagneSheet"
 
-    /// The other database, `nil` for the real one.
-    static var database: String? {
-        database(in: UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain))
+    /// The launch's own arguments, never the saved preferences.
+    private static var arguments: [String: Any] {
+        UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
     }
+
+    /// The other database, `nil` for the real one.
+    static var database: String? { database(in: arguments) }
 
     static func database(in arguments: [String: Any]) -> String? {
         guard let value = arguments[databaseKey] as? String else { return nil }
@@ -33,9 +36,7 @@ enum LaunchOptions {
     }
 
     /// The tab to open on, `nil` for the usual one.
-    static var tab: LedgerTab? {
-        tab(in: UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain))
-    }
+    static var tab: LedgerTab? { tab(in: arguments) }
 
     static func tab(in arguments: [String: Any]) -> LedgerTab? {
         guard let value = arguments[tabKey] as? String else { return nil }
@@ -47,9 +48,7 @@ enum LaunchOptions {
     /// `importStatement`, `move`, `rejected` or `settings`,
     /// matched without regard to case. The ones about sharing need an
     /// account, so a demo database opens nothing for them.
-    static var sheet: String? {
-        sheet(in: UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain))
-    }
+    static var sheet: String? { sheet(in: arguments) }
 
     static func sheet(in arguments: [String: Any]) -> String? {
         guard let value = arguments[sheetKey] as? String else { return nil }

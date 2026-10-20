@@ -1342,13 +1342,14 @@ final class AppStore {
         .executeRecurring(
             recurringId: recurringId,
             periodDate: periodDate,
-            occurredAt: Self.combine(day: periodDate, timeOf: now),
+            occurredAt: Self.stamp(day: CoreDate.localDay(periodDate) ?? now, likeTimeOf: now),
             person: explicitPerson(owner)
         )
     }
 
     /// The calendar day of `day` with the clock time of `reference`: moving a
-    /// row to another day must not silently move it to midnight.
+    /// row to another day must not silently move it to midnight, and a
+    /// recorded period lands on its day at the time it was recorded.
     static func stamp(day: Date, likeTimeOf reference: Date, calendar: Calendar = .current) -> OffsetDateTime {
         let time = calendar.dateComponents([.hour, .minute, .second], from: reference)
         let combined = calendar.date(
@@ -1358,16 +1359,6 @@ final class AppStore {
             of: day
         )
         return CoreDate.offset(combined ?? day)
-    }
-
-    /// `periodDate` (a bare day) at today's time of day, in the system
-    /// offset: what `executeRecurring` sends as `occurredAt`.
-    private static func combine(day: NaiveDate, timeOf now: Date) -> OffsetDateTime {
-        guard let dayDate = CoreDate.localDay(day) else { return CoreDate.offset(now) }
-        let calendar = Calendar.current
-        let time = calendar.dateComponents([.hour, .minute, .second], from: now)
-        let combined = calendar.date(bySettingHour: time.hour ?? 0, minute: time.minute ?? 0, second: time.second ?? 0, of: dayDate)
-        return CoreDate.offset(combined ?? now)
     }
 
     // MARK: - Ledger writes
@@ -1436,7 +1427,7 @@ final class AppStore {
             flowId: envelope,
             category: category?.trimmingCharacters(in: .whitespacesAndNewlines),
             note: trimmedNote.isEmpty ? nil : trimmedNote,
-            occurredAt: Self.combine(day: CoreDate.day(day), timeOf: Date()),
+            occurredAt: Self.stamp(day: day, likeTimeOf: Date()),
             person: explicitPerson(person)
         )
         let command: Command

@@ -29,30 +29,23 @@ struct ContentView: View {
     private func open() async {
         guard store == nil, launchFailure == nil else { return }
         do {
-            if let database = LaunchOptions.database {
-                // Another database, with no engine: nothing in it is pushed,
-                // and the window has no account or sharing to offer. New rows
-                // are signed with the name chosen for rows written offline.
-                let core = try CoreActor.onDisk(named: database, author: AccountStore.loggedOutAuthor())
-                let opened = AppStore(core: core, defaultCategories: DefaultCategories.forAppLanguage())
-                if let tab = LaunchOptions.tab { opened.tab = tab }
-                store = opened
-                await opened.bootstrap()
-                return
-            }
-            let core = try CoreActor.onDisk()
+            // Another database has no engine: nothing in it is pushed, and
+            // the window has no account or sharing to offer. Its new rows are
+            // signed with the name chosen for rows written offline.
+            let other = LaunchOptions.database
+            let core = try other.map { try CoreActor.onDisk(named: $0, author: AccountStore.loggedOutAuthor()) }
+                ?? CoreActor.onDisk()
             let opened = AppStore(core: core, defaultCategories: DefaultCategories.forAppLanguage())
             if let tab = LaunchOptions.tab { opened.tab = tab }
-            // The engine adopts the account's username as the author and
-            // starts the first sync right after bootstrap.
-            // It prepares before the bootstrap so the
-            // first command is already signed with the account's name.
-            let sync = SyncEngine(core: core, store: opened, account: AccountStore())
+            let sync = other == nil ? SyncEngine(core: core, store: opened, account: AccountStore()) : nil
             store = opened
             engine = sync
-            await sync.prepare()
+            // The engine adopts the account's username before the bootstrap,
+            // so the first command is already signed with it, and starts the
+            // first sync right after.
+            await sync?.prepare()
             await opened.bootstrap()
-            sync.start()
+            sync?.start()
         } catch {
             launchFailure = error.localizedDescription
         }

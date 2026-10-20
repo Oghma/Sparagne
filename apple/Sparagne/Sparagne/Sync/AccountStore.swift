@@ -79,26 +79,6 @@ struct KeychainTokenStore: TokenStore {
     }
 }
 
-/// A token store that forgets everything when the process ends.
-final class MemoryTokenStore: TokenStore, @unchecked Sendable {
-    private let lock = NSLock()
-    private var tokens: [String: String] = [:]
-
-    init() {}
-
-    func token(for account: String) -> String? {
-        lock.withLock { tokens[account] }
-    }
-
-    func save(_ token: String, for account: String) {
-        lock.withLock { tokens[account] = token }
-    }
-
-    func delete(for account: String) {
-        _ = lock.withLock { tokens.removeValue(forKey: account) }
-    }
-}
-
 /// The server this app talks to and who it talks as.
 ///
 /// The URL, the username and the token's expiry are preferences; the token is
