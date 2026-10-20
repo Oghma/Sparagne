@@ -56,24 +56,10 @@ enum LedgerMoney {
         return percent(savings, of: income, decimals: 0)
     }
 
-    /// A month-over-month delta as the cards show it: `"+4,2%"`, or `nil` when
-    /// the previous period was zero (the delta divides by `|previous|`,
-    /// which is undefined there).
-    static func delta(current: Int64, previous: Int64) -> String? {
-        guard previous != 0 else { return nil }
-        let ratio = (Decimal(current - previous) / Decimal(abs(previous)) * 100) as NSDecimalNumber
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.decimalSeparator = ","
-        formatter.positivePrefix = "+"
-        formatter.minimumFractionDigits = 1
-        formatter.maximumFractionDigits = 1
-        return formatter.string(from: ratio).map { "\($0)%" }
-    }
-
     /// `"12.50"`: the plain text `parseMoney` accepts, for a grid cell being
-    /// edited. No symbol, no grouping.
-    static func editable(_ minorUnits: Int64) -> String {
+    /// edited, and the figure of an exported CSV. No sign, no symbol, no
+    /// grouping, never through `Double`.
+    nonisolated static func editable(_ minorUnits: Int64) -> String {
         let absolute = minorUnits.magnitude
         return String(format: "%llu.%02llu", absolute / 100, absolute % 100)
     }

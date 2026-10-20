@@ -22,26 +22,24 @@ enum CoreSchedule {
 /// UTC, where a day is always 24 hours and a daylight-saving change never
 /// moves midnight onto the day before.
 enum NaiveDay {
-    private static let utc = TimeZone(identifier: "UTC") ?? .gmt
-
     private static var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = utc
+        calendar.timeZone = CoreDate.utc
         return calendar
     }
 
     /// `"2026-10-07"` plus `days`, or `nil` for a string that is not a day.
     static func adding(_ days: Int, to day: NaiveDate) -> NaiveDate? {
-        guard let date = CoreDate.localDay(day, timeZone: utc),
+        guard let date = CoreDate.localDay(day, timeZone: CoreDate.utc),
               let moved = calendar.date(byAdding: .day, value: days, to: date)
         else { return nil }
-        return CoreDate.day(moved, timeZone: utc)
+        return CoreDate.day(moved, timeZone: CoreDate.utc)
     }
 
     /// Whole days from `start` to `end`: positive when `end` is later.
     static func days(from start: NaiveDate, to end: NaiveDate) -> Int? {
-        guard let from = CoreDate.localDay(start, timeZone: utc),
-              let to = CoreDate.localDay(end, timeZone: utc)
+        guard let from = CoreDate.localDay(start, timeZone: CoreDate.utc),
+              let to = CoreDate.localDay(end, timeZone: CoreDate.utc)
         else { return nil }
         return calendar.dateComponents([.day], from: from, to: to).day
     }
@@ -49,7 +47,7 @@ enum NaiveDay {
     /// The year, month and day of a `yyyy-MM-dd`, for seeding a new
     /// template's day of the month or of the week from today.
     static func components(_ day: NaiveDate) -> (year: Int, month: Int, day: Int, isoWeekday: Int)? {
-        guard let date = CoreDate.localDay(day, timeZone: utc) else { return nil }
+        guard let date = CoreDate.localDay(day, timeZone: CoreDate.utc) else { return nil }
         let parts = calendar.dateComponents([.year, .month, .day, .weekday], from: date)
         guard let year = parts.year, let month = parts.month, let dayOfMonth = parts.day,
               let weekday = parts.weekday

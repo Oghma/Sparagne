@@ -1,14 +1,10 @@
 import Foundation
 import SparagneCore
 
-/// Formats `Int64` minor units (e.g. cents) as currency. Amounts are never
-/// floats anywhere in the app; this is the
-/// only place minor units get converted to displayable text, always through
-/// `Decimal`.
-///
-/// Note: this assumes 2 minor-unit decimal places (true for EUR, the only
-/// currency v2.0 supports). A future multi-currency
-/// core would need to expose the exponent per currency instead of assuming it.
+/// `Int64` minor units as currency in the user's locale, through `Decimal`:
+/// kept for a build with more than one currency, while every screen writes
+/// money with `LedgerMoney`. Assumes 2 decimal places, as EUR has; another
+/// currency would need its exponent from the core.
 enum MoneyFormatter {
     private static let minorUnitsPerMajor: Int64 = 100
 
@@ -20,8 +16,7 @@ enum MoneyFormatter {
     /// `1250` -> `"12.50"`: the plain major-unit text `parseMoney` accepts,
     /// with no sign, grouping separator or currency code.
     static func editable(minorUnits: Int64) -> String {
-        let absolute = minorUnits.magnitude
-        return String(format: "%llu.%02llu", absolute / 100, absolute % 100)
+        LedgerMoney.editable(minorUnits)
     }
 
     private static func decimalValue(_ minorUnits: Int64) -> Decimal {
@@ -101,16 +96,14 @@ enum CountText {
 /// written in UTC on both sides: the local zone could put its midnight on
 /// the day before.
 enum RecurringDayText {
-    private static let utc = TimeZone(identifier: "UTC") ?? .gmt
-
     private static func style(_ locale: Locale) -> Date.FormatStyle {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = locale
-        return Date.FormatStyle(locale: locale, calendar: calendar, timeZone: utc)
+        return Date.FormatStyle(locale: locale, calendar: calendar, timeZone: CoreDate.utc)
     }
 
     private static func date(_ day: NaiveDate) -> Date? {
-        CoreDate.localDay(day, timeZone: utc)
+        CoreDate.localDay(day, timeZone: CoreDate.utc)
     }
 
     /// `"gio 1 ott"`: a due period, a tile of the agenda.
@@ -206,20 +199,12 @@ enum ScheduleFormatting {
     /// The localized weekday name for an ISO weekday (Monday = 1 ... Sunday
     /// = 7), used both by `describe` and by the weekday picker.
     static func weekdayName(_ isoWeekday: UInt8, locale: Locale = .autoupdatingCurrent) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = locale
-        let symbols = calendar.weekdaySymbols
-        let index = Int(isoWeekday) % 7
-        return symbols.indices.contains(index) ? symbols[index] : "\(isoWeekday)"
+        LedgerDate.weekdayName(Int(isoWeekday) % 7 + 1, style: .format, locale: locale)
     }
 
     /// The localized month name for a 1-based month, used both by
     /// `describe` and by the yearly-schedule picker.
     static func monthName(_ month: UInt8, locale: Locale = .autoupdatingCurrent) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = locale
-        let symbols = calendar.monthSymbols
-        let index = Int(month) - 1
-        return symbols.indices.contains(index) ? symbols[index] : "\(month)"
+        LedgerDate.monthName(Int(month), style: .format, locale: locale)
     }
 }

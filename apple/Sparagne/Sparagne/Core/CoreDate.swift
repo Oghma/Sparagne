@@ -16,7 +16,9 @@ nonisolated enum CoreDate {
         )
     }
 
-    private static let utc = TimeZone(identifier: "UTC") ?? .gmt
+    /// A `NaiveDate` has no zone: read and written in UTC, where a
+    /// daylight-saving change never moves midnight onto the day before.
+    static let utc = TimeZone(identifier: "UTC") ?? .gmt
 
     /// `2026-03-01T12:00:00+01:00` in the system time zone.
     static func offset(_ date: Date, timeZone: TimeZone = .current) -> OffsetDateTime {
