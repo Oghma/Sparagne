@@ -1,22 +1,6 @@
 import Foundation
 import SparagneCore
 
-/// One person's movement in one bucket of the core's `year_breakdown`.
-/// Bucket 0 is everything before January; 1...12 are
-/// the months of the year.
-struct YearRow: Hashable, Sendable {
-    let bucket: Int
-    let person: String
-    /// Income other than opening balances.
-    let income: Int64
-    /// Opening balances of wallets (the system category `Opening`), signed.
-    let opening: Int64
-    /// `net_expense` on envelopes without a cap.
-    let cashExpense: Int64
-    /// `net_expense` on envelopes with a cap: the "fondi".
-    let fundExpense: Int64
-}
-
 /// A capped envelope as the RIEPILOGO's fund cards show it: how full it is
 /// against its cap.
 struct FundGauge: Identifiable, Hashable, Sendable {
@@ -48,15 +32,6 @@ struct FundGauge: Identifiable, Hashable, Sendable {
         guard cap > 0 else { return 0 }
         return min(max(Double(filled) / Double(cap), 0), 1)
     }
-}
-
-/// What one wallet or envelope gained or lost in one bucket of the core's
-/// `balance_breakdown`: the signed sum of its legs, transfers included.
-/// Bucket 0 is everything before January, 1...12 the months.
-struct BalanceDelta: Hashable, Sendable {
-    let bucket: Int
-    let targetId: Uuid
-    let delta: Int64
 }
 
 /// One person's share of one month, the four figures the table and the
@@ -409,7 +384,9 @@ struct YearSummary: Sendable {
     }
 
     /// Pure arithmetic over the query's rows and the vault's envelopes, so it
-    /// can be tested without a database.
+    /// can be tested without a database. In `rows`, the core's
+    /// `year_breakdown`, bucket 0 is everything before January and 1...12
+    /// the months.
     ///
     /// `vaultPeople` are the persons of every live row of the vault
     /// (`AppStore.peopleInRows`): each gets a column in every year, so a year
@@ -424,21 +401,21 @@ struct YearSummary: Sendable {
     static func build(
         year: Int,
         upTo: MonthKey,
-        rows: [YearRow],
+        rows: [BucketPersonTotals],
         flows: [FlowView],
         vaultPeople: [String] = [],
         person: String? = nil,
         today: MonthKey? = nil,
         wallets: [WalletView] = [],
-        walletBalances: [BalanceDelta] = []
+        walletBalances: [BucketTargetTotals] = []
     ) -> YearSummary {
         // Under PERSONA everybody else's rows go before anything is summed,
         // so TOTALE and FONDO CASSA are that person's share; the one column
         // is theirs even in a year with no row of theirs.
         let rows = person.map { name in rows.filter { $0.person == name } } ?? rows
         let people = person.map { [$0] } ?? Self.people(in: rows, vaultPeople: vaultPeople)
-        var byBucket: [Int: [YearRow]] = [:]
-        for row in rows { byBucket[row.bucket, default: []].append(row) }
+        var byBucket: [Int: [BucketPersonTotals]] = [:]
+        for row in rows { byBucket[Int(row.bucket), default: []].append(row) }
 
         // Bucket 0 is everything before January: it opens the recurrence.
         let initialByPerson = people.map { name in
@@ -525,16 +502,17 @@ struct YearSummary: Sendable {
     /// and would be a column of zeros.
     private static func walletColumns(
         wallets: [WalletView],
-        deltas: [BalanceDelta],
+        deltas: [BucketTargetTotals],
         through: Int
     ) -> [WalletYearColumn] {
         var buckets: [Uuid: [Int64]] = [:]
         var inYear = Set<Uuid>()
-        for delta in deltas where (0...12).contains(delta.bucket) {
-            buckets[delta.targetId, default: Array(repeating: 0, count: 13)][delta.bucket] += delta.delta
+        for delta in deltas where delta.bucket <= 12 {
+            let bucket = Int(delta.bucket)
+            buckets[delta.targetId, default: Array(repeating: 0, count: 13)][bucket] += delta.delta
             // A wallet closed before the year comes back with legs that net
             // to nothing: it has no column.
-            if delta.delta != 0, delta.bucket <= through { inYear.insert(delta.targetId) }
+            if delta.delta != 0, bucket <= through { inYear.insert(delta.targetId) }
         }
         let shown = wallets.filter { inYear.contains($0.id) }
         guard shown.count >= 2 else { return [] }
@@ -552,7 +530,7 @@ struct YearSummary: Sendable {
     /// One column per person, de-duplicated in the core's order and then
     /// sorted case-insensitively, so two runs of the same vault always put
     /// the columns in the same place.
-    private static func people(in rows: [YearRow], vaultPeople: [String]) -> [String] {
+    private static func people(in rows: [BucketPersonTotals], vaultPeople: [String]) -> [String] {
         var seen = Set<String>()
         var people: [String] = []
         for person in vaultPeople + rows.map(\.person) where seen.insert(person).inserted {
@@ -563,7 +541,7 @@ struct YearSummary: Sendable {
 
     /// What a bucket leaves behind: everything that came in, less everything
     /// that went out, on both kinds of envelope.
-    private static func closing(_ rows: [YearRow]) -> Int64 {
+    private static func closing(_ rows: [BucketPersonTotals]) -> Int64 {
         rows.reduce(0) { $0 + $1.income + $1.opening - $1.cashExpense - $1.fundExpense }
     }
 

@@ -9,8 +9,8 @@ import Testing
 struct CategoryHeatTests {
     private static let september = MonthKey(year: 2026, month: 9)
 
-    private static func bucket(_ bucket: Int, _ name: String, _ netExpense: Int64) -> CategoryBucket {
-        CategoryBucket(
+    private static func bucket(_ bucket: UInt32, _ name: String, _ netExpense: Int64) -> BucketCategoryTotals {
+        BucketCategoryTotals(
             bucket: bucket, categoryId: name.lowercased(), name: name, isSystem: false, netExpense: netExpense, count: 1
         )
     }

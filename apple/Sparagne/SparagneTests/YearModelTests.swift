@@ -11,14 +11,14 @@ struct YearModelTests {
     private static let upTo = MonthKey(year: 2026, month: 9)
 
     private static func row(
-        _ bucket: Int,
+        _ bucket: UInt32,
         _ person: String,
         income: Int64 = 0,
         opening: Int64 = 0,
         cashExpense: Int64 = 0,
         fundExpense: Int64 = 0
-    ) -> YearRow {
-        YearRow(
+    ) -> BucketPersonTotals {
+        BucketPersonTotals(
             bucket: bucket,
             person: person,
             income: income,
@@ -31,7 +31,7 @@ struct YearModelTests {
     /// Two people with money already in the vault before January, a January
     /// that earns and spends on both kinds of envelope, a wallet opened in
     /// March and a quiet September.
-    private static var household: [YearRow] {
+    private static var household: [BucketPersonTotals] {
         [
             row(0, "matteo", income: 100_000, opening: 500_000, cashExpense: 40_000, fundExpense: 10_000),
             row(0, "elisa", opening: 200_000),
@@ -44,14 +44,14 @@ struct YearModelTests {
 
     private static func build(
         year: Int = 2026,
-        rows: [YearRow],
+        rows: [BucketPersonTotals],
         flows: [FlowView] = [],
         upTo: MonthKey = upTo,
         vaultPeople: [String] = [],
         person: String? = nil,
         today: MonthKey? = nil,
         wallets: [WalletView] = [],
-        walletBalances: [BalanceDelta] = []
+        walletBalances: [BucketTargetTotals] = []
     ) -> YearSummary {
         YearSummary.build(
             year: year,
@@ -508,7 +508,7 @@ struct YearModelTests {
 
     /// An opening of 1.000,00 and three finished months, the third with a
     /// cent the pace cannot split; April is still going.
-    private static var threeMonths: [YearRow] {
+    private static var threeMonths: [BucketPersonTotals] {
         [
             row(0, "matteo", opening: 100_000),
             row(1, "matteo", income: 300_000, cashExpense: 100_000),
@@ -613,8 +613,8 @@ struct YearModelTests {
         WalletView(id: name, name: name, balance: 0, archived: archived)
     }
 
-    private static func delta(_ bucket: Int, _ wallet: String, _ delta: Int64) -> BalanceDelta {
-        BalanceDelta(bucket: bucket, targetId: wallet, delta: delta)
+    private static func delta(_ bucket: UInt32, _ wallet: String, _ delta: Int64) -> BucketTargetTotals {
+        BucketTargetTotals(bucket: bucket, targetId: wallet, delta: delta)
     }
 
     /// The household's money, wallet by wallet: Conto and Cash before the
@@ -624,7 +624,7 @@ struct YearModelTests {
         [wallet("Cash"), wallet("Conto"), wallet("Carta"), wallet("Vecchio", archived: true)]
     }
 
-    private static var householdBalances: [BalanceDelta] {
+    private static var householdBalances: [BucketTargetTotals] {
         [
             delta(0, "Conto", 550_000),
             delta(0, "Cash", 200_000),

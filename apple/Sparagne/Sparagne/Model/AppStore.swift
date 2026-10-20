@@ -816,26 +816,16 @@ final class AppStore {
         person: String?,
         today: MonthKey
     ) -> YearSummary {
-        let rows = loaded.year.map {
-            YearRow(
-                bucket: Int($0.bucket),
-                person: $0.person,
-                income: $0.income,
-                opening: $0.opening,
-                cashExpense: $0.cashExpense,
-                fundExpense: $0.fundExpense
-            )
-        }
-        return YearSummary.build(
+        YearSummary.build(
             year: month.year,
             upTo: month,
-            rows: rows,
+            rows: loaded.year,
             flows: flows,
             vaultPeople: loaded.people,
             person: person,
             today: today,
             wallets: loaded.snapshot.wallets,
-            walletBalances: loaded.walletBalances.map(Self.delta)
+            walletBalances: loaded.walletBalances
         )
     }
 
@@ -844,20 +834,7 @@ final class AppStore {
     /// which the strip of things to do counts.
     private func loadYearExtras(from loaded: VaultLoad, year: YearSummary) {
         yearCategories = SummaryCategories.rows(loaded.yearCategories)
-        categoryHeat = CategoryHeat.build(
-            buckets: loaded.categoryBuckets.map {
-                CategoryBucket(
-                    bucket: Int($0.bucket),
-                    categoryId: $0.categoryId,
-                    name: $0.name,
-                    isSystem: $0.isSystem,
-                    netExpense: $0.netExpense,
-                    count: Int($0.count)
-                )
-            },
-            shares: yearCategories,
-            upTo: month
-        )
+        categoryHeat = CategoryHeat.build(buckets: loaded.categoryBuckets, shares: yearCategories, upTo: month)
         // The envelopes are the family's whatever PERSONA says, like the
         // funds: their figures come from the unfiltered matrix, and so do
         // their columns, every person of the vault's rows in the core's
@@ -865,7 +842,7 @@ final class AppStore {
         envelopeYear = EnvelopeYear.build(
             flows: flows,
             flowPerson: loaded.yearFlowPerson,
-            balances: loaded.flowBalances.map(Self.delta),
+            balances: loaded.flowBalances,
             upTo: month,
             people: loaded.people
         )
@@ -886,10 +863,6 @@ final class AppStore {
             pendingAllocation: isReadOnly ? nil : pendingAllocation,
             yearCategories: yearCategoryTotals
         )
-    }
-
-    private static func delta(_ row: BucketTargetTotals) -> BalanceDelta {
-        BalanceDelta(bucket: Int(row.bucket), targetId: row.targetId, delta: row.delta)
     }
 
     /// The row `reveal` asked for, selected alone once its month is on

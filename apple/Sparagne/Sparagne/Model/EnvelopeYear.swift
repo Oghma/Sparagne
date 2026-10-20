@@ -41,12 +41,12 @@ struct EnvelopeYear: Hashable, Sendable {
     static func build(
         flows: [FlowView],
         flowPerson: [FlowPersonTotals],
-        balances: [BalanceDelta],
+        balances: [BucketTargetTotals],
         upTo: MonthKey,
         people: [String]
     ) -> EnvelopeYear {
         var balance: [Uuid: Int64] = [:]
-        for delta in balances where delta.bucket <= upTo.month {
+        for delta in balances where Int(delta.bucket) <= upTo.month {
             balance[delta.targetId, default: 0] += delta.delta
         }
         var lines: [Uuid: [FlowPersonTotals]] = [:]
