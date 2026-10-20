@@ -5419,8 +5419,8 @@ public struct StatementPreview: Equatable, Hashable, Codable {
      * Wallets not checked for rows typed by hand, nor any statement's (a
      * claim or a move names it, or [`StatementOptions::statement_wallets`]
      * holds it), where new rows that matched nothing look like entries
-     * already there,
-     * the most such rows first. Advice only: matching does not use them.
+     * already there, the most such rows first. Advice only: matching does
+     * not use them.
      */
     public var lookalikes: [StatementLookalike]
 
@@ -5444,8 +5444,8 @@ public struct StatementPreview: Equatable, Hashable, Codable {
          * Wallets not checked for rows typed by hand, nor any statement's (a
          * claim or a move names it, or [`StatementOptions::statement_wallets`]
          * holds it), where new rows that matched nothing look like entries
-         * already there,
-         * the most such rows first. Advice only: matching does not use them.
+         * already there, the most such rows first. Advice only: matching does
+         * not use them.
          */lookalikes: [StatementLookalike] = []) {
         self.rows = rows
         self.newRows = newRows

@@ -32,7 +32,7 @@ impl FlowMode {
 }
 
 /// How much more may come into a flow before its cap refuses it: what
-/// [`Flow::apply_leg_change`] accepts as a new positive leg. `None` for an
+/// `Flow::apply_leg_change` accepts as a new positive leg. `None` for an
 /// unlimited flow.
 ///
 /// Net-capped: `cap - balance`, which is more than the cap while the balance
@@ -114,7 +114,7 @@ impl Flow {
         Ok(())
     }
 
-    /// Same bookkeeping as [`Flow::apply_leg_change`] with no rule checks.
+    /// Same bookkeeping as `Flow::apply_leg_change` with no rule checks.
     /// Used by void: undoing is always allowed.
     pub fn apply_leg_change_unchecked(&mut self, old: i64, new: i64) {
         if let Some(total) = self.income_total {
