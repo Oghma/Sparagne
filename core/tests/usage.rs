@@ -41,13 +41,7 @@ fn vaults_lists_two_vaults_sorted_by_name_with_currency_and_owner() {
 #[test]
 fn transaction_returns_legs_and_voided_flag_and_notfound_on_missing_or_wrong_vault() {
     let mut fx = setup();
-    let income = run(
-        &mut fx.core,
-        fx.vault,
-        Command::Income(entry(500, None, None, Some("Salary"), T0)),
-    )
-    .result_id
-    .unwrap();
+    let income = fx.id(Command::Income(entry(500, None, None, Some("Salary"), T0)));
 
     let view = fx.core.transaction(fx.vault, income).unwrap();
     assert_eq!(view.amount, 500);
@@ -60,13 +54,9 @@ fn transaction_returns_legs_and_voided_flag_and_notfound_on_missing_or_wrong_vau
     assert_eq!(view.to_id, None);
     assert!(!view.category_is_system);
 
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::VoidTransaction {
-            transaction_id: income,
-        },
-    );
+    fx.run(Command::VoidTransaction {
+        transaction_id: income,
+    });
     let voided = fx.core.transaction(fx.vault, income).unwrap();
     assert!(voided.voided);
     assert_eq!(voided.legs.len(), 2);
@@ -93,29 +83,21 @@ fn transaction_returns_legs_and_voided_flag_and_notfound_on_missing_or_wrong_vau
 #[test]
 fn listed_rows_carry_their_shape() {
     let mut fx = setup();
-    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 1000))
-        .result_id
-        .unwrap();
-    let expense = run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(100, Some(fx.wallet), None, Some("Food"), T0 + 1)),
-    )
-    .result_id
-    .unwrap();
-    let transfer = run(
-        &mut fx.core,
-        fx.vault,
-        Command::TransferWallet {
-            amount: 50,
-            from_wallet_id: fx.wallet,
-            to_wallet_id: bank,
-            note: None,
-            occurred_at: at(T0 + 2),
-        },
-    )
-    .result_id
-    .unwrap();
+    let bank = fx.id(wallet_cmd("Bank", 1000));
+    let expense = fx.id(Command::Expense(entry(
+        100,
+        Some(fx.wallet),
+        None,
+        Some("Food"),
+        T0 + 1,
+    )));
+    let transfer = fx.id(Command::TransferWallet {
+        amount: 50,
+        from_wallet_id: fx.wallet,
+        to_wallet_id: bank,
+        note: None,
+        occurred_at: at(T0 + 2),
+    });
 
     let rows = list(&fx.core, fx.vault, &all());
     let find = |id: Uuid| rows.iter().find(|t| t.id == id).unwrap().clone();
@@ -148,75 +130,53 @@ fn listed_rows_carry_their_shape() {
 #[test]
 fn recent_usage_orders_by_last_use_respects_limit_and_ignores_voided_and_transfers() {
     let mut fx = setup();
-    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
-        .result_id
-        .unwrap();
-    let fun = run(
-        &mut fx.core,
-        fx.vault,
-        flow_cmd("Fun", FlowMode::Unlimited, true, 0),
-    )
-    .result_id
-    .unwrap();
-    let trips = run(
-        &mut fx.core,
-        fx.vault,
-        flow_cmd("Trips", FlowMode::Unlimited, true, 0),
-    )
-    .result_id
-    .unwrap();
+    let bank = fx.id(wallet_cmd("Bank", 0));
+    let fun = fx.id(flow_cmd("Fun", FlowMode::Unlimited, true, 0));
+    let trips = fx.id(flow_cmd("Trips", FlowMode::Unlimited, true, 0));
 
     // Salary: Cash / Unallocated, oldest.
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Income(entry(1000, Some(fx.wallet), None, Some("Salary"), T0)),
-    );
+    fx.run(Command::Income(entry(
+        1000,
+        Some(fx.wallet),
+        None,
+        Some("Salary"),
+        T0,
+    )));
     // Food: Cash / Fun.
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(10, Some(fx.wallet), Some(fun), Some("Food"), T0 + 1)),
-    );
+    fx.run(Command::Expense(entry(
+        10,
+        Some(fx.wallet),
+        Some(fun),
+        Some("Food"),
+        T0 + 1,
+    )));
     // Transport: Bank / Trips, most recent non-voided non-transfer use.
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(
-            20,
-            Some(bank),
-            Some(trips),
-            Some("Transport"),
-            T0 + 2,
-        )),
-    );
+    fx.run(Command::Expense(entry(
+        20,
+        Some(bank),
+        Some(trips),
+        Some("Transport"),
+        T0 + 2,
+    )));
     // Old: Cash / Fun, newer than Food but voided, so must not count.
-    let old = run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(5, Some(fx.wallet), Some(fun), Some("Old"), T0 + 3)),
-    )
-    .result_id
-    .unwrap();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::VoidTransaction {
-            transaction_id: old,
-        },
-    );
+    let old = fx.id(Command::Expense(entry(
+        5,
+        Some(fx.wallet),
+        Some(fun),
+        Some("Old"),
+        T0 + 3,
+    )));
+    fx.run(Command::VoidTransaction {
+        transaction_id: old,
+    });
     // Newest event overall, but a transfer: must not count for Cash or Bank.
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::TransferWallet {
-            amount: 5,
-            from_wallet_id: fx.wallet,
-            to_wallet_id: bank,
-            note: None,
-            occurred_at: at(T0 + 4),
-        },
-    );
+    fx.run(Command::TransferWallet {
+        amount: 5,
+        from_wallet_id: fx.wallet,
+        to_wallet_id: bank,
+        note: None,
+        occurred_at: at(T0 + 4),
+    });
 
     let cats = fx.core.categories(fx.vault, false).unwrap();
     let cat_id = |name: &str| cats.iter().find(|c| c.name == name).unwrap().id;
@@ -241,17 +201,21 @@ fn recent_usage_orders_by_last_use_respects_limit_and_ignores_voided_and_transfe
 #[test]
 fn recent_usage_excludes_system_category_even_when_most_recent() {
     let mut fx = setup();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(1, Some(fx.wallet), None, Some("Food"), T0)),
-    );
+    fx.run(Command::Expense(entry(
+        1,
+        Some(fx.wallet),
+        None,
+        Some("Food"),
+        T0,
+    )));
     // Blank category -> system "Uncategorized", most recent of the two.
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(1, Some(fx.wallet), None, None, T0 + 1)),
-    );
+    fx.run(Command::Expense(entry(
+        1,
+        Some(fx.wallet),
+        None,
+        None,
+        T0 + 1,
+    )));
 
     let cats = fx.core.categories(fx.vault, false).unwrap();
     let food_id = cats.iter().find(|c| c.name == "Food").unwrap().id;
@@ -265,19 +229,23 @@ fn recent_usage_excludes_system_category_even_when_most_recent() {
 #[test]
 fn text_search_matches_note_and_category_case_insensitively() {
     let mut fx = setup();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(1, None, None, Some("Groceries"), T0)),
-    );
+    fx.run(Command::Expense(entry(
+        1,
+        None,
+        None,
+        Some("Groceries"),
+        T0,
+    )));
     let mut with_note = entry(2, None, None, Some("Food"), T0 + 1);
     with_note.note = Some("Pizza night".to_string());
-    run(&mut fx.core, fx.vault, Command::Expense(with_note));
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(3, None, None, Some("Other"), T0 + 2)),
-    );
+    fx.run(Command::Expense(with_note));
+    fx.run(Command::Expense(entry(
+        3,
+        None,
+        None,
+        Some("Other"),
+        T0 + 2,
+    )));
 
     let by_category = list(
         &fx.core,
@@ -307,10 +275,10 @@ fn text_search_percent_in_query_is_literal() {
     let mut fx = setup();
     let mut a = entry(1, None, None, None, T0);
     a.note = Some("50% off".to_string());
-    run(&mut fx.core, fx.vault, Command::Expense(a));
+    fx.run(Command::Expense(a));
     let mut b = entry(2, None, None, None, T0 + 1);
     b.note = Some("50 off".to_string());
-    run(&mut fx.core, fx.vault, Command::Expense(b));
+    fx.run(Command::Expense(b));
 
     let hits = list(
         &fx.core,
@@ -327,16 +295,14 @@ fn text_search_percent_in_query_is_literal() {
 #[test]
 fn text_search_combines_with_kinds_filter() {
     let mut fx = setup();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Income(entry(1, None, None, Some("Coffee"), T0)),
-    );
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(2, None, None, Some("Coffee"), T0 + 1)),
-    );
+    fx.run(Command::Income(entry(1, None, None, Some("Coffee"), T0)));
+    fx.run(Command::Expense(entry(
+        2,
+        None,
+        None,
+        Some("Coffee"),
+        T0 + 1,
+    )));
 
     let hits = list(
         &fx.core,
@@ -358,18 +324,10 @@ fn text_search_works_with_cursor_pagination() {
     for i in 0..3 {
         let mut e = entry(1, None, None, None, T0 + i);
         e.note = Some("match me".to_string());
-        ids.push(
-            run(&mut fx.core, fx.vault, Command::Expense(e))
-                .result_id
-                .unwrap(),
-        );
+        ids.push(fx.id(Command::Expense(e)));
     }
     // Does not match; must not appear and must not break pagination.
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(1, None, None, None, T0 + 10)),
-    );
+    fx.run(Command::Expense(entry(1, None, None, None, T0 + 10)));
 
     let filter = TransactionFilter {
         text: Some("match".to_string()),

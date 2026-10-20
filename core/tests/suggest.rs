@@ -5,7 +5,7 @@
 mod common;
 
 use chrono::{DateTime, Utc};
-use common::{Fx, T0, at, run, setup};
+use common::{Fx, T0, at, setup};
 use sparagne_core::{CategorySuggestion, Command, Entry};
 use uuid::Uuid;
 
@@ -30,7 +30,7 @@ fn file_as(
         occurred_at: at(secs),
         person: None,
     });
-    run(&mut fx.core, fx.vault, command).result_id.unwrap()
+    fx.id(command)
 }
 
 fn since(secs: i64) -> DateTime<Utc> {
@@ -164,13 +164,9 @@ fn archived_and_system_categories_are_left_out() {
     file(&mut fx, "regalo", "Svago", T0 + 1);
     file(&mut fx, "regalo", "Regali", T0 + 2);
     let regali = category_id(&fx, "Regali");
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ArchiveCategory {
-            category_id: regali,
-        },
-    );
+    fx.run(Command::ArchiveCategory {
+        category_id: regali,
+    });
     assert_eq!(
         shape(one(&fx, "regalo")),
         Some(("Svago".to_string(), 1, true))
@@ -187,13 +183,9 @@ fn voided_and_old_transactions_are_left_out() {
     let mut fx = setup();
     let voided = file(&mut fx, "cinema", "Svago", T0);
     file(&mut fx, "cinema", "Uscite", T0 - 1_000);
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::VoidTransaction {
-            transaction_id: voided,
-        },
-    );
+    fx.run(Command::VoidTransaction {
+        transaction_id: voided,
+    });
     assert_eq!(
         shape(one(&fx, "cinema")),
         Some(("Uscite".to_string(), 1, true))

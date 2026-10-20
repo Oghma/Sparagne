@@ -39,20 +39,8 @@ struct Shared {
 /// on cash.
 fn shared_month() -> Shared {
     let mut fx = setup();
-    let cash = run(
-        &mut fx.core,
-        fx.vault,
-        flow_cmd("Cash", FlowMode::Unlimited, true, 0),
-    )
-    .result_id
-    .unwrap();
-    let varie = run(
-        &mut fx.core,
-        fx.vault,
-        flow_cmd("Varie", FlowMode::Unlimited, true, 0),
-    )
-    .result_id
-    .unwrap();
+    let cash = fx.id(flow_cmd("Cash", FlowMode::Unlimited, true, 0));
+    let varie = fx.id(flow_cmd("Varie", FlowMode::Unlimited, true, 0));
     let w = Some(fx.wallet);
 
     run_as(
@@ -106,13 +94,9 @@ fn people_are_distinct_and_sorted_and_skip_voided_rows() {
         },
     );
     assert_eq!(elisa_row.len(), 1);
-    run(
-        &mut s.fx.core,
-        s.fx.vault,
-        Command::VoidTransaction {
-            transaction_id: elisa_row[0].id,
-        },
-    );
+    s.fx.run(Command::VoidTransaction {
+        transaction_id: elisa_row[0].id,
+    });
     assert_eq!(s.fx.core.people(s.fx.vault).unwrap(), ["matteo"]);
 }
 
@@ -413,20 +397,13 @@ fn year_bounds() -> Vec<DateTime<Utc>> {
 /// before and inside the year, and two people moving money.
 fn year_fx() -> YearFx {
     let mut fx = setup();
-    let cash = run(
-        &mut fx.core,
-        fx.vault,
-        flow_cmd("Cash", FlowMode::Unlimited, true, 0),
-    )
-    .result_id
-    .unwrap();
-    let fondo = run(
-        &mut fx.core,
-        fx.vault,
-        flow_cmd("Fondo casa", FlowMode::NetCapped { cap: 100_000 }, true, 0),
-    )
-    .result_id
-    .unwrap();
+    let cash = fx.id(flow_cmd("Cash", FlowMode::Unlimited, true, 0));
+    let fondo = fx.id(flow_cmd(
+        "Fondo casa",
+        FlowMode::NetCapped { cap: 100_000 },
+        true,
+        0,
+    ));
     let w = Some(fx.wallet);
 
     // Before the year: alice's savings account.
@@ -793,31 +770,21 @@ fn month_bounds() -> Vec<DateTime<Utc>> {
 #[test]
 fn balance_breakdown_moves_a_wallet_transfer_from_one_wallet_to_the_other() {
     let mut fx = setup();
-    let conto = run(&mut fx.core, fx.vault, wallet_cmd("Conto", 0))
-        .result_id
-        .unwrap();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Income(entry(
-            500,
-            Some(fx.wallet),
-            None,
-            Some("Stipendio"),
-            T0 + 2 * DAY,
-        )),
-    );
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::TransferWallet {
-            amount: 200,
-            from_wallet_id: fx.wallet,
-            to_wallet_id: conto,
-            note: None,
-            occurred_at: at(T0 + 3 * DAY),
-        },
-    );
+    let conto = fx.id(wallet_cmd("Conto", 0));
+    fx.run(Command::Income(entry(
+        500,
+        Some(fx.wallet),
+        None,
+        Some("Stipendio"),
+        T0 + 2 * DAY,
+    )));
+    fx.run(Command::TransferWallet {
+        amount: 200,
+        from_wallet_id: fx.wallet,
+        to_wallet_id: conto,
+        note: None,
+        occurred_at: at(T0 + 3 * DAY),
+    });
 
     // The transfer opens a bucket of its own: [T0 + 3d, T0 + 31d).
     let bounds = vec![utc(0), utc(T0 + DAY), utc(T0 + 3 * DAY), utc(T0 + 31 * DAY)];
@@ -851,25 +818,21 @@ fn balance_breakdown_moves_a_wallet_transfer_from_one_wallet_to_the_other() {
 fn balance_breakdown_puts_an_opening_before_the_first_month_in_bucket_zero() {
     let mut fx = setup();
     // Opened at T0, before the first month boundary at T0 + 1d.
-    let risparmi = run(&mut fx.core, fx.vault, wallet_cmd("Risparmi", 5_000))
-        .result_id
-        .unwrap();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(300, Some(risparmi), None, Some("Casa"), T0 + 2 * DAY)),
-    );
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Income(entry(
-            1_200,
-            Some(risparmi),
-            None,
-            Some("Stipendio"),
-            T0 + 40 * DAY,
-        )),
-    );
+    let risparmi = fx.id(wallet_cmd("Risparmi", 5_000));
+    fx.run(Command::Expense(entry(
+        300,
+        Some(risparmi),
+        None,
+        Some("Casa"),
+        T0 + 2 * DAY,
+    )));
+    fx.run(Command::Income(entry(
+        1_200,
+        Some(risparmi),
+        None,
+        Some("Stipendio"),
+        T0 + 40 * DAY,
+    )));
 
     // The fixture's Cash wallet opened at zero, so it never moved.
     let wallets = deltas(&fx.core, fx.vault, month_bounds(), TargetKind::Wallet);
@@ -1015,25 +978,15 @@ fn balance_breakdown_of_the_envelopes_matches_the_year_breakdown_bucket_by_bucke
 #[test]
 fn balance_breakdown_keeps_an_archived_wallet_with_movement_in_the_range() {
     let mut fx = setup();
-    let vecchio = run(&mut fx.core, fx.vault, wallet_cmd("Vecchio", 300))
-        .result_id
-        .unwrap();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::TransferWallet {
-            amount: 300,
-            from_wallet_id: vecchio,
-            to_wallet_id: fx.wallet,
-            note: None,
-            occurred_at: at(T0 + 5 * DAY),
-        },
-    );
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ArchiveWallet { wallet_id: vecchio },
-    );
+    let vecchio = fx.id(wallet_cmd("Vecchio", 300));
+    fx.run(Command::TransferWallet {
+        amount: 300,
+        from_wallet_id: vecchio,
+        to_wallet_id: fx.wallet,
+        note: None,
+        occurred_at: at(T0 + 5 * DAY),
+    });
+    fx.run(Command::ArchiveWallet { wallet_id: vecchio });
 
     let wallets = deltas(&fx.core, fx.vault, month_bounds(), TargetKind::Wallet);
     assert_eq!(wallets.len(), 3);
@@ -1046,31 +999,31 @@ fn balance_breakdown_keeps_an_archived_wallet_with_movement_in_the_range() {
 fn balance_breakdown_leaves_voided_rows_and_rows_past_the_range_out() {
     let mut fx = setup();
     let w = Some(fx.wallet);
-    let income = run(
-        &mut fx.core,
-        fx.vault,
-        Command::Income(entry(500, w, None, Some("Stipendio"), T0 + 2 * DAY)),
-    )
-    .result_id
-    .unwrap();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(100, w, None, Some("Spesa"), T0 + 3 * DAY)),
-    );
+    let income = fx.id(Command::Income(entry(
+        500,
+        w,
+        None,
+        Some("Stipendio"),
+        T0 + 2 * DAY,
+    )));
+    fx.run(Command::Expense(entry(
+        100,
+        w,
+        None,
+        Some("Spesa"),
+        T0 + 3 * DAY,
+    )));
     // Past the last boundary.
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(70, w, None, Some("Spesa"), T0 + 90 * DAY)),
-    );
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::VoidTransaction {
-            transaction_id: income,
-        },
-    );
+    fx.run(Command::Expense(entry(
+        70,
+        w,
+        None,
+        Some("Spesa"),
+        T0 + 90 * DAY,
+    )));
+    fx.run(Command::VoidTransaction {
+        transaction_id: income,
+    });
 
     assert_eq!(
         deltas(&fx.core, fx.vault, month_bounds(), TargetKind::Wallet),

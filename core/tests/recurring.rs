@@ -75,7 +75,7 @@ fn due_dates(core: &Core, vault: Uuid, today: NaiveDate) -> Vec<(Uuid, Vec<Naive
 #[test]
 fn create_lists_the_template_with_its_schedule() {
     let mut fx = setup();
-    let id = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();
+    let id = fx.id(rent_cmd());
 
     let templates = fx.core.list_recurring(fx.vault, false).unwrap();
     assert_eq!(templates.len(), 1);
@@ -109,80 +109,64 @@ fn create_rejects_bad_kind_amount_schedule_and_targets() {
     let good = monthly(1, date(2026, 1, 1), None);
 
     assert!(matches!(
-        try_run(
-            &mut fx.core,
-            fx.vault,
-            recurring_cmd(TransactionKind::TransferWallet, 100, None, None, good),
-        ),
+        fx.try_run(recurring_cmd(
+            TransactionKind::TransferWallet,
+            100,
+            None,
+            None,
+            good
+        )),
         Err(DomainError::InvalidCommand(_))
     ));
     assert!(matches!(
-        try_run(
-            &mut fx.core,
-            fx.vault,
-            recurring_cmd(TransactionKind::Refund, 100, None, None, good),
-        ),
+        fx.try_run(recurring_cmd(
+            TransactionKind::Refund,
+            100,
+            None,
+            None,
+            good
+        )),
         Err(DomainError::InvalidCommand(_))
     ));
     assert!(matches!(
-        try_run(
-            &mut fx.core,
-            fx.vault,
-            recurring_cmd(TransactionKind::Income, 0, None, None, good),
-        ),
+        fx.try_run(recurring_cmd(TransactionKind::Income, 0, None, None, good)),
         Err(DomainError::InvalidAmount(_))
     ));
     assert!(matches!(
-        try_run(
-            &mut fx.core,
-            fx.vault,
-            recurring_cmd(
-                TransactionKind::Income,
-                100,
-                None,
-                None,
-                Schedule {
-                    interval: 0,
-                    ..good
-                },
-            ),
-        ),
+        fx.try_run(recurring_cmd(
+            TransactionKind::Income,
+            100,
+            None,
+            None,
+            Schedule {
+                interval: 0,
+                ..good
+            },
+        )),
         Err(DomainError::InvalidCommand(_))
     ));
     assert_eq!(
-        try_run(
-            &mut fx.core,
-            fx.vault,
-            recurring_cmd(
-                TransactionKind::Income,
-                100,
-                Some(Uuid::now_v7()),
-                None,
-                good
-            ),
-        )
+        fx.try_run(recurring_cmd(
+            TransactionKind::Income,
+            100,
+            Some(Uuid::now_v7()),
+            None,
+            good
+        ))
         .unwrap_err(),
         DomainError::NotFound("flow".to_string())
     );
 
-    let flow = run(
-        &mut fx.core,
-        fx.vault,
-        flow_cmd("Old", FlowMode::Unlimited, false, 0),
-    )
-    .result_id
-    .unwrap();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ArchiveFlow { flow_id: flow },
-    );
+    let flow = fx.id(flow_cmd("Old", FlowMode::Unlimited, false, 0));
+    fx.run(Command::ArchiveFlow { flow_id: flow });
     assert!(matches!(
-        try_run(
-            &mut fx.core,
-            fx.vault,
-            recurring_cmd(TransactionKind::Income, 100, Some(flow), None, good),
-        ),
+        fx.try_run(recurring_cmd(
+            TransactionKind::Income,
+            100,
+            Some(flow),
+            None,
+            good
+        )),
         Err(DomainError::InvalidCommand(_))
     ));
     assert!(fx.core.list_recurring(fx.vault, true).unwrap().is_empty());
@@ -191,7 +175,7 @@ fn create_rejects_bad_kind_amount_schedule_and_targets() {
 #[test]
 fn update_changes_the_schedule_and_what_is_pending() {
     let mut fx = setup();
-    let id = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();
+    let id = fx.id(rent_cmd());
     assert_eq!(
         due_dates(&fx.core, fx.vault, date(2026, 3, 15)),
         vec![(
@@ -201,20 +185,16 @@ fn update_changes_the_schedule_and_what_is_pending() {
     );
 
     let moved = monthly(20, date(2026, 2, 1), None);
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::UpdateRecurring {
-            recurring_id: id,
-            patch: RecurringPatch {
-                amount: Some(3000),
-                category: Some("  ".to_string()),
-                note: Some("monthly rent".to_string()),
-                schedule: Some(moved),
-                ..RecurringPatch::default()
-            },
+    fx.run(Command::UpdateRecurring {
+        recurring_id: id,
+        patch: RecurringPatch {
+            amount: Some(3000),
+            category: Some("  ".to_string()),
+            note: Some("monthly rent".to_string()),
+            schedule: Some(moved),
+            ..RecurringPatch::default()
         },
-    );
+    });
 
     let t = fx.core.list_recurring(fx.vault, false).unwrap().remove(0);
     assert_eq!(t.amount, 3000);
@@ -230,52 +210,36 @@ fn update_changes_the_schedule_and_what_is_pending() {
 #[test]
 fn update_and_archive_refuse_the_impossible() {
     let mut fx = setup();
-    let id = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();
+    let id = fx.id(rent_cmd());
     let empty = Command::UpdateRecurring {
         recurring_id: id,
         patch: RecurringPatch::default(),
     };
     assert!(matches!(
-        try_run(&mut fx.core, fx.vault, empty),
+        fx.try_run(empty),
         Err(DomainError::InvalidCommand(_))
     ));
     assert_eq!(
-        try_run(
-            &mut fx.core,
-            fx.vault,
-            Command::ArchiveRecurring {
-                recurring_id: Uuid::now_v7()
-            },
-        )
+        fx.try_run(Command::ArchiveRecurring {
+            recurring_id: Uuid::now_v7()
+        })
         .unwrap_err(),
         DomainError::NotFound("recurring".to_string())
     );
 
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ArchiveRecurring { recurring_id: id },
-    );
+    fx.run(Command::ArchiveRecurring { recurring_id: id });
     assert!(matches!(
-        try_run(
-            &mut fx.core,
-            fx.vault,
-            Command::ArchiveRecurring { recurring_id: id },
-        ),
+        fx.try_run(Command::ArchiveRecurring { recurring_id: id }),
         Err(DomainError::InvalidCommand(_))
     ));
     assert!(matches!(
-        try_run(
-            &mut fx.core,
-            fx.vault,
-            Command::UpdateRecurring {
-                recurring_id: id,
-                patch: RecurringPatch {
-                    amount: Some(10),
-                    ..RecurringPatch::default()
-                },
+        fx.try_run(Command::UpdateRecurring {
+            recurring_id: id,
+            patch: RecurringPatch {
+                amount: Some(10),
+                ..RecurringPatch::default()
             },
-        ),
+        }),
         Err(DomainError::InvalidCommand(_))
     ));
 }
@@ -283,37 +247,21 @@ fn update_and_archive_refuse_the_impossible() {
 #[test]
 fn restore_reactivates_an_archived_template() {
     let mut fx = setup();
-    let id = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();
+    let id = fx.id(rent_cmd());
     assert!(matches!(
-        try_run(
-            &mut fx.core,
-            fx.vault,
-            Command::RestoreRecurring { recurring_id: id },
-        ),
+        fx.try_run(Command::RestoreRecurring { recurring_id: id }),
         Err(DomainError::InvalidCommand(_))
     ));
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ArchiveRecurring { recurring_id: id },
-    );
+    fx.run(Command::ArchiveRecurring { recurring_id: id });
     assert!(fx.core.list_recurring(fx.vault, false).unwrap().is_empty());
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::RestoreRecurring { recurring_id: id },
-    );
+    fx.run(Command::RestoreRecurring { recurring_id: id });
     let listed = fx.core.list_recurring(fx.vault, false).unwrap();
     assert_eq!(listed.len(), 1);
     assert!(!listed[0].archived);
     assert_eq!(
-        try_run(
-            &mut fx.core,
-            fx.vault,
-            Command::RestoreRecurring {
-                recurring_id: Uuid::now_v7()
-            },
-        )
+        fx.try_run(Command::RestoreRecurring {
+            recurring_id: Uuid::now_v7()
+        })
         .unwrap_err(),
         DomainError::NotFound("recurring".to_string())
     );
@@ -326,7 +274,7 @@ fn restore_reactivates_an_archived_template() {
 #[test]
 fn pending_backfills_missed_periods_and_stops_at_today() {
     let mut fx = setup();
-    let id = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();
+    let id = fx.id(rent_cmd());
 
     assert!(due_dates(&fx.core, fx.vault, date(2025, 12, 31)).is_empty());
     assert_eq!(
@@ -350,38 +298,24 @@ fn pending_backfills_missed_periods_and_stops_at_today() {
 #[test]
 fn pending_respects_end_date_disabled_and_archived() {
     let mut fx = setup();
-    let bounded = run(
-        &mut fx.core,
-        fx.vault,
-        recurring_cmd(
-            TransactionKind::Income,
-            100,
-            None,
-            None,
-            monthly(1, date(2026, 1, 1), Some(date(2026, 2, 15))),
-        ),
-    )
-    .result_id
-    .unwrap();
-    let off = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();
-    let gone = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();
+    let bounded = fx.id(recurring_cmd(
+        TransactionKind::Income,
+        100,
+        None,
+        None,
+        monthly(1, date(2026, 1, 1), Some(date(2026, 2, 15))),
+    ));
+    let off = fx.id(rent_cmd());
+    let gone = fx.id(rent_cmd());
 
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::UpdateRecurring {
-            recurring_id: off,
-            patch: RecurringPatch {
-                enabled: Some(false),
-                ..RecurringPatch::default()
-            },
+    fx.run(Command::UpdateRecurring {
+        recurring_id: off,
+        patch: RecurringPatch {
+            enabled: Some(false),
+            ..RecurringPatch::default()
         },
-    );
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ArchiveRecurring { recurring_id: gone },
-    );
+    });
+    fx.run(Command::ArchiveRecurring { recurring_id: gone });
 
     assert_eq!(
         due_dates(&fx.core, fx.vault, date(2026, 6, 1)),
@@ -393,16 +327,12 @@ fn pending_respects_end_date_disabled_and_archived() {
     // A disabled or archived template cannot be executed either.
     for id in [off, gone] {
         assert!(matches!(
-            try_run(
-                &mut fx.core,
-                fx.vault,
-                Command::ExecuteRecurring {
-                    recurring_id: id,
-                    period_date: date(2026, 1, 1),
-                    occurred_at: at(T0),
-                    person: None,
-                },
-            ),
+            fx.try_run(Command::ExecuteRecurring {
+                recurring_id: id,
+                period_date: date(2026, 1, 1),
+                occurred_at: at(T0),
+                person: None,
+            }),
             Err(DomainError::InvalidCommand(_))
         ));
     }
@@ -415,25 +345,21 @@ fn pending_respects_end_date_disabled_and_archived() {
 #[test]
 fn execute_posts_the_transaction_and_records_the_run() {
     let mut fx = setup();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Income(entry(10_000, None, None, Some("Salary"), T0)),
-    );
-    let id = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();
+    fx.run(Command::Income(entry(
+        10_000,
+        None,
+        None,
+        Some("Salary"),
+        T0,
+    )));
+    let id = fx.id(rent_cmd());
 
-    let tx_id = run(
-        &mut fx.core,
-        fx.vault,
-        Command::ExecuteRecurring {
-            recurring_id: id,
-            period_date: date(2026, 1, 1),
-            occurred_at: at(T0 + 100),
-            person: None,
-        },
-    )
-    .result_id
-    .unwrap();
+    let tx_id = fx.id(Command::ExecuteRecurring {
+        recurring_id: id,
+        period_date: date(2026, 1, 1),
+        occurred_at: at(T0 + 100),
+        person: None,
+    });
 
     assert_eq!(wallet_balance(&fx.core, fx.vault, fx.wallet), 7500);
     assert_eq!(flow_balance(&fx.core, fx.vault, fx.unallocated), 7500);
@@ -465,12 +391,8 @@ fn execute_posts_the_transaction_and_records_the_run() {
 #[test]
 fn a_period_can_be_handled_only_once_and_only_when_due() {
     let mut fx = setup();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Income(entry(10_000, None, None, None, T0)),
-    );
-    let id = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();
+    fx.run(Command::Income(entry(10_000, None, None, None, T0)));
+    let id = fx.id(rent_cmd());
     let execute = |period: NaiveDate| Command::ExecuteRecurring {
         recurring_id: id,
         period_date: period,
@@ -480,29 +402,25 @@ fn a_period_can_be_handled_only_once_and_only_when_due() {
 
     // Not an occurrence of the schedule.
     assert!(matches!(
-        try_run(&mut fx.core, fx.vault, execute(date(2026, 1, 2))),
+        fx.try_run(execute(date(2026, 1, 2))),
         Err(DomainError::InvalidCommand(_))
     ));
     // Before start_date, even though it is a 1st of the month.
     assert!(matches!(
-        try_run(&mut fx.core, fx.vault, execute(date(2025, 12, 1))),
+        fx.try_run(execute(date(2025, 12, 1))),
         Err(DomainError::InvalidCommand(_))
     ));
 
-    run(&mut fx.core, fx.vault, execute(date(2026, 1, 1)));
+    fx.run(execute(date(2026, 1, 1)));
     assert_eq!(
-        try_run(&mut fx.core, fx.vault, execute(date(2026, 1, 1))).unwrap_err(),
+        fx.try_run(execute(date(2026, 1, 1))).unwrap_err(),
         DomainError::AlreadyExists("run for 2026-01-01".to_string())
     );
     assert!(matches!(
-        try_run(
-            &mut fx.core,
-            fx.vault,
-            Command::SkipRecurring {
-                recurring_id: id,
-                period_date: date(2026, 1, 1),
-            },
-        ),
+        fx.try_run(Command::SkipRecurring {
+            recurring_id: id,
+            period_date: date(2026, 1, 1),
+        }),
         Err(DomainError::AlreadyExists(_))
     ));
     assert_eq!(fx.core.recurring_runs(fx.vault, id).unwrap().len(), 1);
@@ -512,16 +430,12 @@ fn a_period_can_be_handled_only_once_and_only_when_due() {
 #[test]
 fn skip_handles_the_period_without_a_transaction() {
     let mut fx = setup();
-    let id = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();
+    let id = fx.id(rent_cmd());
 
-    let receipt = run(
-        &mut fx.core,
-        fx.vault,
-        Command::SkipRecurring {
-            recurring_id: id,
-            period_date: date(2026, 1, 1),
-        },
-    );
+    let receipt = fx.run(Command::SkipRecurring {
+        recurring_id: id,
+        period_date: date(2026, 1, 1),
+    });
     assert_eq!(receipt.result_id, None);
     assert!(list(&fx.core, fx.vault, &all()).is_empty());
     assert_eq!(wallet_balance(&fx.core, fx.vault, fx.wallet), 0);
@@ -539,44 +453,24 @@ fn skip_handles_the_period_without_a_transaction() {
 #[test]
 fn a_refused_execution_leaves_no_run_and_no_transaction() {
     let mut fx = setup();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Income(entry(10_000, None, None, None, T0)),
-    );
-    let capped = run(
-        &mut fx.core,
-        fx.vault,
-        flow_cmd("Fun", FlowMode::NetCapped { cap: 1000 }, false, 0),
-    )
-    .result_id
-    .unwrap();
-    let id = run(
-        &mut fx.core,
-        fx.vault,
-        recurring_cmd(
-            TransactionKind::Income,
-            5000,
-            Some(capped),
-            Some("Bonus"),
-            monthly(1, date(2026, 1, 1), None),
-        ),
-    )
-    .result_id
-    .unwrap();
+    fx.run(Command::Income(entry(10_000, None, None, None, T0)));
+    let capped = fx.id(flow_cmd("Fun", FlowMode::NetCapped { cap: 1000 }, false, 0));
+    let id = fx.id(recurring_cmd(
+        TransactionKind::Income,
+        5000,
+        Some(capped),
+        Some("Bonus"),
+        monthly(1, date(2026, 1, 1), None),
+    ));
 
     let before = balances(&fx.core, fx.vault);
     assert_eq!(
-        try_run(
-            &mut fx.core,
-            fx.vault,
-            Command::ExecuteRecurring {
-                recurring_id: id,
-                period_date: date(2026, 1, 1),
-                occurred_at: at(T0 + 100),
-                person: None,
-            },
-        )
+        fx.try_run(Command::ExecuteRecurring {
+            recurring_id: id,
+            period_date: date(2026, 1, 1),
+            occurred_at: at(T0 + 100),
+            person: None,
+        })
         .unwrap_err(),
         DomainError::MaxBalanceReached("Fun".to_string())
     );
@@ -593,24 +487,14 @@ fn a_refused_execution_leaves_no_run_and_no_transaction() {
 #[test]
 fn wallet_none_resolves_to_the_only_active_wallet() {
     let mut fx = setup();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Income(entry(10_000, None, None, None, T0)),
-    );
-    let id = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();
-    let tx_id = run(
-        &mut fx.core,
-        fx.vault,
-        Command::ExecuteRecurring {
-            recurring_id: id,
-            period_date: date(2026, 1, 1),
-            occurred_at: at(T0 + 100),
-            person: None,
-        },
-    )
-    .result_id
-    .unwrap();
+    fx.run(Command::Income(entry(10_000, None, None, None, T0)));
+    let id = fx.id(rent_cmd());
+    let tx_id = fx.id(Command::ExecuteRecurring {
+        recurring_id: id,
+        period_date: date(2026, 1, 1),
+        occurred_at: at(T0 + 100),
+        person: None,
+    });
     assert_eq!(
         list(&fx.core, fx.vault, &all())
             .into_iter()
@@ -623,18 +507,14 @@ fn wallet_none_resolves_to_the_only_active_wallet() {
     assert_eq!(wallet_balance(&fx.core, fx.vault, fx.wallet), 7500);
 
     // With a second active wallet the template no longer knows where to post.
-    run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0));
+    fx.run(wallet_cmd("Bank", 0));
     assert!(matches!(
-        try_run(
-            &mut fx.core,
-            fx.vault,
-            Command::ExecuteRecurring {
-                recurring_id: id,
-                period_date: date(2026, 2, 1),
-                occurred_at: at(T0 + 200),
-                person: None,
-            },
-        ),
+        fx.try_run(Command::ExecuteRecurring {
+            recurring_id: id,
+            period_date: date(2026, 2, 1),
+            occurred_at: at(T0 + 200),
+            person: None,
+        }),
         Err(DomainError::InvalidCommand(_))
     ));
     assert_eq!(fx.core.recurring_runs(fx.vault, id).unwrap().len(), 1);
@@ -658,62 +538,44 @@ fn runs_of_an_unknown_template_are_not_found() {
 #[test]
 fn replay_rebuilds_templates_runs_and_transactions() {
     let mut fx = setup();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Income(entry(50_000, None, None, Some("Salary"), T0)),
-    );
-    let id = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ExecuteRecurring {
-            recurring_id: id,
-            period_date: date(2026, 1, 1),
-            occurred_at: at(T0 + 100),
-            person: None,
+    fx.run(Command::Income(entry(
+        50_000,
+        None,
+        None,
+        Some("Salary"),
+        T0,
+    )));
+    let id = fx.id(rent_cmd());
+    fx.run(Command::ExecuteRecurring {
+        recurring_id: id,
+        period_date: date(2026, 1, 1),
+        occurred_at: at(T0 + 100),
+        person: None,
+    });
+    fx.run(Command::SkipRecurring {
+        recurring_id: id,
+        period_date: date(2026, 2, 1),
+    });
+    fx.run(Command::UpdateRecurring {
+        recurring_id: id,
+        patch: RecurringPatch {
+            amount: Some(2600),
+            wallet_id: Some(fx.wallet),
+            note: Some("rent".to_string()),
+            schedule: Some(monthly(3, date(2026, 1, 1), Some(date(2026, 12, 31)))),
+            ..RecurringPatch::default()
         },
-    );
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::SkipRecurring {
-            recurring_id: id,
-            period_date: date(2026, 2, 1),
-        },
-    );
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::UpdateRecurring {
-            recurring_id: id,
-            patch: RecurringPatch {
-                amount: Some(2600),
-                wallet_id: Some(fx.wallet),
-                note: Some("rent".to_string()),
-                schedule: Some(monthly(3, date(2026, 1, 1), Some(date(2026, 12, 31)))),
-                ..RecurringPatch::default()
-            },
-        },
-    );
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ExecuteRecurring {
-            recurring_id: id,
-            period_date: date(2026, 3, 3),
-            occurred_at: at(T0 + 300),
-            person: None,
-        },
-    );
-    let archived = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ArchiveRecurring {
-            recurring_id: archived,
-        },
-    );
+    });
+    fx.run(Command::ExecuteRecurring {
+        recurring_id: id,
+        period_date: date(2026, 3, 3),
+        occurred_at: at(T0 + 300),
+        person: None,
+    });
+    let archived = fx.id(rent_cmd());
+    fx.run(Command::ArchiveRecurring {
+        recurring_id: archived,
+    });
 
     let log = fx.core.commands_since(fx.vault, 0).unwrap();
     let mut fresh = Core::open_in_memory().unwrap();

@@ -22,26 +22,10 @@ struct Fixture {
 
 fn build_fixture() -> Fixture {
     let mut fx = setup();
-    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
-        .result_id
-        .unwrap();
-    let bancoposta = run(&mut fx.core, fx.vault, wallet_cmd("Bancoposta", 0))
-        .result_id
-        .unwrap();
-    let vacanze = run(
-        &mut fx.core,
-        fx.vault,
-        flow_cmd("Vacanze", FlowMode::Unlimited, false, 5000),
-    )
-    .result_id
-    .unwrap();
-    let spesa = run(
-        &mut fx.core,
-        fx.vault,
-        flow_cmd("Spesa", FlowMode::Unlimited, false, 0),
-    )
-    .result_id
-    .unwrap();
+    let bank = fx.id(wallet_cmd("Bank", 0));
+    let bancoposta = fx.id(wallet_cmd("Bancoposta", 0));
+    let vacanze = fx.id(flow_cmd("Vacanze", FlowMode::Unlimited, false, 5000));
+    let spesa = fx.id(flow_cmd("Spesa", FlowMode::Unlimited, false, 0));
     let cash = fx.wallet;
     Fixture {
         fx,
@@ -212,11 +196,7 @@ fn yesterday_shifts_occurred_at_by_one_day_keeping_time_and_offset() {
 fn archived_wallets_are_not_matched() {
     let mut f = build_fixture();
     let now = at(T0);
-    run(
-        &mut f.fx.core,
-        f.fx.vault,
-        Command::ArchiveWallet { wallet_id: f.bank },
-    );
+    f.fx.run(Command::ArchiveWallet { wallet_id: f.bank });
     let parsed = quick_add::parse("15 pizza @bank", Currency::Eur).unwrap();
     let err =
         f.fx.core
@@ -259,7 +239,7 @@ fn transfer_flow_execute_produces_expected_transaction() {
     assert_eq!(resolved.wallet_id, None);
     assert_eq!(resolved.flow_id, None);
 
-    try_run(&mut f.fx.core, f.fx.vault, resolved.command).unwrap();
+    f.fx.try_run(resolved.command).unwrap();
 
     let txns = list(&f.fx.core, f.fx.vault, &all());
     let transfer = txns
@@ -438,10 +418,7 @@ fn a_line_without_a_person_leaves_it_to_the_author() {
         Command::Expense(entry) => assert_eq!(entry.person, None),
         other => panic!("unexpected {other:?}"),
     }
-    let id = try_run(&mut f.fx.core, f.fx.vault, resolved.command)
-        .unwrap()
-        .result_id
-        .unwrap();
+    let id = f.fx.try_run(resolved.command).unwrap().result_id.unwrap();
     let row = f.fx.core.transaction(f.fx.vault, id).unwrap();
     assert_eq!(row.person, "alice");
 }
@@ -454,10 +431,7 @@ fn a_resolved_person_is_who_the_row_is_for_and_the_author_recorded_it() {
         f.fx.core
             .resolve_quick_add(f.fx.vault, &parsed, at(T0), &no_defaults(), &people())
             .unwrap();
-    let id = try_run(&mut f.fx.core, f.fx.vault, resolved.command)
-        .unwrap()
-        .result_id
-        .unwrap();
+    let id = f.fx.try_run(resolved.command).unwrap().result_id.unwrap();
     let row = f.fx.core.transaction(f.fx.vault, id).unwrap();
     assert_eq!(row.person, "elisa");
     assert_eq!(row.created_by, "alice");
