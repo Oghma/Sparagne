@@ -74,7 +74,7 @@ pub async fn remove(
             if username == user.username {
                 return match membership(&db, vault_id, user.id)? {
                     MemberRole::Owner => Err(ApiError::forbidden()),
-                    _ => db.remove_membership(vault_id, user.id).map(|_| ()),
+                    _ => db.remove_membership(vault_id, user.id),
                 };
             }
             require_owner(&db, vault_id, user.id)?;
@@ -86,7 +86,7 @@ pub async fn remove(
                 Some(MemberRole::Owner) => return Err(ApiError::forbidden()),
                 Some(_) => {}
             }
-            db.remove_membership(vault_id, target.id).map(|_| ())
+            db.remove_membership(vault_id, target.id)
         })
         .await?;
     Ok(StatusCode::NO_CONTENT)

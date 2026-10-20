@@ -188,7 +188,7 @@ fn claim(
     };
     state
         .db()
-        .insert_membership(vault_id, user.id, MemberRole::Owner, Utc::now().timestamp())?;
+        .set_membership(vault_id, user.id, MemberRole::Owner, Utc::now().timestamp())?;
     Ok(PushResult {
         command_id,
         outcome: PushOutcome::Applied {

@@ -5,7 +5,7 @@
 
 use std::{path::Path, time::Duration};
 
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, Params, Row, params};
 use sparagne_core::sync::{MemberEntry, MemberRole};
 use uuid::Uuid;
 
@@ -83,7 +83,16 @@ impl ServerDb {
         Ok(Self { conn })
     }
 
-    // -- Users --------------------------------------------------------------
+    fn rows<T>(
+        &self,
+        sql: &str,
+        args: impl Params,
+        row: impl FnMut(&Row<'_>) -> rusqlite::Result<T>,
+    ) -> ApiResult<Vec<T>> {
+        let mut stmt = self.conn.prepare(sql)?;
+        let rows = stmt.query_map(args, row)?.collect::<Result<_, _>>()?;
+        Ok(rows)
+    }
 
     /// Inserts an account; the username is unique.
     pub fn insert_user(&self, username: &str, password_hash: &str, now: i64) -> ApiResult<User> {
@@ -109,13 +118,7 @@ impl ServerDb {
             .query_row(
                 "SELECT id, username, password_hash FROM users WHERE username = ?1",
                 params![username],
-                |r| {
-                    Ok((
-                        r.get::<_, Uuid>(0)?,
-                        r.get::<_, String>(1)?,
-                        r.get::<_, String>(2)?,
-                    ))
-                },
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .optional()?;
         Ok(row.map(|(id, username, hash)| (User { id, username }, hash)))
@@ -126,7 +129,6 @@ impl ServerDb {
         Ok(self.user_with_hash(username)?.map(|(user, _)| user))
     }
 
-    /// Replaces an account's password hash.
     pub fn set_password_hash(&self, user_id: Uuid, password_hash: &str) -> ApiResult<()> {
         self.conn.execute(
             "UPDATE users SET password_hash = ?2 WHERE id = ?1",
@@ -137,16 +139,12 @@ impl ServerDb {
 
     /// Every account with its creation time (unix seconds), by username.
     pub fn users(&self) -> ApiResult<Vec<(String, i64)>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT username, created_at FROM users ORDER BY username")?;
-        let rows = stmt
-            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(rows)
+        self.rows(
+            "SELECT username, created_at FROM users ORDER BY username",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
     }
-
-    // -- Tokens -------------------------------------------------------------
 
     /// Stores a token by its sha256 hex digest.
     pub fn insert_token(
@@ -173,13 +171,7 @@ impl ServerDb {
                  FROM tokens t JOIN users u ON u.id = t.user_id
                  WHERE t.hash = ?1",
                 params![token_hash],
-                |r| {
-                    Ok((
-                        r.get::<_, Uuid>(0)?,
-                        r.get::<_, String>(1)?,
-                        r.get::<_, i64>(2)?,
-                    ))
-                },
+                |r| Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)?)),
             )
             .optional()?;
         match row {
@@ -207,14 +199,11 @@ impl ServerDb {
         )?)
     }
 
-    /// Drops every token that is already past its expiry.
     pub fn purge_expired_tokens(&self, now: i64) -> ApiResult<()> {
         self.conn
             .execute("DELETE FROM tokens WHERE expires_at <= ?1", params![now])?;
         Ok(())
     }
-
-    // -- Memberships --------------------------------------------------------
 
     /// The role of an account on a vault, `None` when it is not a member.
     pub fn membership(&self, vault_id: Uuid, user_id: Uuid) -> ApiResult<Option<MemberRole>> {
@@ -228,22 +217,6 @@ impl ServerDb {
             .optional()?;
         role.map(|value| MemberRole::parse(&value).map_err(ApiError::from))
             .transpose()
-    }
-
-    /// Adds a membership, leaving an existing one untouched.
-    pub fn insert_membership(
-        &self,
-        vault_id: Uuid,
-        user_id: Uuid,
-        role: MemberRole,
-        now: i64,
-    ) -> ApiResult<()> {
-        self.conn.execute(
-            "INSERT OR IGNORE INTO vault_memberships (vault_id, user_id, role, created_at)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![vault_id, user_id, role.as_str(), now],
-        )?;
-        Ok(())
     }
 
     /// Adds or changes a membership.
@@ -263,51 +236,44 @@ impl ServerDb {
         Ok(())
     }
 
-    /// `true` when a membership was actually removed.
-    pub fn remove_membership(&self, vault_id: Uuid, user_id: Uuid) -> ApiResult<bool> {
-        let changed = self.conn.execute(
+    pub fn remove_membership(&self, vault_id: Uuid, user_id: Uuid) -> ApiResult<()> {
+        self.conn.execute(
             "DELETE FROM vault_memberships WHERE vault_id = ?1 AND user_id = ?2",
             params![vault_id, user_id],
         )?;
-        Ok(changed > 0)
+        Ok(())
     }
 
     /// Every vault an account is a member of, with its role.
     pub fn memberships_of_user(&self, user_id: Uuid) -> ApiResult<Vec<(Uuid, MemberRole)>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT vault_id, role FROM vault_memberships WHERE user_id = ?1")?;
-        let rows = stmt
-            .query_map(params![user_id], |r| {
-                Ok((r.get::<_, Uuid>(0)?, r.get::<_, String>(1)?))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        rows.into_iter()
-            .map(|(vault_id, role)| Ok((vault_id, MemberRole::parse(&role)?)))
-            .collect()
+        self.rows(
+            "SELECT vault_id, role FROM vault_memberships WHERE user_id = ?1",
+            params![user_id],
+            |r| Ok((r.get::<_, Uuid>(0)?, r.get::<_, String>(1)?)),
+        )?
+        .into_iter()
+        .map(|(vault_id, role)| Ok((vault_id, MemberRole::parse(&role)?)))
+        .collect()
     }
 
     /// Members of a vault: the owner first, then editors, then viewers.
     pub fn members_of_vault(&self, vault_id: Uuid) -> ApiResult<Vec<MemberEntry>> {
-        let mut stmt = self.conn.prepare(
+        self.rows(
             "SELECT u.username, m.role
              FROM vault_memberships m JOIN users u ON u.id = m.user_id
              WHERE m.vault_id = ?1
              ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'editor' THEN 1 ELSE 2 END,
                       lower(u.username)",
-        )?;
-        let rows = stmt
-            .query_map(params![vault_id], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        rows.into_iter()
-            .map(|(username, role)| {
-                Ok(MemberEntry {
-                    username,
-                    role: MemberRole::parse(&role)?,
-                })
+            params![vault_id],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+        )?
+        .into_iter()
+        .map(|(username, role)| {
+            Ok(MemberEntry {
+                username,
+                role: MemberRole::parse(&role)?,
             })
-            .collect()
+        })
+        .collect()
     }
 }
