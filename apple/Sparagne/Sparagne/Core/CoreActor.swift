@@ -330,10 +330,6 @@ actor CoreActor {
         try await visit { try $0.previewMerge(vaultId: vaultId, sourceId: sourceId, targetId: targetId) }
     }
 
-    func listRecurring(vaultId: Uuid, includeArchived: Bool) async throws -> [RecurringView] {
-        try await visit { try $0.listRecurring(vaultId: vaultId, includeArchived: includeArchived) }
-    }
-
     /// The periods of one template already recorded or skipped, oldest first.
     func recurringRuns(vaultId: Uuid, recurringId: Uuid) async throws -> [RecurringRunView] {
         try await visit { try $0.recurringRuns(vaultId: vaultId, recurringId: recurringId) }

@@ -379,6 +379,22 @@ struct AppStoreTests {
         #expect(store.wallets.contains { $0.id == cash.id })
     }
 
+    @Test("A setup command that goes through moves the status line's saved-at; one refused does not")
+    func setupCommandMovesSavedAt() async throws {
+        let store = try await Self.onboarded()
+        let cash = try #require(store.wallets.first { $0.name == "Cash" })
+        #expect(store.savedAt == nil)
+
+        await store.archiveWallet(cash.id)
+        #expect(store.presentedError != nil)
+        #expect(store.savedAt == nil)
+
+        store.presentedError = nil
+        await store.createWallet(name: "Card", openingBalance: 0)
+        #expect(store.presentedError == nil)
+        #expect(store.savedAt != nil)
+    }
+
     @Test("Updating an envelope's cap shows up in the snapshot")
     func updatingAnEnvelopeChangesTheCapInTheSnapshot() async throws {
         let store = try await Self.onboarded()

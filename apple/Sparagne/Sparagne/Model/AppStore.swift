@@ -297,8 +297,7 @@ final class AppStore {
     /// Ricorrenze tab and the Mastro's pending rows stay current without a
     /// separate poll.
     private(set) var pendingRecurringItems: [PendingRecurring] = []
-    /// Every template, active and archived; loaded on demand when the
-    /// Recurring panel opens.
+    /// Every template, active and archived, refreshed on every `reload()`.
     private(set) var recurringTemplates: [RecurringView] = []
     /// The periods of the next days, soonest first, for the Ricorrenze tab's
     /// agenda. Written only by that tab's loader (`AppStore+Recurring.swift`),
@@ -677,8 +676,8 @@ final class AppStore {
         defaults.set(vault.id, forKey: Self.lastVaultKey)
         lastWalletId = nil
         lastFlowId = nil
-        // Stale until whichever view needs them reloads: the SETUP tab and
-        // the Recurring panel load on appear, not eagerly.
+        // The vault being left's: the tabs load their own lists again, and
+        // the templates come with the reload below.
         windowCategories = []
         categoryAliases = []
         recentCategoryIds = []
@@ -723,6 +722,7 @@ final class AppStore {
             yearCategoryTotals = []
             topExpenses = []
             pendingRecurringItems = []
+            recurringTemplates = []
             allocationPlan = nil
             pendingAllocation = nil
             allocationBase = AllocationBase(total: 0, incomes: [])
@@ -1038,10 +1038,7 @@ final class AppStore {
     /// palette. The name is a label, so two vaults may share it, and the
     /// currency never changes.
     func renameVault(_ vaultId: Uuid, name: String) async {
-        await guarded {
-            try await core.execute(vaultId: vaultId, .renameVault(name: name))
-            try await adoptVaultList()
-        }
+        await write(.renameVault(name: name), in: vaultId) { try await adoptVaultList() }
     }
 
     /// Deletes a vault with everything in it, for every member and on every
@@ -1059,42 +1056,23 @@ final class AppStore {
             ledgerEditor.reset()
             await ledgerEditor.settle()
         }
-        await guarded {
-            try await core.execute(vaultId: vaultId, .deleteVault)
-            try await adoptVaultList()
-        }
+        await write(.deleteVault, in: vaultId) { try await adoptVaultList() }
     }
 
     func createWallet(name: String, openingBalance: Int64) async {
-        guard let vault = currentVault, !refusedAsReadOnly() else { return }
-        await guarded {
-            try await core.execute(
-                vaultId: vault.id,
-                .createWallet(
-                    name: name,
-                    openingBalance: openingBalance,
-                    occurredAt: CoreDate.offset(Date())
-                )
-            )
-            await reload()
-        }
+        await command(.createWallet(name: name, openingBalance: openingBalance, occurredAt: CoreDate.offset(Date())))
     }
 
     func createEnvelope(name: String, mode: FlowMode, allowNegative: Bool, openingAllocation: Int64) async {
-        guard let vault = currentVault, !refusedAsReadOnly() else { return }
-        await guarded {
-            try await core.execute(
-                vaultId: vault.id,
-                .createFlow(
-                    name: name,
-                    mode: mode,
-                    allowNegative: allowNegative,
-                    openingAllocation: openingAllocation,
-                    occurredAt: CoreDate.offset(Date())
-                )
+        await command(
+            .createFlow(
+                name: name,
+                mode: mode,
+                allowNegative: allowNegative,
+                openingAllocation: openingAllocation,
+                occurredAt: CoreDate.offset(Date())
             )
-            await reload()
-        }
+        )
     }
 
     // MARK: - Wallet and envelope management
@@ -1103,8 +1081,8 @@ final class AppStore {
         await command(.renameWallet(walletId: walletId, name: name))
     }
 
-    /// Requires a zero balance in the core; the error surfaces as-is
-    /// (docs task 2: no client-side pre-validation).
+    /// Requires a zero balance in the core; the error surfaces as-is, with no
+    /// check of the app's own before it.
     func archiveWallet(_ walletId: Uuid) async {
         await command(.archiveWallet(walletId: walletId))
     }
@@ -1133,20 +1111,32 @@ final class AppStore {
         await command(.restoreFlow(flowId: flowId))
     }
 
-    /// One command against the current vault, then the reload that shows what
-    /// it did. The shape every management action has.
-    private func command(_ command: Command) async {
-        guard let vault = currentVault, !refusedAsReadOnly() else { return }
+    /// One command against the vault on screen, then the reload that shows
+    /// what it did. `nil` when nothing was written.
+    @discardableResult
+    private func command(_ command: Command) async -> Receipt? {
+        guard let vault = currentVault, !refusedAsReadOnly() else { return nil }
+        return await write(command, in: vault.id) { await reload() }
+    }
+
+    /// `command` written to `vaultId`, then `show`: every write of one
+    /// command goes through here, so every one that goes through moves
+    /// "saved at". `nil` when the core refused it, with the alert up.
+    @discardableResult
+    private func write(_ command: Command, in vaultId: Uuid, then show: () async throws -> Void) async -> Receipt? {
+        var receipt: Receipt?
         await guarded {
-            try await core.execute(vaultId: vault.id, command)
-            await reload()
+            receipt = try await core.execute(vaultId: vaultId, command)
+            savedAt = Date()
+            try await show()
         }
+        return receipt
     }
 
     // MARK: - Category management (the SETUP tab)
 
     /// Loads both the management list (archived included) and the aliases;
-    /// called when the SETUP tab appears (docs task 3).
+    /// called when the SETUP tab appears.
     func loadCategoryManagement() async {
         guard let vault = currentVault else {
             windowCategories = []
@@ -1248,35 +1238,20 @@ final class AppStore {
     /// repoints them: the loaded
     /// transactions page can be stale, not just the category lists.
     private func categoryCommand(_ command: Command) async {
-        guard let vault = currentVault, !refusedAsReadOnly() else { return }
-        await guarded {
-            try await core.execute(vaultId: vault.id, command)
-            await reload()
-            if let management = try? await core.categoryManagement(vaultId: vault.id) {
-                windowCategories = management.categories
-                categoryAliases = management.aliases
-            }
-        }
+        // A failed refetch leaves the lists as they were until the tab
+        // loads them again: the write itself went through.
+        guard let vault = currentVault, await self.command(command) != nil,
+              let management = try? await core.categoryManagement(vaultId: vault.id)
+        else { return }
+        windowCategories = management.categories
+        categoryAliases = management.aliases
     }
 
     // MARK: - Recurring
 
-    /// Every template, active and archived; called when the Recurring panel
-    /// opens (`pendingRecurringItems` itself is kept current by `reload()`).
-    func loadRecurringTemplates() async {
-        guard let vault = currentVault else {
-            recurringTemplates = []
-            return
-        }
-        await guarded {
-            let templates = try await core.listRecurring(vaultId: vault.id, includeArchived: true)
-            // Another vault opened while the list was on its way: it belongs
-            // to the vault that is gone, and would sit under the new one's
-            // name until the next load.
-            guard currentVault?.id == vault.id else { return }
-            recurringTemplates = templates
-        }
-    }
+    /// Nothing to do: every `reload()` brings the templates, archived ones
+    /// included. Kept for the Ricorrenze tab, which still calls it.
+    func loadRecurringTemplates() async {}
 
     /// Returns the new template's id, from the core's receipt, or `nil` when
     /// it was refused: the inspector selects what it created by that id, not
@@ -1293,45 +1268,35 @@ final class AppStore {
         schedule: Schedule,
         owner: String? = nil
     ) async -> Uuid? {
-        guard let vault = currentVault, !refusedAsReadOnly() else { return nil }
-        var created: Uuid?
-        // `recurringCommand`'s steps, keeping the receipt it drops.
-        await guarded {
-            let receipt = try await core.execute(
-                vaultId: vault.id,
-                .createRecurring(
-                    transactionKind: kind,
-                    amount: amount,
-                    walletId: walletId,
-                    flowId: flowId,
-                    category: category,
-                    note: note,
-                    schedule: schedule,
-                    // The author is the core's default owner: said by
-                    // leaving it out, like a row's person.
-                    owner: explicitPerson(owner)
-                )
+        await command(
+            .createRecurring(
+                transactionKind: kind,
+                amount: amount,
+                walletId: walletId,
+                flowId: flowId,
+                category: category,
+                note: note,
+                schedule: schedule,
+                // The author is the core's default owner: said by leaving it
+                // out, like a row's person.
+                owner: explicitPerson(owner)
             )
-            created = receipt.resultId
-            await loadRecurringTemplates()
-            await reload()
-        }
-        return created
+        )?.resultId
     }
 
     func updateRecurring(_ recurringId: Uuid, patch: RecurringPatch) async {
         guard !patch.isEmpty else { return }
-        await recurringCommand(.updateRecurring(recurringId: recurringId, patch: patch))
+        await command(.updateRecurring(recurringId: recurringId, patch: patch))
     }
 
     func archiveRecurring(_ recurringId: Uuid) async {
-        await recurringCommand(.archiveRecurring(recurringId: recurringId))
+        await command(.archiveRecurring(recurringId: recurringId))
     }
 
     /// Puts an archived template back on the schedule; the periods it missed
     /// while archived come back as due.
     func restoreRecurring(_ recurringId: Uuid) async {
-        await recurringCommand(.restoreRecurring(recurringId: recurringId))
+        await command(.restoreRecurring(recurringId: recurringId))
     }
 
     /// Every period waiting for a decision, oldest first: what the due sheet
@@ -1343,9 +1308,9 @@ final class AppStore {
     }
 
     /// Materializes `periodDate` as a transaction; `occurredAt` is the due
-    /// date at the current time of day, in the system offset (team-lead
-    /// task 4). The row is for the template's owner, whoever presses
-    /// Registra: the mortgage stays Matteo's when Elisa records it.
+    /// date at the current time of day, in the system offset. The row is for
+    /// the template's owner, whoever presses Registra: the mortgage stays
+    /// Matteo's when Elisa records it.
     ///
     /// An owner who left the vault is refused here, before the core: the
     /// buttons are off for such a template (`ownerHasLeft`), and a period
@@ -1360,11 +1325,11 @@ final class AppStore {
             )
             return
         }
-        await recurringCommand(execution(recurringId, owner: owner, periodDate: periodDate, now: Date()))
+        await command(execution(recurringId, owner: owner, periodDate: periodDate, now: Date()))
     }
 
     func skipRecurring(_ recurringId: Uuid, periodDate: NaiveDate) async {
-        await recurringCommand(.skipRecurring(recurringId: recurringId, periodDate: periodDate))
+        await command(.skipRecurring(recurringId: recurringId, periodDate: periodDate))
     }
 
     /// Executes every period on the due list as one batch: all of them are
@@ -1403,8 +1368,8 @@ final class AppStore {
         )
     }
 
-    /// The owner of a template, from the due list `reload()` keeps fresh, or
-    /// from the templates the Ricorrenze tab loaded.
+    /// The owner of a template, from the due list or the templates, both of
+    /// which `reload()` keeps fresh.
     func owner(ofTemplate id: Uuid) -> String? {
         pendingRecurringItems.first { $0.template.id == id }?.template.owner
             ?? recurringTemplates.first { $0.id == id }?.owner
@@ -1421,17 +1386,6 @@ final class AppStore {
             occurredAt: Self.combine(day: periodDate, timeOf: now),
             person: explicitPerson(owner)
         )
-    }
-
-    /// A recurring command, then the template list and the ledger together:
-    /// executing a period writes a transaction as well as a run.
-    private func recurringCommand(_ command: Command) async {
-        guard let vault = currentVault, !refusedAsReadOnly() else { return }
-        await guarded {
-            try await core.execute(vaultId: vault.id, command)
-            await loadRecurringTemplates()
-            await reload()
-        }
     }
 
     /// The calendar day of `day` with the clock time of `reference`: moving a
@@ -1787,11 +1741,7 @@ final class AppStore {
     /// gets its turn after that month's rows have replaced its own.
     func update(transactionId: Uuid, patch: TransactionPatch, inverse: TransactionPatch?) async {
         guard let vault = currentVault, !patch.isEmpty, !refusedAsReadOnly() else { return }
-        await guarded {
-            try await core.execute(
-                vaultId: vault.id,
-                .updateTransaction(transactionId: transactionId, patch: patch)
-            )
+        await write(.updateTransaction(transactionId: transactionId, patch: patch), in: vault.id) {
             if let inverse {
                 recordPatches(
                     [RowPatch(id: transactionId, patch: patch)],
@@ -1800,7 +1750,6 @@ final class AppStore {
                     name: String(localized: "Edit Row")
                 )
             }
-            savedAt = Date()
             await reload()
         }
     }

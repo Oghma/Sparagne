@@ -9,7 +9,7 @@ extension AppStore {
 
     /// Every period of the running templates from the day after `today` to
     /// 30 days on, into `upcomingRecurring` (`RecurringAgenda`). Reads the
-    /// templates already loaded (`loadRecurringTemplates`): the tab calls it
+    /// templates `reload()` already loaded: the tab calls it
     /// again whenever they change, whenever the due list does, and when the
     /// day turns.
     ///

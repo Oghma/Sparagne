@@ -35,7 +35,6 @@ struct PeopleTests {
                 owner: owner
             )
         )
-        await store.loadRecurringTemplates()
         await store.reload()
     }
 
