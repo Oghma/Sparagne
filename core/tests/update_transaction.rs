@@ -408,12 +408,8 @@ fn archived_targets_are_refused() {
 fn income_capped_flow_caps_the_new_amount_and_frees_room_when_lowered() {
     let mut fx = setup();
     let w = Some(fx.wallet);
-    let capped = fx.id(flow_cmd(
-        "Capped",
-        FlowMode::IncomeCapped { cap: 1000 },
-        false,
-        0,
-    ));
+    let cmd = flow_cmd("Capped", FlowMode::IncomeCapped { cap: 1000 }, false, 0);
+    let capped = fx.id(cmd);
     let tx = fx.id(Command::Income(entry(400, w, Some(capped), None, T0 + 1)));
     assert_eq!(income_total(&fx, capped), Some(400));
 
@@ -439,12 +435,8 @@ fn net_capped_flow_rejects_a_retarget_over_its_cap() {
     let mut fx = setup();
     let w = Some(fx.wallet);
     let wide = flow(&mut fx, "Wide");
-    let small = fx.id(flow_cmd(
-        "Small",
-        FlowMode::NetCapped { cap: 100 },
-        false,
-        0,
-    ));
+    let cmd = flow_cmd("Small", FlowMode::NetCapped { cap: 100 }, false, 0);
+    let small = fx.id(cmd);
     let tx = fx.id(Command::Income(entry(500, w, Some(wide), None, T0 + 1)));
 
     assert_eq!(

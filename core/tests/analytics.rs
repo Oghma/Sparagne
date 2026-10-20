@@ -318,12 +318,8 @@ fn year_bounds() -> Vec<DateTime<Utc>> {
 fn year_fx() -> YearFx {
     let mut fx = setup();
     let cash = fx.id(flow_cmd("Cash", FlowMode::Unlimited, true, 0));
-    let fondo = fx.id(flow_cmd(
-        "Fondo casa",
-        FlowMode::NetCapped { cap: 100_000 },
-        true,
-        0,
-    ));
+    let cmd = flow_cmd("Fondo casa", FlowMode::NetCapped { cap: 100_000 }, true, 0);
+    let fondo = fx.id(cmd);
     let w = Some(fx.wallet);
 
     // Before the year: alice's savings account.
@@ -694,12 +690,8 @@ fn balance_breakdown_of_the_envelopes_matches_the_year_breakdown_bucket_by_bucke
     let vault = fx.vault;
     let w = Some(fx.wallet);
     let spesa = fx.id(flow_cmd("Spesa", FlowMode::Unlimited, true, 0));
-    let fondo = fx.id(flow_cmd(
-        "Fondo",
-        FlowMode::NetCapped { cap: 100_000 },
-        true,
-        0,
-    ));
+    let cmd = flow_cmd("Fondo", FlowMode::NetCapped { cap: 100_000 }, true, 0);
+    let fondo = fx.id(cmd);
 
     // Bucket 0: an opening and an expense before the first month.
     open_wallet(&mut fx, "alice", "Risparmi", 700, T0);

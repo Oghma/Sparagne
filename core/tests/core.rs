@@ -127,12 +127,8 @@ fn transfer_wallet_does_not_touch_flows() {
 fn flow_caps_are_enforced_and_income_capped_counts_transfers_in() {
     let mut fx = setup();
     fx.run(Command::Income(entry(1000, None, None, None, T0)));
-    let vacanze = fx.id(flow_cmd(
-        "Vacanze",
-        FlowMode::IncomeCapped { cap: 500 },
-        false,
-        0,
-    ));
+    let cmd = flow_cmd("Vacanze", FlowMode::IncomeCapped { cap: 500 }, false, 0);
+    let vacanze = fx.id(cmd);
     let unallocated = fx.unallocated;
     let transfer = |amount| Command::TransferFlow {
         amount,
@@ -148,12 +144,8 @@ fn flow_caps_are_enforced_and_income_capped_counts_transfers_in() {
     );
     assert_eq!(flow_balance(&fx.core, fx.vault, vacanze), 300);
 
-    let casa = fx.try_run(flow_cmd(
-        "Casa",
-        FlowMode::NetCapped { cap: 200 },
-        false,
-        250,
-    ));
+    let cmd = flow_cmd("Casa", FlowMode::NetCapped { cap: 200 }, false, 250);
+    let casa = fx.try_run(cmd);
     assert_eq!(
         casa.unwrap_err(),
         DomainError::MaxBalanceReached("Casa".to_string())
@@ -442,12 +434,8 @@ fn wallet_defaults_to_the_only_active_wallet() {
 fn wallets_and_flows_always_balance_and_replay_rebuilds_the_projection() {
     let mut fx = setup();
     let bank = fx.id(wallet_cmd("Bank", 5000));
-    let vacanze = fx.id(flow_cmd(
-        "Vacanze",
-        FlowMode::NetCapped { cap: 100_000 },
-        false,
-        1000,
-    ));
+    let cmd = flow_cmd("Vacanze", FlowMode::NetCapped { cap: 100_000 }, false, 1000);
+    let vacanze = fx.id(cmd);
     let e = entry(2000, Some(fx.wallet), None, Some("Stipendio"), T0 + 1);
     fx.run(Command::Income(e));
     let cmd = Command::Expense(entry(300, Some(bank), Some(vacanze), Some("Treno"), T0 + 2));
