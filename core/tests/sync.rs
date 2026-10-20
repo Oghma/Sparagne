@@ -1,28 +1,25 @@
 //! Client-side sync: outbox, push results, pull integration, rebase.
 //!
-//! Every test runs against a [`FakeServer`], a third in-memory [`Core`] that
-//! plays the part of the real server: apply a push in
-//! order with `execute`, hand out the log from a seq.
+//! The server is a second in-memory [`Core`] answering through `serve_push`
+//! and `serve_pull`. The real server has its own push loop, with author and
+//! membership checks, so the scenarios that go through it are in
+//! `server/tests`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod common;
 
-use common::{T0, all, at, entry, flow_cmd, wallet_cmd};
+use common::{
+    T0, all, at, entry, flow_cmd,
+    sync::{ALL, create_vault, exec, projection, pull, rename, spend, sync, vault_of},
+    wallet_cmd,
+};
 use sparagne_core::{
-    AliasView, CategoryView, Command, CommandEnvelope, Core, Currency, DomainError, Entry,
-    FlowMode, Frequency, RecurringView, Schedule, SyncReport, TransactionKind, TransactionPatch,
-    TransactionView, VaultSnapshot,
-    sync::{PullResponse, PushOutcome, PushRequest, PushResponse, PushResult, SyncRecord},
+    Command, CommandEnvelope, Core, DomainError, Entry, FlowMode, Frequency, Schedule, SyncReport,
+    TransactionKind, TransactionPatch,
+    sync::{PullResponse, PushOutcome, PushRequest, SyncRecord},
 };
 use uuid::Uuid;
-
-// ---------------------------------------------------------------------------
-// Harness
-// ---------------------------------------------------------------------------
-
-/// A push limit that is no limit: the whole outbox in one body.
-const ALL: usize = usize::MAX;
 
 /// The report of a sync round that changed nothing, carrying the server's
 /// last seq as every report now does.
@@ -33,124 +30,6 @@ fn quiet(server_last_seq: i64) -> SyncReport {
     }
 }
 
-/// The sync server, minus HTTP and permissions.
-struct FakeServer {
-    core: Core,
-}
-
-impl FakeServer {
-    fn new() -> Self {
-        Self {
-            core: Core::open_in_memory().unwrap(),
-        }
-    }
-
-    /// Applies a batch in order. A refusal does not stop the batch, and a
-    /// command already in the log answers with its original seq.
-    fn push(&mut self, vault: Uuid, request: PushRequest) -> PushResponse {
-        let results = request
-            .commands
-            .into_iter()
-            .map(|envelope| {
-                let command_id = envelope.id;
-                let outcome = match self.core.execute(envelope) {
-                    Ok(receipt) => PushOutcome::Applied {
-                        seq: receipt.seq,
-                        result_id: receipt.result_id,
-                    },
-                    Err(err) => PushOutcome::Rejected {
-                        code: err.code().to_string(),
-                        message: err.to_string(),
-                        detail: None,
-                    },
-                };
-                PushResult {
-                    command_id,
-                    outcome,
-                }
-            })
-            .collect();
-        PushResponse {
-            results,
-            last_seq: self.core.last_seq(vault).unwrap(),
-        }
-    }
-
-    /// A capped page, the way `GET /pull?limit=` answers.
-    fn pull_page(&self, vault: Uuid, since: i64, limit: usize) -> PullResponse {
-        self.core.serve_pull(vault, since, limit).unwrap()
-    }
-
-    fn pull(&self, vault: Uuid, since: i64) -> PullResponse {
-        PullResponse {
-            commands: self
-                .core
-                .commands_since(vault, since)
-                .unwrap()
-                .into_iter()
-                .map(|record| SyncRecord {
-                    envelope: record.envelope,
-                    seq: record.seq,
-                    result_id: record.result_id,
-                    created_at: record.created_at,
-                })
-                .collect(),
-            last_seq: self.core.last_seq(vault).unwrap(),
-        }
-    }
-}
-
-/// One round of what the app does: push, fold the response back, pull from the
-/// resulting watermark, fold that back.
-fn sync(client: &mut Core, server: &mut FakeServer, vault: Uuid) -> (SyncReport, SyncReport) {
-    let request = client.push_request(vault, ALL).unwrap();
-    let response = server.push(vault, request);
-    let pushed = client.apply_push_response(vault, &response).unwrap();
-    let since = client.sync_state(vault).unwrap().last_server_seq;
-    let pulled = client
-        .integrate_pull(vault, &server.pull(vault, since))
-        .unwrap();
-    (pushed, pulled)
-}
-
-/// Everything a user can see of a vault, in one comparable value.
-type Projection = (
-    VaultSnapshot,
-    Vec<TransactionView>,
-    Vec<CategoryView>,
-    Vec<AliasView>,
-    Vec<RecurringView>,
-);
-
-fn projection(core: &Core, vault: Uuid) -> Projection {
-    (
-        core.snapshot(vault).unwrap(),
-        core.list_transactions(vault, &all(), 200, None)
-            .unwrap()
-            .items,
-        core.categories(vault, true).unwrap(),
-        core.aliases(vault).unwrap(),
-        core.list_recurring(vault, true).unwrap(),
-    )
-}
-
-fn exec(core: &mut Core, vault: Uuid, author: &str, command: Command) -> Uuid {
-    core.execute(CommandEnvelope::new(vault, author, command))
-        .unwrap()
-        .result_id
-        .unwrap_or(vault)
-}
-
-fn spend(amount: i64, wallet: Uuid, flow: Uuid, category: &str, secs: i64) -> Command {
-    Command::Expense(entry(
-        amount,
-        Some(wallet),
-        Some(flow),
-        Some(category),
-        secs,
-    ))
-}
-
 fn unallocated(core: &Core, vault: Uuid) -> Uuid {
     core.snapshot(vault).unwrap().unallocated_flow_id
 }
@@ -158,7 +37,7 @@ fn unallocated(core: &Core, vault: Uuid) -> Uuid {
 /// A vault with a wallet holding 100.00 and a `Vacanze` envelope holding 50.00,
 /// created by `alice` and already pushed.
 struct Shared {
-    server: FakeServer,
+    server: Core,
     alice: Core,
     vault: Uuid,
     wallet: Uuid,
@@ -166,17 +45,8 @@ struct Shared {
 }
 
 fn shared() -> Shared {
-    let mut server = FakeServer::new();
-    let mut alice = Core::open_in_memory().unwrap();
-    let vault = alice
-        .execute(CommandEnvelope::create_vault(
-            "alice",
-            "Casa",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
+    let mut server = Core::open_in_memory().unwrap();
+    let (mut alice, vault) = vault_of("alice", "Casa");
     let wallet = exec(&mut alice, vault, "alice", wallet_cmd("Cash", 10_000));
     let vacanze = exec(
         &mut alice,
@@ -195,31 +65,27 @@ fn shared() -> Shared {
 }
 
 /// A second client that has joined the vault by pulling from zero.
-fn join(server: &FakeServer, vault: Uuid) -> Core {
+fn join(server: &Core, vault: Uuid) -> Core {
     let mut core = Core::open_in_memory().unwrap();
-    let report = core.integrate_pull(vault, &server.pull(vault, 0)).unwrap();
+    let report = core.integrate_pull(vault, &pull(server, vault, 0)).unwrap();
     assert!(report.rebased);
     assert!(report.received > 0);
     core
 }
 
-// ---------------------------------------------------------------------------
-// Outbox and push
-// ---------------------------------------------------------------------------
+/// `(id, name, owner)` of every vault, in the order `vaults()` lists them.
+fn listing(core: &Core) -> Vec<(Uuid, String, String)> {
+    core.vaults()
+        .unwrap()
+        .into_iter()
+        .map(|v| (v.id, v.name, v.owner))
+        .collect()
+}
 
 #[test]
 fn outbox_holds_the_unconfirmed_commands_in_local_order() {
-    let mut server = FakeServer::new();
-    let mut alice = Core::open_in_memory().unwrap();
-    let vault = alice
-        .execute(CommandEnvelope::create_vault(
-            "alice",
-            "Casa",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
+    let mut server = Core::open_in_memory().unwrap();
+    let (mut alice, vault) = vault_of("alice", "Casa");
     let wallet = exec(&mut alice, vault, "alice", wallet_cmd("Cash", 10_000));
     let unallocated = unallocated(&alice, vault);
     exec(
@@ -256,7 +122,7 @@ fn outbox_holds_the_unconfirmed_commands_in_local_order() {
     assert_eq!(state.rejected, 0);
 
     // Once confirmed the outbox drains and the watermark moves.
-    let response = server.push(vault, request);
+    let response = server.serve_push(vault, &request).unwrap();
     let report = alice.apply_push_response(vault, &response).unwrap();
     assert_eq!(report.confirmed, 3);
     assert!(!report.rebased);
@@ -268,26 +134,19 @@ fn outbox_holds_the_unconfirmed_commands_in_local_order() {
 
 #[test]
 fn a_pull_of_ones_own_commands_takes_the_fast_path() {
-    let mut server = FakeServer::new();
-    let mut alice = Core::open_in_memory().unwrap();
-    let vault = alice
-        .execute(CommandEnvelope::create_vault(
-            "alice",
-            "Casa",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
+    let mut server = Core::open_in_memory().unwrap();
+    let (mut alice, vault) = vault_of("alice", "Casa");
     exec(&mut alice, vault, "alice", wallet_cmd("Cash", 10_000));
 
     // The push goes through but its response never comes back, so the pull is
     // what confirms the commands.
     let request = alice.push_request(vault, ALL).unwrap();
-    let _lost = server.push(vault, request);
+    let _lost = server.serve_push(vault, &request).unwrap();
 
     let before = projection(&alice, vault);
-    let report = alice.integrate_pull(vault, &server.pull(vault, 0)).unwrap();
+    let report = alice
+        .integrate_pull(vault, &pull(&server, vault, 0))
+        .unwrap();
     assert_eq!(report.confirmed, 2);
     assert_eq!(report.received, 0);
     assert!(!report.rebased, "own commands must not force a rebase");
@@ -307,35 +166,6 @@ fn a_pull_of_ones_own_commands_takes_the_fast_path() {
 }
 
 #[test]
-fn pushing_twice_is_idempotent() {
-    let mut server = FakeServer::new();
-    let mut alice = Core::open_in_memory().unwrap();
-    let vault = alice
-        .execute(CommandEnvelope::create_vault(
-            "alice",
-            "Casa",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
-    exec(&mut alice, vault, "alice", wallet_cmd("Cash", 10_000));
-
-    let request = alice.push_request(vault, ALL).unwrap();
-    let first = server.push(vault, request.clone());
-    let second = server.push(vault, request);
-    assert_eq!(first, second, "a replayed push answers the same seqs");
-
-    let report = alice.apply_push_response(vault, &first).unwrap();
-    assert_eq!(report.confirmed, 2);
-    // The second response confirms nothing more and changes nothing.
-    let again = alice.apply_push_response(vault, &second).unwrap();
-    assert_eq!(again, quiet(2));
-    assert_eq!(alice.sync_state(vault).unwrap().last_server_seq, 2);
-    assert_eq!(server.core.last_seq(vault).unwrap(), 2);
-}
-
-#[test]
 fn integrate_pull_ignores_records_at_or_below_the_watermark() {
     let Shared {
         mut server,
@@ -347,23 +177,25 @@ fn integrate_pull_ignores_records_at_or_below_the_watermark() {
     assert_eq!(alice.sync_state(vault).unwrap().last_server_seq, 3);
 
     // A full pull from zero: every record is already known.
-    let report = alice.integrate_pull(vault, &server.pull(vault, 0)).unwrap();
+    let report = alice
+        .integrate_pull(vault, &pull(&server, vault, 0))
+        .unwrap();
     assert_eq!(report, quiet(3));
     assert_eq!(projection(&alice, vault), before);
 
     // And so is a pull from the watermark.
-    let report = alice.integrate_pull(vault, &server.pull(vault, 3)).unwrap();
+    let report = alice
+        .integrate_pull(vault, &pull(&server, vault, 3))
+        .unwrap();
     assert_eq!(report, quiet(3));
     assert_eq!(projection(&alice, vault), before);
 
     // Nothing reached the server either.
-    let _ = server.push(vault, PushRequest { commands: vec![] });
-    assert_eq!(server.core.last_seq(vault).unwrap(), 3);
+    server
+        .serve_push(vault, &PushRequest { commands: vec![] })
+        .unwrap();
+    assert_eq!(server.last_seq(vault).unwrap(), 3);
 }
-
-// ---------------------------------------------------------------------------
-// Two clients
-// ---------------------------------------------------------------------------
 
 #[test]
 fn two_clients_converge_on_the_server_projection() {
@@ -440,7 +272,7 @@ fn two_clients_converge_on_the_server_projection() {
         vault,
         "bob",
         Command::CreateRecurring {
-            transaction_kind: sparagne_core::TransactionKind::Expense,
+            transaction_kind: TransactionKind::Expense,
             amount: 49_00,
             wallet_id: Some(wallet),
             flow_id: None,
@@ -465,7 +297,7 @@ fn two_clients_converge_on_the_server_projection() {
     // Bob pushes first, so Alice's command lands after his on the server.
     let (bob_push, bob_pull) = sync(&mut bob, &mut server, vault);
     assert_eq!(bob_push.confirmed, 3);
-    assert_eq!(bob_pull, quiet(server.core.last_seq(vault).unwrap()));
+    assert_eq!(bob_pull, quiet(server.last_seq(vault).unwrap()));
 
     let (alice_push, alice_pull) = sync(&mut alice, &mut server, vault);
     assert_eq!(alice_push.confirmed, 1);
@@ -481,7 +313,9 @@ fn two_clients_converge_on_the_server_projection() {
     assert!(second.rebased);
     assert_eq!(second.received, 1);
 
-    let expected = projection(&server.core, vault);
+    // Entity ids derive from the command ids, so the views (ids included)
+    // are equal on every core.
+    let expected = projection(&server, vault);
     assert_eq!(projection(&alice, vault), expected);
     assert_eq!(projection(&bob, vault), expected);
 
@@ -508,141 +342,8 @@ fn two_clients_converge_on_the_server_projection() {
         let state = core.sync_state(vault).unwrap();
         assert_eq!(state.outbox, 0);
         assert_eq!(state.rejected, 0);
-        assert_eq!(state.last_server_seq, server.core.last_seq(vault).unwrap());
+        assert_eq!(state.last_server_seq, server.last_seq(vault).unwrap());
     }
-}
-
-#[test]
-fn entity_ids_are_the_same_on_every_core() {
-    let Shared {
-        mut server,
-        mut alice,
-        vault,
-        wallet,
-        vacanze,
-    } = shared();
-    let bob_core = join(&server, vault);
-    let mut bob = bob_core;
-    exec(
-        &mut bob,
-        vault,
-        "bob",
-        spend(5_00, wallet, vacanze, "hotel", T0 + 60),
-    );
-    exec(
-        &mut alice,
-        vault,
-        "alice",
-        spend(7_00, wallet, vacanze, "taxi", T0 + 120),
-    );
-    sync(&mut bob, &mut server, vault);
-    sync(&mut alice, &mut server, vault);
-    sync(&mut bob, &mut server, vault);
-
-    let ids = |core: &Core| {
-        let snapshot = core.snapshot(vault).unwrap();
-        let mut out: Vec<Uuid> = snapshot.wallets.iter().map(|w| w.id).collect();
-        out.extend(snapshot.flows.iter().map(|f| f.id));
-        out.extend(core.categories(vault, true).unwrap().iter().map(|c| c.id));
-        out.extend(
-            core.list_transactions(vault, &all(), 200, None)
-                .unwrap()
-                .items
-                .iter()
-                .map(|t| t.id),
-        );
-        out
-    };
-    let expected = ids(&server.core);
-    assert!(!expected.is_empty());
-    assert_eq!(ids(&alice), expected);
-    assert_eq!(ids(&bob), expected);
-}
-
-// ---------------------------------------------------------------------------
-// Rejections
-// ---------------------------------------------------------------------------
-
-#[test]
-fn a_server_rejection_leaves_the_projection_and_is_dismissable() {
-    let Shared {
-        mut server,
-        mut alice,
-        vault,
-        wallet,
-        vacanze,
-    } = shared();
-    let mut bob = join(&server, vault);
-
-    // Vacanze holds 50.00. Alice takes 45.00 first; Bob's 40.00 fits locally
-    // but not once Alice's spend is on the server.
-    exec(
-        &mut alice,
-        vault,
-        "alice",
-        spend(45_00, wallet, vacanze, "volo", T0 + 60),
-    );
-    sync(&mut alice, &mut server, vault);
-
-    let refused = exec(
-        &mut bob,
-        vault,
-        "bob",
-        spend(40_00, wallet, vacanze, "hotel", T0 + 120),
-    );
-    assert!(
-        bob.list_transactions(vault, &all(), 50, None)
-            .unwrap()
-            .items
-            .iter()
-            .any(|t| t.id == refused),
-        "the optimistic spend is in Bob's projection"
-    );
-
-    let request = bob.push_request(vault, ALL).unwrap();
-    let response = server.push(vault, request);
-    let report = bob.apply_push_response(vault, &response).unwrap();
-
-    assert_eq!(report.confirmed, 0);
-    assert!(report.rebased);
-    assert_eq!(report.rejected.len(), 1);
-    let rejection = &report.rejected[0];
-    assert_eq!(rejection.command_id, refused);
-    assert_eq!(rejection.kind, "expense");
-    assert_eq!(rejection.code, "insufficient_funds");
-    assert!(rejection.message.contains("Vacanze"));
-
-    assert!(
-        !bob.list_transactions(vault, &all(), 50, None)
-            .unwrap()
-            .items
-            .iter()
-            .any(|t| t.id == refused),
-        "the rebuild dropped it"
-    );
-    assert_eq!(bob.sync_state(vault).unwrap().outbox, 0);
-    assert_eq!(bob.sync_state(vault).unwrap().rejected, 1);
-    assert_eq!(bob.rejected_commands(vault).unwrap(), report.rejected);
-    // A rejected row is out of the log the server would ever see.
-    assert!(
-        bob.commands_since(vault, 0)
-            .unwrap()
-            .iter()
-            .all(|r| r.envelope.id != refused)
-    );
-
-    // Bob catches up and matches the server.
-    let (_, pulled) = sync(&mut bob, &mut server, vault);
-    assert_eq!(pulled.received, 1);
-    assert_eq!(projection(&bob, vault), projection(&server.core, vault));
-    // The rejection outlives the rebase until it is dismissed.
-    assert_eq!(bob.rejected_commands(vault).unwrap().len(), 1);
-
-    bob.dismiss_rejected(vault, refused).unwrap();
-    assert!(bob.rejected_commands(vault).unwrap().is_empty());
-    assert_eq!(bob.sync_state(vault).unwrap().rejected, 0);
-    // Dismissing twice is quiet.
-    bob.dismiss_rejected(vault, refused).unwrap();
 }
 
 #[test]
@@ -675,19 +376,37 @@ fn an_outbox_command_that_no_longer_applies_is_rejected_by_the_rebase() {
     // Bob pulls before pushing, so the rebase is what refuses the command.
     let since = bob.sync_state(vault).unwrap().last_server_seq;
     let report = bob
-        .integrate_pull(vault, &server.pull(vault, since))
+        .integrate_pull(vault, &pull(&server, vault, since))
         .unwrap();
 
     assert!(report.rebased);
     assert_eq!(report.received, 1);
     assert_eq!(report.confirmed, 0);
     assert_eq!(report.rejected.len(), 1);
-    assert_eq!(report.rejected[0].command_id, doomed);
-    assert_eq!(report.rejected[0].code, "insufficient_funds");
+    let rejection = &report.rejected[0];
+    assert_eq!(rejection.command_id, doomed);
+    assert_eq!(rejection.kind, "expense");
+    assert_eq!(rejection.code, "insufficient_funds");
+    assert!(rejection.message.contains("Vacanze"));
 
     assert_eq!(bob.sync_state(vault).unwrap().outbox, 0);
     assert!(bob.push_request(vault, ALL).unwrap().commands.is_empty());
-    assert_eq!(projection(&bob, vault), projection(&server.core, vault));
+    assert_eq!(projection(&bob, vault), projection(&server, vault));
+    // A rejected row is out of the log the server would ever see, and waits
+    // for the UI until it is dismissed.
+    assert!(
+        bob.commands_since(vault, 0)
+            .unwrap()
+            .iter()
+            .all(|r| r.envelope.id != doomed)
+    );
+    assert_eq!(bob.sync_state(vault).unwrap().rejected, 1);
+    assert_eq!(bob.rejected_commands(vault).unwrap(), report.rejected);
+    bob.dismiss_rejected(vault, doomed).unwrap();
+    assert!(bob.rejected_commands(vault).unwrap().is_empty());
+    assert_eq!(bob.sync_state(vault).unwrap().rejected, 0);
+    // Dismissing twice is quiet.
+    bob.dismiss_rejected(vault, doomed).unwrap();
 }
 
 #[test]
@@ -738,7 +457,7 @@ fn a_confirmed_command_that_cannot_be_replayed_is_a_divergence() {
     assert_eq!(projection(&alice, vault), before);
     assert_eq!(alice.commands_since(vault, 0).unwrap(), log_before);
     assert_eq!(alice.sync_state(vault).unwrap().last_server_seq, 3);
-    assert_eq!(server.core.last_seq(vault).unwrap(), 3);
+    assert_eq!(server.last_seq(vault).unwrap(), 3);
 }
 
 #[test]
@@ -750,8 +469,7 @@ fn a_pull_for_another_vault_is_refused() {
         ..
     } = shared();
     let response = PullResponse {
-        commands: server
-            .pull(vault, 0)
+        commands: pull(&server, vault, 0)
             .commands
             .into_iter()
             .map(|mut record| {
@@ -766,24 +484,11 @@ fn a_pull_for_another_vault_is_refused() {
     assert_eq!(err.code(), "invalid_command");
 }
 
-// ---------------------------------------------------------------------------
-// Login
-// ---------------------------------------------------------------------------
-
 #[test]
 fn relabel_outbox_rewrites_the_author_of_what_is_not_yet_pushed() {
-    let mut server = FakeServer::new();
-    let mut core = Core::open_in_memory().unwrap();
+    let mut server = Core::open_in_memory().unwrap();
     // The app starts logged out: commands carry a local placeholder author.
-    let vault = core
-        .execute(CommandEnvelope::create_vault(
-            "local",
-            "Casa",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
+    let (mut core, vault) = vault_of("local", "Casa");
     let wallet = exec(&mut core, vault, "local", wallet_cmd("Cash", 10_000));
     let unallocated = unallocated(&core, vault);
     exec(
@@ -821,7 +526,7 @@ fn relabel_outbox_rewrites_the_author_of_what_is_not_yet_pushed() {
 
     // The relabelled log is what the server gets, and both agree.
     sync(&mut core, &mut server, vault);
-    assert_eq!(projection(&core, vault), projection(&server.core, vault));
+    assert_eq!(projection(&core, vault), projection(&server, vault));
 
     // Confirmed commands are not touched by a later relabel.
     core.relabel_outbox(vault, "bruno").unwrap();
@@ -836,17 +541,8 @@ fn relabel_outbox_rewrites_the_author_of_what_is_not_yet_pushed() {
 
 #[test]
 fn relabelling_renames_the_people_the_outbox_named_by_the_local_name() {
-    let mut server = FakeServer::new();
-    let mut core = Core::open_in_memory().unwrap();
-    let vault = core
-        .execute(CommandEnvelope::create_vault(
-            "local",
-            "Casa",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
+    let mut server = Core::open_in_memory().unwrap();
+    let (mut core, vault) = vault_of("local", "Casa");
     let wallet = exec(&mut core, vault, "local", wallet_cmd("Cash", 10_000));
     let flow = unallocated(&core, vault);
     let for_whom = |person: &str, amount: i64| {
@@ -932,38 +628,25 @@ fn relabelling_renames_the_people_the_outbox_named_by_the_local_name() {
     // The server takes the relabelled log and both sides agree.
     sync(&mut core, &mut server, vault);
     assert_eq!(core.sync_state(vault).unwrap().rejected, 0);
-    assert_eq!(projection(&core, vault), projection(&server.core, vault));
+    assert_eq!(projection(&core, vault), projection(&server, vault));
 }
-
-// ---------------------------------------------------------------------------
-// JSON entry points
-// ---------------------------------------------------------------------------
 
 #[test]
 fn the_json_entry_points_round_trip_through_the_wire_types() {
-    let mut server = FakeServer::new();
-    let mut alice = Core::open_in_memory().unwrap();
-    let vault = alice
-        .execute(CommandEnvelope::create_vault(
-            "alice",
-            "Casa",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
+    let mut server = Core::open_in_memory().unwrap();
+    let (mut alice, vault) = vault_of("alice", "Casa");
     exec(&mut alice, vault, "alice", wallet_cmd("Cash", 10_000));
 
     let body = alice.push_request_json(vault, ALL).unwrap();
     let request: PushRequest = serde_json::from_str(&body).unwrap();
     assert_eq!(request.commands.len(), 2);
 
-    let response = serde_json::to_string(&server.push(vault, request)).unwrap();
+    let response = serde_json::to_string(&server.serve_push(vault, &request).unwrap()).unwrap();
     let report = alice.apply_push_response_json(vault, &response).unwrap();
     assert_eq!(report.confirmed, 2);
 
-    let pull = serde_json::to_string(&server.pull(vault, 0)).unwrap();
-    assert_eq!(alice.integrate_pull_json(vault, &pull).unwrap(), quiet(2));
+    let pulled = serde_json::to_string(&pull(&server, vault, 0)).unwrap();
+    assert_eq!(alice.integrate_pull_json(vault, &pulled).unwrap(), quiet(2));
 
     for bad in ["", "{", "{\"nope\":1}"] {
         assert_eq!(
@@ -990,26 +673,13 @@ fn an_unknown_vault_reports_an_empty_sync_state() {
     assert_eq!(core.last_seq(Uuid::now_v7()).unwrap(), 0);
 }
 
-// ---------------------------------------------------------------------------
-// Batches and server-side reads
-// ---------------------------------------------------------------------------
-
 #[test]
 fn a_long_outbox_goes_up_in_batches_and_converges() {
     const BATCH: usize = 500;
     const TOTAL: i64 = 1_200;
 
-    let mut server = FakeServer::new();
-    let mut alice = Core::open_in_memory().unwrap();
-    let vault = alice
-        .execute(CommandEnvelope::create_vault(
-            "alice",
-            "Casa",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
+    let mut server = Core::open_in_memory().unwrap();
+    let (mut alice, vault) = vault_of("alice", "Casa");
     let wallet = exec(&mut alice, vault, "alice", wallet_cmd("Cash", 1_000_000));
     let unallocated = unallocated(&alice, vault);
     // Two commands are already in: fill the outbox up to TOTAL.
@@ -1034,14 +704,14 @@ fn a_long_outbox_goes_up_in_batches_and_converges() {
         assert!(rounds <= 10, "the push loop must converge");
         let request = alice.push_request(vault, BATCH).unwrap();
         assert!(request.commands.len() <= BATCH);
-        let response = server.core.serve_push(vault, &request).unwrap();
+        let response = server.serve_push(vault, &request).unwrap();
         alice.apply_push_response(vault, &response).unwrap();
     }
 
     assert_eq!(rounds, 3, "1200 commands in batches of 500");
-    assert_eq!(server.core.last_seq(vault).unwrap(), TOTAL);
+    assert_eq!(server.last_seq(vault).unwrap(), TOTAL);
     assert_eq!(alice.sync_state(vault).unwrap().last_server_seq, TOTAL);
-    assert_eq!(projection(&alice, vault), projection(&server.core, vault));
+    assert_eq!(projection(&alice, vault), projection(&server, vault));
 }
 
 #[test]
@@ -1052,17 +722,17 @@ fn a_report_carries_the_servers_last_seq_and_whether_more_is_waiting() {
     // One record per page: the first two leave something behind.
     for since in 0..2 {
         let report = bob
-            .integrate_pull(vault, &server.pull_page(vault, since, 1))
+            .integrate_pull(vault, &server.serve_pull(vault, since, 1).unwrap())
             .unwrap();
         assert_eq!(report.server_last_seq, 3);
         assert!(report.has_more, "page from {since} is not the last");
     }
     let last = bob
-        .integrate_pull(vault, &server.pull_page(vault, 2, 1))
+        .integrate_pull(vault, &server.serve_pull(vault, 2, 1).unwrap())
         .unwrap();
     assert_eq!(last.server_last_seq, 3);
     assert!(!last.has_more);
-    assert_eq!(projection(&bob, vault), projection(&server.core, vault));
+    assert_eq!(projection(&bob, vault), projection(&server, vault));
 }
 
 #[test]
@@ -1070,31 +740,18 @@ fn the_server_reads_one_vault_and_every_last_seq_at_once() {
     let Shared {
         mut server, vault, ..
     } = shared();
-    let casa = server.core.vault(vault).unwrap().expect("Casa");
+    let casa = server.vault(vault).unwrap().expect("Casa");
     assert_eq!(casa.id, vault);
     assert_eq!(casa.name, "Casa");
     assert_eq!(casa.owner, "alice");
-    assert_eq!(server.core.vault(Uuid::now_v7()).unwrap(), None);
+    assert_eq!(server.vault(Uuid::now_v7()).unwrap(), None);
 
     // A second vault, with a log of its own.
-    let other = server
-        .core
-        .execute(CommandEnvelope::create_vault(
-            "bob",
-            "Ufficio",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
-    let mut seqs = server.core.last_seqs().unwrap();
+    let other = create_vault(&mut server, "bob", "Ufficio");
+    let mut seqs = server.last_seqs().unwrap();
     seqs.sort_by_key(|(_, seq)| *seq);
     assert_eq!(seqs, vec![(other, 1), (vault, 3)]);
 }
-
-// ---------------------------------------------------------------------------
-// Vault deletion and renaming across members
-// ---------------------------------------------------------------------------
 
 #[test]
 fn a_deleted_vault_still_pushes_and_the_server_forgets_it() {
@@ -1120,16 +777,18 @@ fn a_deleted_vault_still_pushes_and_the_server_forgets_it() {
     assert_eq!(alice.sync_state(vault).unwrap().last_server_seq, 4);
 
     // The server applied the same command with the same outcome.
-    assert_eq!(server.core.vault(vault).unwrap(), None);
-    assert_eq!(server.core.last_seq(vault).unwrap(), 4);
-    assert_eq!(server.core.deleted_vaults().unwrap(), vec![vault]);
+    assert_eq!(server.vault(vault).unwrap(), None);
+    assert_eq!(server.last_seq(vault).unwrap(), 4);
+    assert_eq!(server.deleted_vaults().unwrap(), vec![vault]);
     // And refuses whatever comes after.
-    let late = server.push(
-        vault,
-        PushRequest {
-            commands: vec![CommandEnvelope::new(vault, "alice", wallet_cmd("Late", 0))],
-        },
-    );
+    let late = server
+        .serve_push(
+            vault,
+            &PushRequest {
+                commands: vec![CommandEnvelope::new(vault, "alice", wallet_cmd("Late", 0))],
+            },
+        )
+        .unwrap();
     assert!(matches!(
         &late.results[0].outcome,
         PushOutcome::Rejected { code, .. } if code == "not_found"
@@ -1137,129 +796,11 @@ fn a_deleted_vault_still_pushes_and_the_server_forgets_it() {
 }
 
 #[test]
-fn the_owners_deletion_reaches_a_member_through_the_pull() {
-    let Shared {
-        mut server,
-        mut alice,
-        vault,
-        wallet,
-        vacanze,
-    } = shared();
-    let mut bob = join(&server, vault);
-
-    // bob writes while alice deletes: his expense is a legitimate command
-    // against the vault as he knows it.
-    let doomed = exec(
-        &mut bob,
-        vault,
-        "bob",
-        spend(1_000, wallet, vacanze, "gelato", T0 + 60),
-    );
-    exec(&mut alice, vault, "alice", Command::DeleteVault);
-    sync(&mut alice, &mut server, vault);
-
-    let (pushed, pulled) = sync(&mut bob, &mut server, vault);
-    // The push meets a vault that no longer exists...
-    assert_eq!(pushed.rejected.len(), 1);
-    assert_eq!(pushed.rejected[0].command_id, doomed);
-    assert_eq!(pushed.rejected[0].code, "not_found");
-    assert!(pushed.rebased);
-    // ...and the pull brings the reason: the projection is rebuilt without
-    // the vault, exactly as on the server.
-    assert_eq!(pulled.received, 1);
-    assert!(pulled.rebased);
-    assert_eq!(bob.vault(vault).unwrap(), None);
-    assert!(bob.vaults().unwrap().is_empty());
-    assert_eq!(bob.deleted_vaults().unwrap(), vec![vault]);
-    let state = bob.sync_state(vault).unwrap();
-    assert_eq!(state.outbox, 0);
-    assert_eq!(state.last_server_seq, 4);
-    // The refused expense is still there for bob to read, even without a
-    // vault to show it under.
-    assert_eq!(state.rejected, 1);
-    let rejected = bob.rejected_commands(vault).unwrap();
-    assert_eq!(rejected.len(), 1);
-    assert_eq!(rejected[0].command_id, doomed);
-    assert_eq!(rejected[0].code, "not_found");
-    bob.dismiss_rejected(vault, doomed).unwrap();
-    assert_eq!(bob.sync_state(vault).unwrap().rejected, 0);
-}
-
-#[test]
-fn a_rename_reaches_the_members_even_to_a_name_the_owner_already_uses() {
-    let Shared {
-        mut server,
-        mut alice,
-        vault,
-        ..
-    } = shared();
-    let mut bob = join(&server, vault);
-
-    exec(
-        &mut alice,
-        vault,
-        "alice",
-        Command::RenameVault {
-            name: "Casa nuova".to_string(),
-        },
-    );
-    sync(&mut alice, &mut server, vault);
-    sync(&mut bob, &mut server, vault);
-    assert_eq!(bob.vault(vault).unwrap().unwrap().name, "Casa nuova");
-    assert_eq!(
-        server.core.vault(vault).unwrap().unwrap().name,
-        "Casa nuova"
-    );
-
-    // alice owns a second vault the server knows and bob does not. bob's
-    // rename to that name is no clash: a name is a label, so the server
-    // takes it exactly as bob's machine did.
-    let ufficio = server
-        .core
-        .execute(CommandEnvelope::create_vault(
-            "alice",
-            "Ufficio",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
-    assert_ne!(ufficio, vault);
-    exec(
-        &mut bob,
-        vault,
-        "bob",
-        Command::RenameVault {
-            name: "ufficio".to_string(),
-        },
-    );
-    let (pushed, _) = sync(&mut bob, &mut server, vault);
-    assert!(pushed.rejected.is_empty());
-    assert_eq!(pushed.confirmed, 1);
-    assert_eq!(bob.vault(vault).unwrap().unwrap().name, "ufficio");
-    assert_eq!(server.core.vault(vault).unwrap().unwrap().name, "ufficio");
-    assert_eq!(server.core.vault(ufficio).unwrap().unwrap().name, "Ufficio");
-    assert_eq!(projection(&bob, vault), projection(&server.core, vault));
-
-    sync(&mut alice, &mut server, vault);
-    assert_eq!(projection(&alice, vault), projection(&server.core, vault));
-}
-
-#[test]
 fn relabelling_covers_a_deleted_vault_too() {
     // Offline, "oghma" creates a vault and deletes it; then logs in as alice.
     // The dead log must be re-signed like a live one, or the push would be
     // refused with `author_mismatch` for ever.
-    let mut core = Core::open_in_memory().unwrap();
-    let vault = core
-        .execute(CommandEnvelope::create_vault(
-            "oghma",
-            "Vecchio",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
+    let (mut core, vault) = vault_of("oghma", "Vecchio");
     exec(&mut core, vault, "oghma", wallet_cmd("Cash", 1_000));
     exec(&mut core, vault, "oghma", Command::DeleteVault);
     assert!(core.vaults().unwrap().is_empty());
@@ -1279,117 +820,16 @@ fn relabelling_covers_a_deleted_vault_too() {
     assert_eq!(core.deleted_vaults().unwrap(), vec![vault]);
     assert_eq!(core.sync_state(vault).unwrap().rejected, 0);
 
-    let mut server = FakeServer::new();
+    let mut server = Core::open_in_memory().unwrap();
     let (pushed, _) = sync(&mut core, &mut server, vault);
     assert_eq!(pushed.confirmed, 3);
-    assert_eq!(server.core.vault(vault).unwrap(), None);
+    assert_eq!(server.vault(vault).unwrap(), None);
 }
 
-// ---------------------------------------------------------------------------
-// Vault names are labels
-// ---------------------------------------------------------------------------
-//
 // A rebuild replays a vault's whole log, its `CreateVault` included, next to
 // whatever other vaults the device holds by then. While names had to be unique
 // per owner, a name another vault had taken in the meantime made that replay
 // fail for ever.
-
-fn create_vault(core: &mut Core, author: &str, name: &str) -> Uuid {
-    core.execute(CommandEnvelope::create_vault(author, name, Currency::Eur))
-        .unwrap()
-        .result_id
-        .unwrap()
-}
-
-fn rename(core: &mut Core, vault: Uuid, author: &str, name: &str) {
-    exec(
-        core,
-        vault,
-        author,
-        Command::RenameVault {
-            name: name.to_string(),
-        },
-    );
-}
-
-/// `(id, name, owner)` of every vault, in the order `vaults()` lists them.
-fn listing(core: &Core) -> Vec<(Uuid, String, String)> {
-    core.vaults()
-        .unwrap()
-        .into_iter()
-        .map(|v| (v.id, v.name, v.owner))
-        .collect()
-}
-
-#[test]
-fn a_renamed_vault_and_a_new_one_with_its_old_name_both_keep_syncing() {
-    let Shared {
-        mut server,
-        mut alice,
-        vault,
-        wallet,
-        vacanze,
-    } = shared();
-    let mut bob = join(&server, vault);
-
-    rename(&mut alice, vault, "alice", "Casa 2025");
-    sync(&mut alice, &mut server, vault);
-    let casa = create_vault(&mut alice, "alice", "Casa");
-    sync(&mut alice, &mut server, casa);
-
-    exec(
-        &mut bob,
-        vault,
-        "bob",
-        spend(1_000, wallet, vacanze, "gelato", T0 + 60),
-    );
-    sync(&mut bob, &mut server, vault);
-
-    // alice has nothing to push, so bob's expense takes the rebuild path,
-    // which replays the old vault's `CreateVault "Casa"` next to the new one.
-    assert_eq!(alice.sync_state(vault).unwrap().outbox, 0);
-    let (_, pulled) = sync(&mut alice, &mut server, vault);
-    assert!(pulled.rebased);
-    assert_eq!(pulled.received, 1);
-    assert!(pulled.rejected.is_empty());
-
-    let expected = projection(&server.core, vault);
-    assert_eq!(projection(&alice, vault), expected);
-    assert_eq!(projection(&bob, vault), expected);
-    assert_eq!(projection(&alice, casa), projection(&server.core, casa));
-    assert_eq!(
-        listing(&alice),
-        vec![
-            (casa, "Casa".to_string(), "alice".to_string()),
-            (vault, "Casa 2025".to_string(), "alice".to_string()),
-        ]
-    );
-}
-
-#[test]
-fn a_fresh_device_joins_a_vault_whose_old_name_is_reused() {
-    let Shared {
-        mut server,
-        mut alice,
-        vault,
-        ..
-    } = shared();
-    rename(&mut alice, vault, "alice", "Casa 2025");
-    sync(&mut alice, &mut server, vault);
-    let casa = create_vault(&mut alice, "alice", "Casa");
-    sync(&mut alice, &mut server, casa);
-
-    // alice's new device joins in listing order, so the new Casa is already
-    // there when the old vault's log starts over from its `CreateVault`.
-    let mut device = Core::open_in_memory().unwrap();
-    for id in [casa, vault] {
-        let report = device.integrate_pull(id, &server.pull(id, 0)).unwrap();
-        assert!(report.rebased);
-        assert!(report.rejected.is_empty());
-        assert_eq!(projection(&device, id), projection(&server.core, id));
-    }
-    assert_eq!(listing(&device), listing(&alice));
-}
 
 #[test]
 fn two_vaults_swap_names_and_a_member_follows() {
@@ -1402,11 +842,11 @@ fn two_vaults_swap_names_and_a_member_follows() {
     let mare = create_vault(&mut alice, "alice", "Mare");
     sync(&mut alice, &mut server, mare);
     let mut bob = join(&server, casa);
-    bob.integrate_pull(mare, &server.pull(mare, 0)).unwrap();
+    bob.integrate_pull(mare, &pull(&server, mare, 0)).unwrap();
 
-    rename(&mut alice, casa, "alice", "tmp");
-    rename(&mut alice, mare, "alice", "Casa");
-    rename(&mut alice, casa, "alice", "Mare");
+    exec(&mut alice, casa, "alice", rename("tmp"));
+    exec(&mut alice, mare, "alice", rename("Casa"));
+    exec(&mut alice, casa, "alice", rename("Mare"));
     sync(&mut alice, &mut server, casa);
     sync(&mut alice, &mut server, mare);
 
@@ -1415,7 +855,7 @@ fn two_vaults_swap_names_and_a_member_follows() {
     for id in [mare, casa] {
         let (_, pulled) = sync(&mut bob, &mut server, id);
         assert!(pulled.rejected.is_empty());
-        assert_eq!(projection(&bob, id), projection(&server.core, id));
+        assert_eq!(projection(&bob, id), projection(&server, id));
     }
     let swapped = vec![
         (mare, "Casa".to_string(), "alice".to_string()),
@@ -1429,10 +869,9 @@ fn two_vaults_swap_names_and_a_member_follows() {
 fn relabel_keeps_a_renamed_never_pushed_vault() {
     // Logged out, the app creates Casa, renames it Mare, then creates a new
     // Casa; none of it has reached a server.
-    let mut core = Core::open_in_memory().unwrap();
-    let old = create_vault(&mut core, "local", "Casa");
+    let (mut core, old) = vault_of("local", "Casa");
     exec(&mut core, old, "local", wallet_cmd("Cash", 1_000));
-    rename(&mut core, old, "local", "Mare");
+    exec(&mut core, old, "local", rename("Mare"));
     let new = create_vault(&mut core, "local", "Casa");
 
     // At login every vault is relabelled in listing order: the new Casa
@@ -1462,10 +901,10 @@ fn relabel_keeps_a_renamed_never_pushed_vault() {
     assert_eq!(core.snapshot(old).unwrap().wallets.len(), 1);
 
     // And the server takes both logs, in the same order.
-    let mut server = FakeServer::new();
+    let mut server = Core::open_in_memory().unwrap();
     for id in [new, old] {
         let (pushed, _) = sync(&mut core, &mut server, id);
         assert!(pushed.rejected.is_empty());
-        assert_eq!(projection(&core, id), projection(&server.core, id));
+        assert_eq!(projection(&core, id), projection(&server, id));
     }
 }

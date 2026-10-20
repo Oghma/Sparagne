@@ -5,55 +5,19 @@
 
 mod common;
 
-use common::{T0, all, entry, flow_cmd, list, setup, wallet_cmd};
+use common::{
+    T0, all, entry, flow_cmd, list, setup,
+    sync::{ALL, category, create_vault, exec, projection, pull, spend, sync, vault_of},
+    wallet_cmd,
+};
 use sparagne_core::{
-    Command, CommandEnvelope, Core, Currency, DomainError, FlowMode, SyncReport, sync::PushOutcome,
+    Command, CommandEnvelope, Core, Currency, DomainError, FlowMode, sync::PushOutcome,
 };
 use uuid::Uuid;
-
-// ---------------------------------------------------------------------------
-// Harness
-// ---------------------------------------------------------------------------
-
-/// A push or pull limit that is no limit.
-const ALL: usize = usize::MAX;
-
-fn category(name: &str) -> Command {
-    Command::CreateCategory {
-        name: name.to_string(),
-    }
-}
-
-fn spend(amount: i64, wallet: Uuid, flow: Uuid, category: &str, secs: i64) -> Command {
-    Command::Expense(entry(
-        amount,
-        Some(wallet),
-        Some(flow),
-        Some(category),
-        secs,
-    ))
-}
 
 fn env(vault: Uuid, author: &str, command: Command) -> CommandEnvelope {
     CommandEnvelope::new(vault, author, command)
 }
-
-/// One round against a server core: push the whole outbox, fold the answer
-/// back, pull from the watermark, fold that back.
-fn sync(client: &mut Core, server: &mut Core, vault: Uuid) -> (SyncReport, SyncReport) {
-    let request = client.push_request(vault, ALL).unwrap();
-    let response = server.serve_push(vault, &request).unwrap();
-    let pushed = client.apply_push_response(vault, &response).unwrap();
-    let since = client.sync_state(vault).unwrap().last_server_seq;
-    let pulled = client
-        .integrate_pull(vault, &server.serve_pull(vault, since, ALL).unwrap())
-        .unwrap();
-    (pushed, pulled)
-}
-
-// ---------------------------------------------------------------------------
-// Local atomicity
-// ---------------------------------------------------------------------------
 
 #[test]
 fn an_empty_batch_writes_nothing() {
@@ -180,16 +144,7 @@ fn a_known_command_id_is_deduplicated_inside_a_batch() {
 #[test]
 fn a_batch_across_vaults_is_refused() {
     let mut fx = setup();
-    let other = fx
-        .core
-        .execute(CommandEnvelope::create_vault(
-            "alice",
-            "Other",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
+    let other = create_vault(&mut fx.core, "alice", "Other");
     let before = fx.core.last_seq(fx.vault).unwrap();
 
     let err = fx
@@ -224,50 +179,29 @@ fn a_batch_can_create_its_own_vault() {
     assert_eq!(core.snapshot(vault).unwrap().wallets[0].balance, 10_00);
 }
 
-// ---------------------------------------------------------------------------
-// Sync: the batch goes up command by command
-// ---------------------------------------------------------------------------
-
 #[test]
 fn batch_commands_are_pushed_and_rejected_one_by_one() {
     // Alice and Bob share a vault whose Vacanze envelope holds 50.00.
     let mut server = Core::open_in_memory().unwrap();
-    let mut alice = Core::open_in_memory().unwrap();
-    let vault = alice
-        .execute(CommandEnvelope::create_vault(
-            "alice",
-            "Casa",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
-    let wallet = alice
-        .execute(env(vault, "alice", wallet_cmd("Cash", 10_000)))
-        .unwrap()
-        .result_id
-        .unwrap();
-    let vacanze = alice
-        .execute(env(
-            vault,
-            "alice",
-            flow_cmd("Vacanze", FlowMode::Unlimited, false, 50_00),
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
+    let (mut alice, vault) = vault_of("alice", "Casa");
+    let wallet = exec(&mut alice, vault, "alice", wallet_cmd("Cash", 10_000));
+    let vacanze = exec(
+        &mut alice,
+        vault,
+        "alice",
+        flow_cmd("Vacanze", FlowMode::Unlimited, false, 50_00),
+    );
     sync(&mut alice, &mut server, vault);
     let mut bob = Core::open_in_memory().unwrap();
-    bob.integrate_pull(vault, &server.serve_pull(vault, 0, ALL).unwrap())
-        .unwrap();
+    bob.integrate_pull(vault, &pull(&server, vault, 0)).unwrap();
 
     // Bob spends 30.00 and pushes first.
-    bob.execute(env(
+    exec(
+        &mut bob,
         vault,
         "bob",
         spend(30_00, wallet, vacanze, "hotel", T0 + 60),
-    ))
-    .unwrap();
+    );
     sync(&mut bob, &mut server, vault);
 
     // Alice, still offline, files two spends in one batch: 40.00 fits her
@@ -313,18 +247,10 @@ fn batch_commands_are_pushed_and_rejected_one_by_one() {
     // Once Bob's spend is pulled, Alice matches the server.
     let since = alice.sync_state(vault).unwrap().last_server_seq;
     alice
-        .integrate_pull(vault, &server.serve_pull(vault, since, ALL).unwrap())
+        .integrate_pull(vault, &pull(&server, vault, since))
         .unwrap();
-    let ids = |core: &Core| {
-        let mut ids: Vec<Uuid> = list(core, vault, &all()).iter().map(|t| t.id).collect();
-        ids.sort();
-        ids
-    };
-    assert_eq!(ids(&alice), ids(&server));
-    assert!(ids(&alice).contains(&fits_id));
-    assert!(!ids(&alice).contains(&too_much_id));
-    assert_eq!(
-        alice.snapshot(vault).unwrap(),
-        server.snapshot(vault).unwrap()
-    );
+    assert_eq!(projection(&alice, vault), projection(&server, vault));
+    let ids: Vec<Uuid> = list(&alice, vault, &all()).iter().map(|t| t.id).collect();
+    assert!(ids.contains(&fits_id));
+    assert!(!ids.contains(&too_much_id));
 }

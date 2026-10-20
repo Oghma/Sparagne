@@ -9,6 +9,7 @@ use sparagne_core::{
     TransactionView,
 };
 use uuid::Uuid;
+pub mod sync;
 
 pub const T0: i64 = 1_700_000_000;
 
