@@ -83,7 +83,6 @@ pub struct Entry {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, uniffi::Enum)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Command {
-    // -- Vault --------------------------------------------------------------
     /// The vault id is the command id.
     CreateVault {
         name: String,
@@ -102,7 +101,6 @@ pub enum Command {
     /// command on the vault is refused with `not_found`.
     DeleteVault,
 
-    // -- Wallet -------------------------------------------------------------
     /// Non-zero `opening_balance` creates an opening transaction on
     /// Unallocated with the system category `opening`.
     CreateWallet {
@@ -122,7 +120,6 @@ pub enum Command {
         wallet_id: Uuid,
     },
 
-    // -- Flow ---------------------------------------------------------------
     /// Positive `opening_allocation` moves money from Unallocated into the new
     /// flow, subject to its cap.
     CreateFlow {
@@ -150,7 +147,6 @@ pub enum Command {
         flow_id: Uuid,
     },
 
-    // -- Category -----------------------------------------------------------
     CreateCategory {
         name: String,
     },
@@ -190,7 +186,6 @@ pub enum Command {
         target_id: Uuid,
     },
 
-    // -- Transaction --------------------------------------------------------
     Income(Entry),
     Expense(Entry),
     Refund(Entry),
@@ -220,7 +215,6 @@ pub enum Command {
         transaction_id: Uuid,
     },
 
-    // -- Recurring ----------------------------------------------------------
     /// A template that the user materializes period by period. Only
     /// `Income` and `Expense` kinds. The template id is the command id.
     CreateRecurring {
@@ -275,7 +269,6 @@ pub enum Command {
         period_date: NaiveDate,
     },
 
-    // -- Allocation ---------------------------------------------------------
     /// The vault's allocation plan: `lines`, in priority order, shared out of
     /// Unallocated once per period of `schedule`. A vault holds at most one
     /// plan; its id is the command id. `lines` is not empty, names each

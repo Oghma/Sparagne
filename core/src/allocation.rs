@@ -1,16 +1,13 @@
 //! Allocation plan: how the money that reaches Unallocated is shared out among
-//! the envelopes, one schedule period at a time.
-//!
-//! A plan is an ordered list of lines, envelope → rule, and the order is the
-//! priority: when the total runs short, the last lines get less or nothing.
-//! Nothing is ever moved automatically. The app asks
-//! `Core::pending_allocation` for the period waiting for a decision, shows
-//! [`resolve`]'s answer (through `Core::preview_allocation`) on the total of
-//! `Core::allocation_base`, and the user either sends `ExecuteAllocation` with
-//! the amounts resolved or skips the period.
-//!
-//! The command carries amounts, never rules: replaying the log gives the same
-//! transfers whatever the plan says by then.
+//! the envelopes, one schedule period at a time. A plan is an ordered list of
+//! lines, envelope → rule, and the order is the priority: when the total runs
+//! short, the last lines get less or nothing. Nothing is ever moved
+//! automatically: the app asks `Core::pending_allocation` for the period
+//! waiting for a decision, shows [`resolve`]'s answer (through
+//! `Core::preview_allocation`) on the total of `Core::allocation_base`, and the
+//! user either sends `ExecuteAllocation` with the amounts resolved or skips the
+//! period. The command carries amounts, never rules, so replaying the log gives
+//! the same transfers whatever the plan says by then.
 
 use std::collections::HashMap;
 
@@ -76,10 +73,6 @@ impl AllocationPlanPatch {
         self.schedule.is_none() && self.lines.is_none() && self.enabled.is_none()
     }
 }
-
-// ---------------------------------------------------------------------------
-// Read-side views
-// ---------------------------------------------------------------------------
 
 /// The vault's plan as the UI sees it.
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -183,10 +176,6 @@ pub struct AllocationRunView {
     pub moves: Vec<RunMove>,
     pub created_by: String,
 }
-
-// ---------------------------------------------------------------------------
-// Resolver
-// ---------------------------------------------------------------------------
 
 /// Works `lines` out on `total`, in order, against the envelopes in `flows`
 /// (the vault's [`FlowView`]s, in any order) and Unallocated's
