@@ -31,8 +31,16 @@ struct StatementReview: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     let names = NameBook(snapshot: model.store.snapshot)
-                    ForEach(model.preview?.rows ?? [], id: \.line) { row in
-                        StatementReviewRow(model: model, row: row, names: names, completion: completion)
+                    let rows = model.preview?.rows ?? []
+                    let routes = StatementImportModel.pairedRoutes(rows, names: names)
+                    ForEach(rows, id: \.line) { row in
+                        StatementReviewRow(
+                            model: model,
+                            row: row,
+                            names: names,
+                            pairedRoute: routes[row.line],
+                            completion: completion
+                        )
                     }
                 }
                 // What the rows show is about to be planned again or written.
@@ -112,6 +120,8 @@ private struct StatementReviewRow: View {
     @Bindable var model: StatementImportModel
     let row: StatementRow
     let names: NameBook
+    /// Where the move this row is half of goes (`pairedRoutes`).
+    let pairedRoute: String?
     let completion: CategoryCompletionModel
 
     @FocusState private var categoryFocused: Bool
@@ -190,7 +200,8 @@ private struct StatementReviewRow: View {
         }
         GridCell { description }
         GridCell(width: ReviewColumn.amount, alignment: .trailing) {
-            Text(verbatim: LedgerMoney.bare(signedAmount)).foregroundStyle(live ? amountTint : Ink.text3)
+            Text(verbatim: LedgerMoney.bare(StatementImportModel.signedAmount(row)))
+                .foregroundStyle(live ? amountTint : Ink.text3)
         }
         GridCell(width: ReviewColumn.kind) { kind }
         GridCell(width: ReviewColumn.status) {
@@ -206,17 +217,6 @@ private struct StatementReviewRow: View {
     private var date: String {
         guard let stamp = row.occurredAt, let date = CoreDate.date(stamp) else { return TransactionRow.placeholder }
         return CoreDate.day(date)
-    }
-
-    /// Expenses and transfers out minus, everything else plus, as the
-    /// ledger's totals sign them. A transfer goes the way what the row is
-    /// taken for says (`movesOut`): a transfer out, the money-out half of a
-    /// move between two accounts, or a `BySign` row its match made a
-    /// transfer, the way the file signs it.
-    private var signedAmount: Int64 {
-        if row.kind == .expense { return -row.amount }
-        if row.kind == .transferWallet { return Self.movesOut(row) ? -row.amount : row.amount }
-        return row.amount
     }
 
     private var amountTint: Color {
@@ -252,35 +252,7 @@ private struct StatementReviewRow: View {
         return "\(account) \u{2192} \(name)"
     }
 
-    /// Whether a row takes money out: by what it is taken for, as an export
-    /// writing every amount positive says through its type, else by its
-    /// sign.
-    private static func movesOut(_ row: StatementRow) -> Bool {
-        switch row.action {
-        case .expense, .transferOut: true
-        case .income, .refund, .transferIn: false
-        case .bySign, .skip: row.outflow
-        }
-    }
-
-    /// One half of a move between two accounts of the file, paired with
-    /// the other: the money-out half is the transfer, the other its pair.
-    private var pairedHalf: Bool { row.pairedLine != nil && row.transferLeg }
-
-    /// The two wallets of a paired move, from the money-out half's to the
-    /// other's (`from Revolut to BBVA`); its two accounts when both go to
-    /// one wallet, where the move changes nothing.
-    private var pairedRoute: String? {
-        guard pairedHalf, let other = row.pairedLine,
-              let otherRow = model.preview?.rows.first(where: { $0.line == other }) else { return nil }
-        let out = Self.movesOut(row) ? row : otherRow
-        let into = Self.movesOut(row) ? otherRow : row
-        func end(_ half: StatementRow) -> String {
-            let wallet = out.walletId == into.walletId ? nil : names.wallet(half.walletId)
-            return wallet ?? half.account ?? TransactionRow.placeholder
-        }
-        return String(localized: "from \(end(out)) to \(end(into))")
-    }
+    private var pairedHalf: Bool { StatementImportModel.isPairedHalf(row) }
 
     /// A replacing row is written, and deletes the entry it matched: its tag
     /// takes the caution ink rather than the accent of an ordinary write.
@@ -341,7 +313,7 @@ private struct StatementReviewRow: View {
             FormPicker(
                 label: String(localized: "Kind"),
                 selection: Binding(
-                    get: { choice },
+                    get: { model.kindChoice(for: row) },
                     set: { model.setAction($0.action(keeping: action), for: row) }
                 ),
                 options: StatementActionChoice.rowChoices,
@@ -355,16 +327,6 @@ private struct StatementReviewRow: View {
         } else {
             Text(verbatim: StatementText.kind(pairedHalf ? .transferWallet : row.kind)).foregroundStyle(ink)
         }
-    }
-
-    /// The menu's ticked item: a `BySign` as the kind it resolved to, an
-    /// income or an expense. One its match made a transfer ticks nothing:
-    /// the cell says transfer, and either entry is a real change.
-    private var choice: StatementActionChoice {
-        if action == .bySign {
-            return row.kind == .income || row.kind == .expense ? (row.outflow ? .expense : .income) : .bySign
-        }
-        return StatementActionChoice(action)
     }
 
     // MARK: Category

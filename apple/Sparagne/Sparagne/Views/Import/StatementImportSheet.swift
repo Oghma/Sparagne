@@ -248,21 +248,11 @@ struct StatementImportSheet: View {
                 FormPrimaryButton(title: importTitle, shortcut: !completion.isOpen) {
                     Task { await model.runImport() }
                 }
-                .disabled(
-                    !Self.writes(model.counts)
-                        || model.isImporting || model.isPreviewing || model.preview == nil
-                )
+                .disabled(!model.counts.writesAnything || model.isImporting || model.isPreviewing || model.preview == nil)
             case .report:
                 FormPrimaryButton(title: String(localized: "Done")) { dismiss() }
             }
         }
-    }
-
-    /// Whether the import writes anything: a row, new or replacing an
-    /// entry, a move, or the record that a transaction already there stands
-    /// for a row, which keeps the next export from taking it again.
-    private static func writes(_ counts: StatementImportModel.Counts) -> Bool {
-        counts.written + counts.moves + counts.possibleDuplicates + counts.matchedTransfers > 0
     }
 
     /// What the review's ↩ does: import the rows it writes (new ones and
