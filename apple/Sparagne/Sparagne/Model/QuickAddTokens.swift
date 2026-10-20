@@ -40,53 +40,41 @@ enum QuickAddTokens {
         person: String? = nil,
         timeZone: TimeZone = .current
     ) -> [QuickAddToken] {
-        var tokens: [QuickAddToken]
+        let kind: TransactionKind
+        let amount: Int64
         let when: DateSpec?
+        var fields: [QuickAddToken] = []
         var who = person
         switch parsed {
-        case .entry(let kind, let amount, _, let category, let wallet, let flow, let date, let named):
+        case .entry(let entryKind, let entryAmount, _, let category, let wallet, let flow, let date, let named):
+            (kind, amount, when) = (entryKind, entryAmount, date)
             who = nonEmpty(person) ?? named
-            tokens = [
-                QuickAddToken(role: .kind, label: nil, value: kindName(kind)),
-                QuickAddToken(role: .amount, label: nil, value: money(amount, currency)),
-            ]
-            if let category = nonEmpty(category) {
-                tokens.append(QuickAddToken(role: .category, label: String(localized: "category"), value: category))
-            } else {
-                tokens.append(
-                    QuickAddToken(
-                        role: .category,
-                        label: String(localized: "category"),
-                        value: String(localized: "Uncategorized"),
-                        isDefault: true
-                    )
+            fields.append(
+                QuickAddToken(
+                    role: .category,
+                    label: String(localized: "category"),
+                    value: nonEmpty(category) ?? String(localized: "Uncategorized"),
+                    isDefault: nonEmpty(category) == nil
                 )
-            }
+            )
             if let flow = nonEmpty(flow) {
-                tokens.append(QuickAddToken(role: .envelope, label: String(localized: "envelope"), value: flow))
+                fields.append(QuickAddToken(role: .envelope, label: String(localized: "envelope"), value: flow))
             }
             if let wallet = nonEmpty(wallet) {
-                tokens.append(QuickAddToken(role: .wallet, label: String(localized: "wallet"), value: wallet))
+                fields.append(QuickAddToken(role: .wallet, label: String(localized: "wallet"), value: wallet))
             }
-            when = date
-
-        case .transferWallet(let amount, let from, let to, _, let date):
-            tokens = [
-                QuickAddToken(role: .kind, label: nil, value: String(localized: "Transfer")),
-                QuickAddToken(role: .amount, label: nil, value: money(amount, currency)),
-                QuickAddToken(role: .wallet, label: String(localized: "wallet"), value: "\(from) \u{2192} \(to)"),
-            ]
-            when = date
-
-        case .transferFlow(let amount, let from, let to, _, let date):
-            tokens = [
-                QuickAddToken(role: .kind, label: nil, value: String(localized: "Transfer")),
-                QuickAddToken(role: .amount, label: nil, value: money(amount, currency)),
-                QuickAddToken(role: .envelope, label: String(localized: "envelope"), value: "\(from) \u{2192} \(to)"),
-            ]
-            when = date
+        case .transferWallet(let transferAmount, let from, let to, _, let date):
+            (kind, amount, when) = (.transferWallet, transferAmount, date)
+            fields = [QuickAddToken(role: .wallet, label: String(localized: "wallet"), value: "\(from) \u{2192} \(to)")]
+        case .transferFlow(let transferAmount, let from, let to, _, let date):
+            (kind, amount, when) = (.transferFlow, transferAmount, date)
+            fields = [QuickAddToken(role: .envelope, label: String(localized: "envelope"), value: "\(from) \u{2192} \(to)")]
         }
 
+        var tokens = [
+            QuickAddToken(role: .kind, label: nil, value: kindName(kind)),
+            QuickAddToken(role: .amount, label: nil, value: money(amount, currency)),
+        ] + fields
         tokens.append(
             QuickAddToken(role: .when, label: String(localized: "when"), value: day(when, today: today, timeZone: timeZone))
         )

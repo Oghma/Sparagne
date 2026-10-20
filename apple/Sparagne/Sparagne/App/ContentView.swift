@@ -52,8 +52,8 @@ struct ContentView: View {
     }
 }
 
-/// The single window: the four sheets behind the tab bar, plus the modal
-/// sheets, the alerts and the undo toast.
+/// The single window: the sheet tabs, plus the modal sheets, the alerts and
+/// the undo toasts.
 struct MainWindow: View {
     @Bindable var store: AppStore
     /// `nil` only before the database is open.
@@ -135,29 +135,15 @@ struct MainWindow: View {
                 // the cache from the last round stands in meanwhile.
                 await engine?.refreshMembers(ofVault: store.currentVault?.id)
             }
-            .onReceive(NotificationCenter.default.publisher(for: .openManagement)) { _ in
-                sheet = .manage
-            }
+            .onPosted(.openManagement) { sheet = .manage }
             // The Vault menu and the palette act on the vault on screen; the
             // management sheet seeds the same sheets with the vault it shows.
-            .onReceive(NotificationCenter.default.publisher(for: .newVault)) { _ in
-                sheet = .vault
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .renameVault)) { _ in
-                if let vault = store.currentVault { sheet = .renameVault(vault) }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .deleteVault)) { _ in
-                if let vault = store.currentVault { sheet = .deleteVault(vault) }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .leaveVault)) { _ in
-                if let vault = store.currentVault { sheet = .leaveVault(vault) }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .importStatement)) { _ in
-                if store.currentVault != nil { sheet = .importStatement }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .moveBetweenEnvelopes)) { _ in
-                if store.canWrite { sheet = .moveBetweenEnvelopes }
-            }
+            .onPosted(.newVault) { sheet = .vault }
+            .onPosted(.renameVault) { if let vault = store.currentVault { sheet = .renameVault(vault) } }
+            .onPosted(.deleteVault) { if let vault = store.currentVault { sheet = .deleteVault(vault) } }
+            .onPosted(.leaveVault) { if let vault = store.currentVault { sheet = .leaveVault(vault) } }
+            .onPosted(.importStatement) { if store.currentVault != nil { sheet = .importStatement } }
+            .onPosted(.moveBetweenEnvelopes) { if store.canWrite { sheet = .moveBetweenEnvelopes } }
             // Back Up Database and Export All Transactions: file panels owned
             // by the exporter (`Support/VaultExporter.swift`).
             .modifier(VaultExportHandlers(store: store))
@@ -259,5 +245,12 @@ struct MainWindow: View {
         case .moveBetweenEnvelopes:
             EnvelopeMoveSheet(store: store)
         }
+    }
+}
+
+private extension View {
+    /// `action` whenever a menu item or the palette posts `name`.
+    func onPosted(_ name: Notification.Name, perform action: @escaping () -> Void) -> some View {
+        onReceive(NotificationCenter.default.publisher(for: name)) { _ in action() }
     }
 }

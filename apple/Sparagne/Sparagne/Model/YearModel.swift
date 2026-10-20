@@ -441,44 +441,23 @@ struct YearSummary: Sendable {
         var runningByPerson = initialByPerson
         for month in 1...12 {
             let monthRows = byBucket[month, default: []]
-            let income = monthRows.reduce(0) { $0 + $1.income }
-            let cashExpense = monthRows.reduce(0) { $0 + $1.cashExpense }
-            let fundExpense = monthRows.reduce(0) { $0 + $1.fundExpense }
-            // FONDO CASSA: last month's TOTALE plus the wallets opened now.
-            let carried = runningTotal + monthRows.reduce(0) { $0 + $1.opening }
-            let total = (income - cashExpense) + carried - fundExpense
-
-            var byPerson: [PersonMonth] = []
-            byPerson.reserveCapacity(people.count)
-            for (index, name) in people.enumerated() {
-                let personRows = monthRows.filter { $0.person == name }
-                let personIncome = personRows.reduce(0) { $0 + $1.income }
-                let personCash = personRows.reduce(0) { $0 + $1.cashExpense }
-                let personFunds = personRows.reduce(0) { $0 + $1.fundExpense }
-                let personCarried = runningByPerson[index] + personRows.reduce(0) { $0 + $1.opening }
-                byPerson.append(
-                    PersonMonth(
-                        income: personIncome,
-                        cashExpense: personCash,
-                        fundExpense: personFunds,
-                        total: (personIncome - personCash) + personCarried - personFunds
-                    )
-                )
+            let all = Self.month(of: monthRows, after: runningTotal)
+            let byPerson = people.enumerated().map { index, name in
+                Self.month(of: monthRows.filter { $0.person == name }, after: runningByPerson[index]).figures
             }
-
             months.append(
                 YearMonth(
                     month: MonthKey(year: year, month: month),
                     isFuture: Self.isFuture(year: year, month: month, upTo: upTo),
-                    income: income,
-                    cashExpense: cashExpense,
-                    fundExpense: fundExpense,
-                    carried: carried,
-                    total: total,
+                    income: all.figures.income,
+                    cashExpense: all.figures.cashExpense,
+                    fundExpense: all.figures.fundExpense,
+                    carried: all.carried,
+                    total: all.figures.total,
                     byPerson: byPerson
                 )
             )
-            runningTotal = total
+            runningTotal = all.figures.total
             runningByPerson = byPerson.map(\.total)
         }
 
@@ -551,6 +530,21 @@ struct YearSummary: Sendable {
             people.append(person)
         }
         return people.sorted { $0.lowercased() < $1.lowercased() }
+    }
+
+    /// One month of `rows`, everybody's or one person's, on from `previous`,
+    /// the TOTALE of the month before. FONDO CASSA is that TOTALE plus the
+    /// wallets opened in the month.
+    private static func month(
+        of rows: [BucketPersonTotals],
+        after previous: Int64
+    ) -> (figures: PersonMonth, carried: Int64) {
+        let income = rows.reduce(0) { $0 + $1.income }
+        let cashExpense = rows.reduce(0) { $0 + $1.cashExpense }
+        let fundExpense = rows.reduce(0) { $0 + $1.fundExpense }
+        let carried = previous + rows.reduce(0) { $0 + $1.opening }
+        let total = (income - cashExpense) + carried - fundExpense
+        return (PersonMonth(income: income, cashExpense: cashExpense, fundExpense: fundExpense, total: total), carried)
     }
 
     /// What a bucket leaves behind: everything that came in, less everything
