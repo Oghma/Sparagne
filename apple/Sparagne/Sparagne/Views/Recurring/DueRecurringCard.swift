@@ -23,35 +23,29 @@ struct DueRecurringCard: View {
     var body: some View {
         let periods = store.duePeriods
         let names = NameBook(snapshot: store.snapshot)
-        Panel(padding: 0) {
-            VStack(alignment: .leading, spacing: 0) {
-                RecurringCardHeader(
-                    title: String(localized: "To confirm"),
-                    count: periods.isEmpty ? nil : periods.count
-                ) {
-                    if store.canWrite, !periods.isEmpty {
-                        Button(String(localized: "Record all")) {
-                            run { await store.executeAllDueRecurring() }
-                        }
-                        .buttonStyle(.chrome(.primary, small: true))
-                        .disabled(working)
+        VStack(alignment: .leading, spacing: 0) {
+            CardHeading(title: String(localized: "To confirm"), count: periods.isEmpty ? nil : periods.count) {
+                if store.canWrite, !periods.isEmpty {
+                    Button(String(localized: "Record all")) {
+                        $working.run { await store.executeAllDueRecurring() }
                     }
-                }
-                if periods.isEmpty {
-                    Text(String(localized: "Nothing to confirm"))
-                        .font(Face.ui(12))
-                        .foregroundStyle(Ink.text3)
-                        .padding(.bottom, 2)
-                } else {
-                    ForEach(Array(periods.enumerated()), id: \.element.id) { index, period in
-                        if index > 0 { Hairline() }
-                        row(period, names: names)
-                    }
+                    .buttonStyle(.chrome(.primary, small: true))
+                    .disabled(working)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            if periods.isEmpty {
+                Text(String(localized: "Nothing to confirm"))
+                    .font(Face.row)
+                    .foregroundStyle(Ink.text3)
+                    .padding(.bottom, 2)
+            } else {
+                ForEach(Array(periods.enumerated()), id: \.element.id) { index, period in
+                    if index > 0 { Hairline() }
+                    row(period, names: names)
+                }
+            }
         }
+        .headedCard()
     }
 
     private func row(_ period: DuePeriod, names: NameBook) -> some View {
@@ -66,7 +60,7 @@ struct DueRecurringCard: View {
                 Text(RecurringDayText.weekday(period.date))
                     .foregroundStyle(Ink.text)
                 Text(CountText.daysAgo(NaiveDay.days(from: period.date, to: today) ?? 0))
-                    .font(Face.ui(11))
+                    .font(Face.footnote)
                     .foregroundStyle(Ink.text3)
             }
             .frame(width: 84, alignment: .leading)
@@ -74,7 +68,7 @@ struct DueRecurringCard: View {
                 Text(RecurringTitle.of(template))
                     .foregroundStyle(Ink.text)
                 Text(DueRecurringText.detail(template, names: names))
-                    .font(Face.ui(11))
+                    .font(Face.footnote)
                     .foregroundStyle(Ink.text3)
             }
             .lineLimit(1)
@@ -88,13 +82,13 @@ struct DueRecurringCard: View {
                 let ownerLeft = store.ownerHasLeft(template)
                 HStack(spacing: 6) {
                     Button(String(localized: "Skip")) {
-                        run { await store.skipRecurring(template.id, periodDate: period.date) }
+                        $working.run { await store.skipRecurring(template.id, periodDate: period.date) }
                     }
                     .buttonStyle(.chrome(.ghost, small: true))
                     // An owner who left the vault: skipping is all that can
                     // be done until the template has another one.
                     Button(String(localized: "Record")) {
-                        run { await store.executeRecurring(template.id, periodDate: period.date) }
+                        $working.run { await store.executeRecurring(template.id, periodDate: period.date) }
                     }
                     .buttonStyle(AccentOutlineButtonStyle())
                     .disabled(ownerLeft)
@@ -107,13 +101,5 @@ struct DueRecurringCard: View {
         .padding(.vertical, 3)
         .frame(minHeight: 36)
         .accessibilityElement(children: .contain)
-    }
-
-    private func run(_ work: @escaping @MainActor () async -> Void) {
-        working = true
-        Task {
-            await work()
-            working = false
-        }
     }
 }

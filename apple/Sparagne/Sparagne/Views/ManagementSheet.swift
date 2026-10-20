@@ -131,10 +131,8 @@ struct ManagementSheet: View {
             do {
                 try await engine.removeFromThisMac(vault.id)
                 removalFailure = nil
-            } catch let error as DomainError {
-                removalFailure = "\(ErrorMessages.summary(for: error.code)): \(error.message)"
             } catch {
-                removalFailure = error.localizedDescription
+                removalFailure = ErrorMessages.line(for: error)
             }
         }
     }

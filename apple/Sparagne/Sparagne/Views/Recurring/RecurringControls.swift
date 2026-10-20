@@ -1,57 +1,157 @@
 import SwiftUI
 import SparagneCore
 
-// The small controls of the Ricorrenze tab, drawn by
-// hand like the rest of the window: the system segmented picker and date
-// picker are light-on-dark strangers on this ground. The switch is
-// `FormSwitch`, in `FormKit`.
+// The small controls of the Ricorrenze and Riparto inspectors, drawn by hand
+// like the rest of the window: the system segmented picker and date picker
+// are light-on-dark strangers on this ground.
 
-/// The canvas's `.seg`: segments on the darkest ground, the chosen one
-/// raised on `hi`. Not `SegmentedStrip`, whose chosen segment is amber: here
-/// the choice is a form value, not the sheet's filter.
+/// A form's choice as a `SegmentedStrip` at its own width, read to VoiceOver
+/// as one group called `name`.
 struct RecurringSegments<Option: Hashable>: View {
     let options: [Option]
-    let selection: Option
+    @Binding var selection: Option
     let label: (Option) -> String
-    let select: (Option) -> Void
-    /// What the group is, for VoiceOver.
     let name: String
 
-    @Environment(\.isEnabled) private var isEnabled
+    var body: some View {
+        SegmentedStrip(options: options, selection: $selection, label: label, fixed: true)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(name)
+    }
+}
+
+/// Quando, as both inspectors edit a `ScheduleDraft`: the cadence, "ogni [1]
+/// mese, il giorno [1]", Inizio and Fine, then the inspector's own `notes`.
+struct ScheduleEditor<Notes: View>: View {
+    @Binding var draft: ScheduleDraft
+    var cadences = ScheduleDraft.Cadence.allCases
+    /// Riparto has no Fine: the plan's end goes through as it is.
+    var showsEnd = true
+    @ViewBuilder var notes: Notes
 
     var body: some View {
-        HStack(spacing: 1) {
-            ForEach(options, id: \.self) { option in
-                let active = option == selection
-                Button {
-                    select(option)
-                } label: {
-                    Text(label(option))
-                        .font(Face.ui(11.5, .medium))
-                        .foregroundStyle(active ? Ink.text : Ink.text2)
-                        .padding(.horizontal, 8)
-                        .frame(height: 18)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(active ? Ink.hi : Color.clear)
-                                .shadow(color: active ? .black.opacity(0.45) : .clear, radius: 1, y: 1)
-                        )
-                        .contentShape(Rectangle())
+        FormGroup(String(localized: "When")) {
+            RecurringSegments(
+                options: cadences,
+                selection: $draft.cadence,
+                label: Self.cadenceLabel,
+                name: String(localized: "Frequency")
+            )
+            .padding(.bottom, 2)
+            FormRow(String(localized: "Repeat"), alignment: .firstTextBaseline) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 4) {
+                        every
+                        on
+                    }
+                    VStack(alignment: .leading, spacing: 5) {
+                        every
+                        on
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(label(option))
-                .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
+            }
+            FormRow(String(localized: "Start")) {
+                DayField(label: String(localized: "Start"), day: $draft.startDate)
+            }
+            if showsEnd {
+                FormRow(String(localized: "End")) {
+                    HStack(spacing: 8) {
+                        RecurringSegments(
+                            options: [false, true],
+                            selection: $draft.hasEndDate,
+                            label: { $0 ? String(localized: "On a day\u{2026}") : String(localized: "Never") },
+                            name: String(localized: "End")
+                        )
+                        if draft.hasEndDate {
+                            DayField(label: String(localized: "End"), day: $draft.shownEndDate)
+                        }
+                    }
+                }
+            }
+            notes
+        }
+    }
+
+    private static func cadenceLabel(_ cadence: ScheduleDraft.Cadence) -> String {
+        switch cadence {
+        case .daily: String(localized: "Day")
+        case .weekly: String(localized: "Week")
+        case .monthly: String(localized: "Month")
+        case .yearly: String(localized: "Year")
+        }
+    }
+
+    /// "ogni [1] mese,". The spacing is tight on purpose: in English, with
+    /// "month," and "on day", the row only just fits the inspector's 340 pt on
+    /// one line, and it wraps (`ViewThatFits`) at any looser gap.
+    private var every: some View {
+        HStack(spacing: 4) {
+            Text(String(localized: "every"))
+            MiniNumberField(label: String(localized: "Interval"), value: $draft.interval)
+            Text(unitWord + (draft.cadence == .daily ? "" : ","))
+        }
+        .font(Face.row)
+        .foregroundStyle(Ink.text)
+        .fixedSize()
+    }
+
+    /// The unit after the interval, singular for one. Two plain words rather
+    /// than a plural key: the number is in the box before it, not in the
+    /// sentence.
+    private var unitWord: String {
+        let one = draft.interval == 1
+        switch draft.cadence {
+        case .daily: return one ? String(localized: "day") : String(localized: "days")
+        case .weekly: return one ? String(localized: "week") : String(localized: "weeks")
+        case .monthly: return one ? String(localized: "month") : String(localized: "months")
+        case .yearly: return one ? String(localized: "year") : String(localized: "years")
+        }
+    }
+
+    /// The day the cadence falls on: a weekday, a day of the month, or a
+    /// day and a month.
+    private var on: some View {
+        HStack(spacing: 4) {
+            switch draft.cadence {
+            case .daily:
+                EmptyView()
+            case .weekly:
+                Text(String(localized: "on"))
+                FormMenu(
+                    label: String(localized: "Weekday"),
+                    value: ScheduleFormatting.weekdayName(UInt8(clamping: draft.weekday))
+                ) {
+                    ForEach(1...7, id: \.self) { day in
+                        Button(ScheduleFormatting.weekdayName(UInt8(day))) { draft.weekday = day }
+                    }
+                }
+                .fixedSize()
+            case .monthly:
+                Text(String(localized: "on day"))
+                MiniNumberField(label: String(localized: "Day of the month"), value: $draft.monthDay)
+            case .yearly:
+                Text(String(localized: "on the"))
+                MiniNumberField(label: String(localized: "Day of the month"), value: $draft.yearDay)
+                FormMenu(
+                    label: String(localized: "Month"),
+                    value: ScheduleFormatting.monthName(UInt8(clamping: draft.yearMonth))
+                ) {
+                    ForEach(1...12, id: \.self) { month in
+                        Button(ScheduleFormatting.monthName(UInt8(month))) { draft.yearMonth = month }
+                    }
+                }
+                .fixedSize()
             }
         }
-        .padding(1)
-        .background(Ink.bg, in: RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Ink.line2, lineWidth: 1))
-        // Dimmed less than a disabled button: a fixed choice (the kind of a
-        // saved template) still has to be read.
-        .opacity(isEnabled ? 1 : 0.75)
+        .font(Face.row)
+        .foregroundStyle(Ink.text)
         .fixedSize()
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(name)
+    }
+}
+
+extension ScheduleEditor where Notes == EmptyView {
+    init(draft: Binding<ScheduleDraft>) {
+        self.init(draft: draft) { EmptyView() }
     }
 }
 
@@ -67,7 +167,7 @@ struct MiniNumberField: View {
         TextField(label, text: $text, prompt: Text(verbatim: ""))
             .textFieldStyle(.plain)
             .labelsHidden()
-            .font(Face.ui(12))
+            .font(Face.row)
             .multilineTextAlignment(.center)
             .frame(width: 44, height: 22)
             .background(Ink.card, in: RoundedRectangle(cornerRadius: 5))
@@ -145,7 +245,7 @@ private struct AccentOutlineBody: View {
 
     var body: some View {
         configuration.label
-            .font(Face.ui(11, .medium))
+            .font(Face.label)
             .foregroundStyle(Ink.accent)
             .padding(.horizontal, 8)
             .frame(height: 22)
@@ -153,33 +253,6 @@ private struct AccentOutlineBody: View {
             .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Ink.accent.opacity(0.4), lineWidth: 1))
             .contentShape(RoundedRectangle(cornerRadius: 5))
             .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.4)
-    }
-}
-
-/// A card's heading line (`.ch`): the title at 11.5 semibold in `text2`, and
-/// whatever goes on its right.
-struct RecurringCardHeader<Trailing: View>: View {
-    let title: String
-    var count: Int?
-    @ViewBuilder var trailing: Trailing
-
-    var body: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 4) {
-                Text(title)
-                if let count {
-                    Text(count, format: .number).foregroundStyle(Ink.accent)
-                }
-            }
-            .font(Face.ui(11.5, .semibold))
-            .foregroundStyle(Ink.text2)
-            .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 8)
-            trailing
-        }
-        .frame(minHeight: 22)
-        .padding(.bottom, 8)
     }
 }
 

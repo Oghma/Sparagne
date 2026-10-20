@@ -81,13 +81,13 @@ struct AllocationDueCard: View {
             if store.canWrite {
                 HStack(spacing: 6) {
                     Button(String(localized: "Skip")) {
-                        run { await store.skipAllocation() }
+                        $working.run { await store.skipAllocation() }
                     }
                     .buttonStyle(.chrome(.ghost, small: true))
                     Button(String(localized: "Share out \(LedgerMoney.bare(preview?.distributed ?? 0))")) {
                         guard let total else { return }
                         let shown = lines
-                        run { await store.executeAllocation(total: total, lines: shown) }
+                        $working.run { await store.executeAllocation(total: total, lines: shown) }
                     }
                     .buttonStyle(.chrome(.primary, small: true))
                     .disabled(total == nil || preview == nil)
@@ -157,7 +157,7 @@ struct AllocationDueCard: View {
                 .foregroundStyle(Ink.positive)
                 .frame(width: 96, alignment: .trailing)
         }
-        .font(Face.ui(12))
+        .font(Face.row)
         .lineLimit(1)
         .frame(height: 22)
         .accessibilityElement(children: .combine)
@@ -168,7 +168,7 @@ struct AllocationDueCard: View {
     @ViewBuilder
     private func summary(names: NameBook) -> some View {
         if let preview {
-            AllocationFlow(horizontal: 18, vertical: 6) {
+            FlowLayout(horizontal: 18, vertical: 6) {
                 figure(String(localized: "Distributed"), preview.distributed)
                 figure(String(localized: "Left in Unallocated"), preview.remainder)
                 figure(String(localized: "Unallocated after"), preview.unallocatedAfter)
@@ -189,14 +189,7 @@ struct AllocationDueCard: View {
     }
 
     private func figure(_ label: String, _ amount: Int64) -> some View {
-        HStack(spacing: 4) {
-            Text(label).foregroundStyle(Ink.text3)
-            Text(LedgerMoney.bare(amount))
-                .fontWeight(.semibold)
-                .foregroundStyle(amount < 0 ? Ink.negative : Ink.text)
-        }
-        .font(Face.ui(12))
-        .accessibilityElement(children: .combine)
+        AmountFigure(label: label, amount: amount, negative: amount < 0).font(Face.row)
     }
 
     // MARK: - Nothing due
@@ -204,17 +197,14 @@ struct AllocationDueCard: View {
     /// No period due: when the next one falls, or that the plan is paused, or
     /// that there is no plan yet.
     private var quietCard: some View {
-        Panel(padding: 0) {
-            VStack(alignment: .leading, spacing: 0) {
-                RecurringCardHeader(title: String(localized: "To share out")) { EmptyView() }
-                Text(quietText)
-                    .font(Face.ui(12))
-                    .foregroundStyle(Ink.text3)
-                    .padding(.bottom, 2)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+        VStack(alignment: .leading, spacing: 0) {
+            CardHeading(title: String(localized: "To share out"))
+            Text(quietText)
+                .font(Face.row)
+                .foregroundStyle(Ink.text3)
+                .padding(.bottom, 2)
         }
+        .headedCard()
     }
 
     private var quietText: String {
@@ -228,14 +218,6 @@ struct AllocationDueCard: View {
             return String(localized: "Nothing to share out: the plan has no periods left.")
         }
         return String(localized: "Nothing to share out until \(RecurringDayText.weekday(next)).")
-    }
-
-    private func run(_ work: @escaping @MainActor () async -> Void) {
-        working = true
-        Task {
-            await work()
-            working = false
-        }
     }
 }
 
@@ -267,56 +249,21 @@ private nonisolated struct DashedLine: Shape {
     }
 }
 
-/// Lays its children out left to right and wraps onto a new line when the
-/// width runs out: the card's figures and its chips.
-struct AllocationFlow: Layout {
-    var horizontal: CGFloat = 6
-    var vertical: CGFloat = 6
+/// A label in `text3` and its amount in semibold, red when `negative`, read
+/// as one: the figures under the period due and under a move.
+struct AmountFigure: View {
+    let label: String
+    let amount: Int64
+    var negative = false
+    var spacing: CGFloat = 4
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = arrange(subviews, width: proposal.width ?? .infinity)
-        let width = rows.map(\.width).max() ?? 0
-        let height = rows.map(\.height).reduce(0, +) + vertical * CGFloat(max(rows.count - 1, 0))
-        return CGSize(width: proposal.width ?? width, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var y = bounds.minY
-        for row in arrange(subviews, width: bounds.width) {
-            var x = bounds.minX
-            for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
-                subviews[index].place(
-                    at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
-                    proposal: ProposedViewSize(size)
-                )
-                x += size.width + horizontal
-            }
-            y += row.height + vertical
+    var body: some View {
+        HStack(spacing: spacing) {
+            Text(label).foregroundStyle(Ink.text3)
+            Text(LedgerMoney.bare(amount))
+                .fontWeight(.semibold)
+                .foregroundStyle(negative ? Ink.negative : Ink.text)
         }
-    }
-
-    private struct Row {
-        var indices: [Int] = []
-        var width: CGFloat = 0
-        var height: CGFloat = 0
-    }
-
-    private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
-        var rows: [Row] = []
-        var current = Row()
-        for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
-            let needed = current.indices.isEmpty ? size.width : current.width + horizontal + size.width
-            if needed > width, !current.indices.isEmpty {
-                rows.append(current)
-                current = Row()
-            }
-            current.width = current.indices.isEmpty ? size.width : current.width + horizontal + size.width
-            current.height = max(current.height, size.height)
-            current.indices.append(index)
-        }
-        if !current.indices.isEmpty { rows.append(current) }
-        return rows
+        .accessibilityElement(children: .combine)
     }
 }

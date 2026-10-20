@@ -8,7 +8,6 @@ private enum HistoryColumn {
     static let detailMinimum: CGFloat = 120
     static let distributed: CGFloat = 120
     static let action: CGFloat = 92
-    static let padding: CGFloat = 8
 }
 
 /// "Storico": the plan's decided periods, the most recent first
@@ -24,18 +23,15 @@ struct AllocationHistory: View {
     var body: some View {
         Panel(padding: 0) {
             VStack(alignment: .leading, spacing: 0) {
-                RecurringCardHeader(title: String(localized: "History")) {
-                    Text(String(localized: "undoing the latest allocation deletes its transfers and puts it back to share out"))
-                        .font(Face.ui(11.5, .medium))
-                        .foregroundStyle(Ink.text3)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.trailing)
-                }
+                CardHeading(
+                    title: String(localized: "History"),
+                    hint: String(localized: "undoing the latest allocation deletes its transfers and puts it back to share out")
+                )
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
                 if store.allocationRuns.isEmpty {
                     Text(String(localized: "No period decided yet"))
-                        .font(Face.ui(12))
+                        .font(Face.row)
                         .foregroundStyle(Ink.text3)
                         .padding(.horizontal, 12)
                         .padding(.bottom, 10)
@@ -83,39 +79,28 @@ struct AllocationHistory: View {
     }
 
     private var header: some View {
-        HStack(spacing: 0) {
-            cell(width: HistoryColumn.period) { Text(String(localized: "Period")) }
-            cell(width: HistoryColumn.outcome) { Text(String(localized: "Outcome")) }
-            cell(minWidth: HistoryColumn.detailMinimum) { Text(String(localized: "Detail")) }
-            cell(width: HistoryColumn.distributed, alignment: .trailing) { Text(String(localized: "Distributed")) }
-            cell(width: HistoryColumn.action) { Text(verbatim: "") }
+        SetupHeaderRow(horizontalPadding: 4, accessibilityHeader: true) {
+            Text(String(localized: "Period")).tableCell(width: HistoryColumn.period)
+            Text(String(localized: "Outcome")).tableCell(width: HistoryColumn.outcome)
+            Text(String(localized: "Detail")).tableCell(minWidth: HistoryColumn.detailMinimum)
+            Text(String(localized: "Distributed")).tableCell(width: HistoryColumn.distributed, alignment: .trailing)
+            Text(verbatim: "").tableCell(width: HistoryColumn.action)
         }
-        .font(Face.ui(11, .medium))
-        .foregroundStyle(Ink.text3)
-        .padding(.horizontal, 4)
-        .frame(height: Metrics.headerHeight)
-        .overlay(alignment: .bottom) { Rectangle().fill(Ink.line2).frame(height: 1) }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
     }
 
     private func row(_ run: AllocationRunView, latest: Bool, last: Bool) -> some View {
         let skipped = run.outcome == .skipped
         return HStack(spacing: 0) {
-            cell(width: HistoryColumn.period) {
-                Text(RecurringDayText.weekday(run.periodDate)).foregroundStyle(Ink.text)
-            }
-            cell(width: HistoryColumn.outcome) {
-                Text(AllocationText.outcome(run.outcome)).foregroundStyle(skipped ? Ink.text3 : Ink.text)
-            }
-            cell(minWidth: HistoryColumn.detailMinimum) {
-                Text(AllocationText.detail(run)).foregroundStyle(skipped ? Ink.text3 : Ink.text2)
-            }
-            cell(width: HistoryColumn.distributed, alignment: .trailing) {
-                Text(skipped ? TransactionRow.placeholder : LedgerMoney.bare(AllocationText.distributed(run)))
-                    .foregroundStyle(skipped ? Ink.text3 : Ink.text)
-            }
-            cell(width: HistoryColumn.action, alignment: .trailing) {
+            Text(RecurringDayText.weekday(run.periodDate)).foregroundStyle(Ink.text)
+                .tableCell(width: HistoryColumn.period)
+            Text(AllocationText.outcome(run.outcome)).foregroundStyle(skipped ? Ink.text3 : Ink.text)
+                .tableCell(width: HistoryColumn.outcome)
+            Text(AllocationText.detail(run)).foregroundStyle(skipped ? Ink.text3 : Ink.text2)
+                .tableCell(minWidth: HistoryColumn.detailMinimum)
+            Text(skipped ? TransactionRow.placeholder : LedgerMoney.bare(AllocationText.distributed(run)))
+                .foregroundStyle(skipped ? Ink.text3 : Ink.text)
+                .tableCell(width: HistoryColumn.distributed, alignment: .trailing)
+            Group {
                 if latest, store.canWrite {
                     Button(String(localized: "allocation.undo", defaultValue: "Undo")) { confirming = run }
                         .buttonStyle(.chrome(.ghost, small: true))
@@ -124,8 +109,9 @@ struct AllocationHistory: View {
                     Text(verbatim: "")
                 }
             }
+            .tableCell(width: HistoryColumn.action, alignment: .trailing)
         }
-        .font(Face.ui(12))
+        .font(Face.row)
         .padding(.horizontal, 4)
         .frame(height: 26)
         .overlay(alignment: .bottom) {
@@ -133,23 +119,5 @@ struct AllocationHistory: View {
         }
         .padding(.bottom, last ? 4 : 0)
         .accessibilityElement(children: .contain)
-    }
-
-    private func cell<Content: View>(
-        width: CGFloat? = nil,
-        minWidth: CGFloat? = nil,
-        alignment: Alignment = .leading,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        content()
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .padding(.horizontal, HistoryColumn.padding)
-            .frame(
-                minWidth: width ?? minWidth,
-                idealWidth: width,
-                maxWidth: width ?? .infinity,
-                alignment: alignment
-            )
     }
 }

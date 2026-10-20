@@ -116,7 +116,7 @@ struct EnvelopeMoveSheet: View {
             .frame(width: 240)
             if let balance = check.sourceBalance?.balance {
                 Text(balanceLabel(balance))
-                    .font(Face.ui(12))
+                    .font(Face.row)
                     .foregroundStyle(Ink.text3)
                     .monospacedDigit()
             }
@@ -143,25 +143,22 @@ struct EnvelopeMoveSheet: View {
             }
             addRow
         }
-        .font(Face.ui(12))
+        .font(Face.row)
         .monospacedDigit()
     }
 
     private var header: some View {
-        HStack(spacing: 0) {
-            cell(minWidth: MoveColumn.envelopeMinimum) { Text(String(localized: "To")) }
-            cell(width: MoveColumn.figure, alignment: .trailing) { Text(String(localized: "Balance")) }
-            cell(width: MoveColumn.figure, alignment: .trailing) { Text(String(localized: "Room")) }
-            cell(width: MoveColumn.amount, alignment: .trailing) { Text(String(localized: "Amount")) }
-            cell(width: MoveColumn.figure, alignment: .trailing) { Text(String(localized: "Balance after")) }
+        SetupHeaderRow {
+            Text(String(localized: "To")).tableCell(minWidth: MoveColumn.envelopeMinimum, padding: MoveColumn.padding)
+            Text(String(localized: "Balance")).tableCell(width: MoveColumn.figure, alignment: .trailing, padding: MoveColumn.padding)
+            Text(String(localized: "Room")).tableCell(width: MoveColumn.figure, alignment: .trailing, padding: MoveColumn.padding)
+            Text(String(localized: "Amount")).tableCell(width: MoveColumn.amount, alignment: .trailing, padding: MoveColumn.padding)
+            Text(String(localized: "Balance after"))
+                .tableCell(width: MoveColumn.figure, alignment: .trailing, padding: MoveColumn.padding)
             // A text, not EmptyView: a frame around nothing takes no room,
             // and the headings would slide off their columns.
-            cell(width: MoveColumn.actions) { Text(verbatim: "") }
+            Text(verbatim: "").tableCell(width: MoveColumn.actions, padding: MoveColumn.padding)
         }
-        .font(Face.label)
-        .foregroundStyle(Ink.text3)
-        .frame(height: Metrics.headerHeight)
-        .overlay(alignment: .bottom) { Rectangle().fill(Ink.line2).frame(height: 1) }
     }
 
     /// One envelope the money goes to. The row under the pointer or with the
@@ -172,42 +169,34 @@ struct EnvelopeMoveSheet: View {
         let active = hovered == row.flowId || focused == row.flowId
         let overCap = if case .overCap = row.issue { true } else { false }
         return HStack(spacing: 0) {
-            cell(minWidth: MoveColumn.envelopeMinimum) {
-                Text(title).foregroundStyle(row.envelope == nil ? Ink.text3 : Ink.text)
-            }
-            cell(width: MoveColumn.figure, alignment: .trailing) {
-                Text(row.balance.map { LedgerMoney.bare($0.balance) } ?? TransactionRow.placeholder)
-                    .foregroundStyle(Ink.text2)
-            }
-            cell(width: MoveColumn.figure, alignment: .trailing) {
-                Text(row.room.map(LedgerMoney.bare) ?? TransactionRow.placeholder)
-                    .foregroundStyle(Ink.text3)
-            }
-            cell(width: MoveColumn.amount) { amountField(row, title: title) }
-            cell(width: MoveColumn.figure, alignment: .trailing) {
-                Text(row.after.map(LedgerMoney.bare) ?? TransactionRow.placeholder)
-                    .foregroundStyle(overCap ? Ink.negative : Ink.text)
-            }
-            cell(width: MoveColumn.actions, alignment: .trailing) {
-                HStack(spacing: 2) {
-                    if active, let room = row.room, room > 0, row.amount != room {
-                        Button(String(localized: "To cap")) { draft.fill(row.flowId, room: room) }
-                            .buttonStyle(.chrome(.ghost, small: true))
-                    }
-                    Button {
-                        draft.remove(row.flowId)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(Ink.text3)
-                            .frame(width: 20, height: 20)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help(String(localized: "Remove \(title)"))
-                    .accessibilityLabel(String(localized: "Remove \(title)"))
+            Text(title).foregroundStyle(row.envelope == nil ? Ink.text3 : Ink.text)
+                .tableCell(minWidth: MoveColumn.envelopeMinimum, padding: MoveColumn.padding)
+            Text(row.balance.map { LedgerMoney.bare($0.balance) } ?? TransactionRow.placeholder)
+                .foregroundStyle(Ink.text2)
+                .tableCell(width: MoveColumn.figure, alignment: .trailing, padding: MoveColumn.padding)
+            Text(row.room.map(LedgerMoney.bare) ?? TransactionRow.placeholder)
+                .foregroundStyle(Ink.text3)
+                .tableCell(width: MoveColumn.figure, alignment: .trailing, padding: MoveColumn.padding)
+            amountField(row, title: title).tableCell(width: MoveColumn.amount, padding: MoveColumn.padding)
+            Text(row.after.map(LedgerMoney.bare) ?? TransactionRow.placeholder)
+                .foregroundStyle(overCap ? Ink.negative : Ink.text)
+                .tableCell(width: MoveColumn.figure, alignment: .trailing, padding: MoveColumn.padding)
+            HStack(spacing: 2) {
+                if active, let room = row.room, room > 0, row.amount != room {
+                    Button(String(localized: "To cap")) { draft.fill(row.flowId, room: room) }
+                        .buttonStyle(.chrome(.ghost, small: true))
+                }
+                SetupIconButton(
+                    symbol: "xmark",
+                    help: String(localized: "Remove \(title)"),
+                    label: String(localized: "Remove \(title)"),
+                    symbolSize: 9,
+                    symbolWeight: .semibold
+                ) {
+                    draft.remove(row.flowId)
                 }
             }
+            .tableCell(width: MoveColumn.actions, alignment: .trailing, padding: MoveColumn.padding)
         }
         .frame(height: MoveColumn.rowHeight)
         .background {
@@ -223,13 +212,7 @@ struct EnvelopeMoveSheet: View {
                 Rectangle().fill(Ink.rowLine).frame(height: 1)
             }
         }
-        .onHover { inside in
-            if inside {
-                hovered = row.flowId
-            } else if hovered == row.flowId {
-                hovered = nil
-            }
-        }
+        .hoverId($hovered, row.flowId)
     }
 
     private func amountField(_ row: EnvelopeMoveCheck.Row, title: String) -> some View {
@@ -258,13 +241,7 @@ struct EnvelopeMoveSheet: View {
         let title = row.envelope.map { store.flowName($0) } ?? TransactionRow.placeholder
         let words = IssueText(issue: issue, title: title, room: row.room)
         return HStack(spacing: 8) {
-            Text(words.tag)
-                .font(Face.ui(10, .semibold))
-                .foregroundStyle(Ink.negative)
-                .padding(.horizontal, 5)
-                .frame(height: 16)
-                .background(Ink.negative.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
-                .fixedSize()
+            RowTag(text: words.tag, tint: Ink.negative, opacity: 0.14)
             Text(words.sentence)
                 .font(Face.ui(11.5))
                 .foregroundStyle(Ink.text2)
@@ -309,9 +286,7 @@ struct EnvelopeMoveSheet: View {
             .frame(maxWidth: .infinity, minHeight: MoveColumn.rowHeight, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
+        .plainMenu()
         .disabled(candidates.isEmpty)
     }
 
@@ -321,15 +296,16 @@ struct EnvelopeMoveSheet: View {
         let sourceName = check.source.map { store.flowName($0) } ?? TransactionRow.placeholder
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 18) {
-                figure(String(localized: "Total"), check.total)
+                AmountFigure(label: String(localized: "Total"), amount: check.total, spacing: 5)
                 if let after = check.sourceAfter {
-                    figure(String(localized: "Left in \(sourceName)"), after, negative: after < 0)
+                    AmountFigure(label: String(localized: "Left in \(sourceName)"), amount: after, negative: after < 0, spacing: 5)
                 }
                 if let lowest = check.sourceLowAfter {
-                    figure(
-                        String(localized: "Lowest on \(RecurringDayText.full(lowest.on))"),
-                        lowest.amount,
-                        negative: lowest.amount < 0
+                    AmountFigure(
+                        label: String(localized: "Lowest on \(RecurringDayText.full(lowest.on))"),
+                        amount: lowest.amount,
+                        negative: lowest.amount < 0,
+                        spacing: 5
                     )
                 }
                 if !check.rows.isEmpty {
@@ -337,7 +313,7 @@ struct EnvelopeMoveSheet: View {
                         .foregroundStyle(Ink.text3)
                 }
             }
-            .font(Face.ui(12))
+            .font(Face.row)
             .monospacedDigit()
             switch check.sourceState {
             case .belowZero(_, nil):
@@ -367,16 +343,6 @@ struct EnvelopeMoveSheet: View {
         .padding(.top, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(alignment: .top) { Rectangle().fill(Ink.line2).frame(height: 1) }
-    }
-
-    private func figure(_ label: String, _ amount: Int64, negative: Bool = false) -> some View {
-        HStack(spacing: 5) {
-            Text(label).foregroundStyle(Ink.text3)
-            Text(LedgerMoney.bare(amount))
-                .fontWeight(.semibold)
-                .foregroundStyle(negative ? Ink.negative : Ink.text)
-        }
-        .accessibilityElement(children: .combine)
     }
 
     // MARK: - The footer
@@ -422,29 +388,9 @@ struct EnvelopeMoveSheet: View {
         }
     }
 
-    // MARK: - Pieces
-
     /// An envelope's name as the window shows it, Unallocated localized.
     private func name(_ flowId: Uuid) -> String {
         store.flows.first { $0.id == flowId }.map { store.flowName($0) } ?? TransactionRow.placeholder
-    }
-
-    private func cell<Content: View>(
-        width: CGFloat? = nil,
-        minWidth: CGFloat? = nil,
-        alignment: Alignment = .leading,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        content()
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .padding(.horizontal, MoveColumn.padding)
-            .frame(
-                minWidth: width ?? minWidth,
-                idealWidth: width,
-                maxWidth: width ?? .infinity,
-                alignment: alignment
-            )
     }
 }
 

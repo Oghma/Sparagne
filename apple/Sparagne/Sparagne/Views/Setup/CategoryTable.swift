@@ -18,20 +18,16 @@ enum CategoryField: Hashable {
     case aliases
 }
 
-/// A cell: which row (nil = the empty line at the bottom) and which field.
-private struct CategoryCellFocus: Hashable {
-    let row: Uuid?
-    let field: CategoryField
-}
+private typealias CategoryCellFocus = SetupFocus<CategoryField>
 
 /// The categories of the vault as an editable table:
 /// the last line adds one, names and aliases edit in place.
 ///
 /// Editing is per row, like the ledger's grid: clicking a cell opens the whole
 /// row with the caret there, ↩ commits what changed, esc throws the draft away
-/// and leaving the row commits it the way a spreadsheet does. A refusal from
-/// the core keeps the row open on the cell that caused it, so the text can be
-/// fixed instead of retyped.
+/// and leaving the row commits it the way a spreadsheet does (`editsRows`). A
+/// refusal from the core keeps the row open on the cell that caused it, so the
+/// text can be fixed instead of retyped.
 struct CategoryTable: View {
     @Bindable var store: AppStore
 
@@ -48,32 +44,34 @@ struct CategoryTable: View {
     @FocusState private var focus: CategoryCellFocus?
 
     var body: some View {
+        let aliases = SetupFigures.aliases(store.categoryAliases)
+        // The top bar's search, on the name and the aliases; the empty line
+        // stays.
+        let shown = store.windowCategories.filter { category in
+            TableFilter.matches(store.tabFilter, [category.name] + (aliases[category.id] ?? []))
+        }
         SetupCard(
             title: String(localized: "Categories"),
             hint: String(localized: "aliases take quick-add to the category: #pizza → Restaurants")
         ) {
             SetupTableBody {
                 header
-                ForEach(active, id: \.id) { category in
-                    row(category)
+                ForEach(shown.filter { !$0.archived }, id: \.id) { category in
+                    row(category, aliases: aliases[category.id] ?? [])
                 }
                 // Archived ones keep their place at the bottom, dimmed.
-                ForEach(archived, id: \.id) { category in
-                    row(category)
+                ForEach(shown.filter(\.archived), id: \.id) { category in
+                    row(category, aliases: aliases[category.id] ?? [])
                 }
                 // A viewer reads the categories; nothing to add.
                 if store.canWrite { newLine }
             }
         }
-        // A vault switch reloads the lists under whatever was open.
-        .onChange(of: store.currentVault?.id) { _, _ in
-            editing = nil
+        .editsRows(editing: $editing, focus: $focus, hovered: hovered, store: store) {
             newName = ""
-            focus = nil
+        } commit: { row in
+            Task { await commit(row) }
         }
-        .onChange(of: focus) { old, new in Task { await commitIfLeft(from: old, to: new) } }
-        // Turned read-only under an open row: it could not be saved.
-        .onChange(of: store.isReadOnly) { _, _ in cancel() }
         .task(id: newName) {
             similar = await store.similarCategories(name: newName).map(\.name)
         }
@@ -81,12 +79,10 @@ struct CategoryTable: View {
             MergeCategorySheet(
                 store: store,
                 source: subject.category,
-                targets: active.filter { $0.id != subject.category.id }
+                targets: shown.filter { !$0.archived && $0.id != subject.category.id }
             )
         }
     }
-
-    // MARK: - Chrome
 
     private var header: some View {
         SetupHeaderRow {
@@ -97,22 +93,12 @@ struct CategoryTable: View {
         }
     }
 
-    // MARK: - Rows
-
-    private var active: [CategoryView] { store.windowCategories.filter { !$0.archived && matchesFilter($0) } }
-    private var archived: [CategoryView] { store.windowCategories.filter { $0.archived && matchesFilter($0) } }
-
-    /// The top bar's search, on the name and the aliases; the empty line stays.
-    private func matchesFilter(_ category: CategoryView) -> Bool {
-        TableFilter.matches(store.tabFilter, [category.name] + aliases(of: category.id))
-    }
-
     /// System categories are read-only: the core refuses to rename, archive or
     /// merge them, so they carry no menu at all rather than an empty one. So
     /// does every category of a vault this account only reads.
     @ViewBuilder
-    private func row(_ category: CategoryView) -> some View {
-        let line = line(category)
+    private func row(_ category: CategoryView, aliases: [String]) -> some View {
+        let line = line(category, aliases: aliases)
         if category.isSystem || !store.canWrite {
             line
         } else if category.archived {
@@ -132,12 +118,11 @@ struct CategoryTable: View {
         }
     }
 
-    @ViewBuilder
-    private func line(_ category: CategoryView) -> some View {
+    private func line(_ category: CategoryView, aliases: [String]) -> some View {
         let isEditing = editing == category.id
-        CategoryRowView(
+        return CategoryRowView(
             category: category,
-            aliases: aliases(of: category.id),
+            aliases: aliases,
             usage: store.categoryUsage[category.id] ?? 0,
             draft: isEditing ? $draft : nil,
             isHovered: hovered == category.id,
@@ -149,13 +134,7 @@ struct CategoryTable: View {
             onArchive: { Task { await store.archiveCategory(category.id) } },
             onRestore: { Task { await store.restoreCategory(category.id) } }
         )
-        .onHover { inside in
-            if inside {
-                hovered = category.id
-            } else if hovered == category.id {
-                hovered = nil
-            }
-        }
+        .hoverId($hovered, category.id)
     }
 
     /// The empty last line: a name, and under ALIAS the near names the core
@@ -164,12 +143,12 @@ struct CategoryTable: View {
         let active = focus == CategoryCellFocus(row: nil, field: .name)
         return SetupRow(highlighted: active, editing: active, separator: false) {
             SetupCell(width: CategoryColumn.name) {
-                TextField(String(localized: "New category…"), text: $newName)
-                    .textFieldStyle(.plain)
-                    .font(Face.row)
-                    .foregroundStyle(Ink.text)
-                    .focused($focus, equals: CategoryCellFocus(row: nil, field: .name))
-                    .onSubmit { Task { await commitNewLine() } }
+                SetupTextField(
+                    placeholder: String(localized: "New category…"), text: $newName,
+                    focus: $focus, key: CategoryCellFocus(row: nil, field: .name)
+                ) {
+                    Task { await commitNewLine() }
+                }
             }
             SetupCell {
                 Text(similarHint)
@@ -179,10 +158,9 @@ struct CategoryTable: View {
             SetupCell(width: CategoryColumn.usage) { EmptyView() }
             SetupCell(width: SetupColumn.action) { EmptyView() }
         }
-        .onKeyPress(.escape) {
+        .onEscape {
             newName = ""
             focus = nil
-            return .handled
         }
     }
 
@@ -197,10 +175,7 @@ struct CategoryTable: View {
     }
 
     private func aliases(of categoryId: Uuid) -> [String] {
-        store.categoryAliases
-            .filter { $0.categoryId == categoryId }
-            .map(\.alias)
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        SetupFigures.aliases(store.categoryAliases)[categoryId] ?? []
     }
 
     // MARK: - Actions
@@ -222,9 +197,6 @@ struct CategoryTable: View {
         focus = CategoryCellFocus(row: category.id, field: field)
     }
 
-    /// esc: throw the draft away. `editing` is cleared before the focus, so
-    /// the focus change that follows does not read as "left the row" and save
-    /// what esc was meant to undo.
     private func cancel() {
         editing = nil
         focus = nil
@@ -233,21 +205,6 @@ struct CategoryTable: View {
     /// ↩: save the row and close it.
     private func submit(_ categoryId: Uuid) async {
         if await commit(categoryId) { focus = nil }
-    }
-
-    /// The commit on blur a spreadsheet does: a click on another row, on the
-    /// empty line or away from the table all write the line being left, as
-    /// `EnvelopeTable.focusMoved` does. The row's own context menu resigns
-    /// the field without giving the focus to anything: a blur while the
-    /// pointer is over the open row is not a departure.
-    private func commitIfLeft(from old: CategoryCellFocus?, to new: CategoryCellFocus?) async {
-        guard let editing else { return }
-        if let new {
-            guard new.row != editing else { return }
-        } else {
-            guard old?.row == editing, hovered != editing else { return }
-        }
-        await commit(editing)
     }
 
     /// Writes the draft back as the commands it implies and says whether they
@@ -340,11 +297,7 @@ private struct CategoryRowView: View {
             SetupCell(width: CategoryColumn.usage, alignment: .trailing) { usageText }
             actionCell
         }
-        .onKeyPress(.escape) {
-            guard draft != nil else { return .ignored }
-            onCancel()
-            return .handled
-        }
+        .onEscape(when: draft != nil, perform: onCancel)
     }
 
     /// The name, with the "system" tag on the two the core owns. An archived
@@ -376,7 +329,7 @@ private struct CategoryRowView: View {
                 if isWritable {
                     Button(action: onRestore) {
                         Text(String(localized: "Restore"))
-                            .font(Face.ui(11))
+                            .font(Face.footnote)
                             .foregroundStyle(Ink.text2)
                             .padding(.horizontal, 4)
                             .frame(height: 18)
@@ -399,7 +352,7 @@ private struct CategoryRowView: View {
     @ViewBuilder
     private var usageText: some View {
         if category.isSystem {
-            Text("—").font(Face.row).foregroundStyle(Ink.text3)
+            Text(verbatim: "—").font(Face.row).foregroundStyle(Ink.text3)
         } else {
             Text(usage.formatted(.number))
                 .font(Face.row)
@@ -407,32 +360,23 @@ private struct CategoryRowView: View {
         }
     }
 
-    /// The archive icon, only for the row under the pointer: the same
-    /// command the context menu already sends, one click closer. Hidden while
-    /// editing, for a system category (which the core refuses either way) and
-    /// for an archived one, whose Restore button is beside its tag.
-    @ViewBuilder
+    /// Not while editing, for a system category (which the core refuses
+    /// either way) or for an archived one, whose Restore button is beside
+    /// its tag.
     private var actionCell: some View {
-        SetupCell(width: SetupColumn.action) {
-            if draft == nil, isHovered, isWritable, !category.isSystem, !category.archived {
-                SetupIconButton(
-                    symbol: "archivebox",
-                    help: String(localized: "Archive"),
-                    label: String(localized: "Archive \(category.name)"),
-                    action: onArchive
-                )
-            }
-        }
+        SetupArchiveCell(
+            name: category.name,
+            shown: draft == nil && isHovered && isWritable && !category.isSystem && !category.archived,
+            action: onArchive
+        )
     }
 
     private func cell(_ value: Binding<String>, _ field: CategoryField, width: CGFloat?) -> some View {
         SetupCell(width: width) {
-            TextField("", text: value)
-                .textFieldStyle(.plain)
-                .font(Face.row)
-                .foregroundStyle(Ink.text)
-                .focused($focus, equals: CategoryCellFocus(row: category.id, field: field))
-                .onSubmit(onCommit)
+            SetupTextField(
+                placeholder: "", text: value,
+                focus: $focus, key: CategoryCellFocus(row: category.id, field: field), submit: onCommit
+            )
         }
     }
 }

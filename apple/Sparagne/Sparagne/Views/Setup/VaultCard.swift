@@ -98,7 +98,7 @@ struct VaultCard: View {
                 ForEach(members) { member in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(member.username).foregroundStyle(Ink.text)
-                        Text(member.role.label).font(Face.ui(11)).foregroundStyle(Ink.text3)
+                        Text(member.role.label).font(Face.footnote).foregroundStyle(Ink.text3)
                     }
                 }
             }

@@ -74,14 +74,29 @@ struct TopBar: View {
     /// template on the Ricorrenze, a one-off move on the Riparto; the Setup
     /// tab adds in its tables' own empty lines. Nothing for an account that
     /// only reads the vault, which could not save what it typed.
+    ///
+    /// Add opens the quick-add line (⌘K), as File ▸ Quick Add does; the
+    /// others are what the Vault menu and the palette ask for, with no key
+    /// cap since their menu items have no shortcut (and ⌘K adds a row, not a
+    /// template).
     @ViewBuilder
     private var addButton: some View {
         if store.canWrite {
             switch store.tab {
-            case .summary, .ledger: AddButton()
-            case .recurring: NewRecurringButton(store: store)
-            case .allocation: MoveBetweenEnvelopesButton()
-            case .setup: EmptyView()
+            case .summary, .ledger:
+                TabActionButton(symbol: "plus", title: String(localized: "Add"), keyCap: "\u{2318}K") {
+                    NotificationCenter.default.post(name: .focusQuickAdd, object: nil)
+                }
+            case .recurring:
+                TabActionButton(symbol: "plus", title: String(localized: "New recurring entry")) {
+                    store.requestNewRecurring()
+                }
+            case .allocation:
+                TabActionButton(symbol: "arrow.left.arrow.right", title: String(localized: "Move between envelopes\u{2026}")) {
+                    NotificationCenter.default.post(name: .moveBetweenEnvelopes, object: nil)
+                }
+            case .setup:
+                EmptyView()
             }
         }
     }
@@ -180,7 +195,7 @@ struct SearchField: View {
                 Text(prompt)
             }
             .textFieldStyle(.plain)
-            .font(Face.ui(12))
+            .font(Face.row)
             .foregroundStyle(Ink.text)
             .focused($focused)
             // esc clears and drops focus; ⌘F (the menu) focuses it again.
@@ -229,60 +244,25 @@ struct DuePill: View {
     }
 }
 
-/// Opens the quick-add line (⌘K), the same as File ▸ Quick Add.
-struct AddButton: View {
-    var body: some View {
-        Button {
-            NotificationCenter.default.post(name: .focusQuickAdd, object: nil)
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "plus")
-                    .font(.system(size: 10, weight: .semibold))
-                    .accessibilityHidden(true)
-                Text(String(localized: "Add"))
-                KeyCap(text: "\u{2318}K")
-                    .accessibilityHidden(true)
-            }
-        }
-        .buttonStyle(.chrome())
-    }
-}
-
-/// The Riparto tab's "Move between envelopes…": the one-off sheet, as the
-/// Vault menu and the palette open it. No key cap: the menu item has no
-/// shortcut.
-struct MoveBetweenEnvelopesButton: View {
-    var body: some View {
-        Button {
-            NotificationCenter.default.post(name: .moveBetweenEnvelopes, object: nil)
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.left.arrow.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .accessibilityHidden(true)
-                Text(String(localized: "Move between envelopes\u{2026}"))
-            }
-        }
-        .buttonStyle(.chrome())
-    }
-}
-
-/// The Ricorrenze tab's add button: the inspector on a new template, as the
-/// Vault menu and the palette ask for it (`AppStore.requestNewRecurring`).
-/// No key cap: the menu item has no shortcut, and ⌘K adds a row, not a
-/// template.
-struct NewRecurringButton: View {
-    let store: AppStore
+/// What the tab on screen adds, at the trailing end of the bar.
+private struct TabActionButton: View {
+    let symbol: String
+    let title: String
+    var keyCap: String?
+    let action: () -> Void
 
     var body: some View {
-        Button {
-            store.requestNewRecurring()
-        } label: {
+        Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: "plus")
+                Image(systemName: symbol)
                     .font(.system(size: 10, weight: .semibold))
                     .accessibilityHidden(true)
-                Text(String(localized: "New recurring entry"))
+                Text(title)
+                if let keyCap {
+                    // The menu item says the shortcut to VoiceOver already.
+                    KeyCap(text: keyCap)
+                        .accessibilityHidden(true)
+                }
             }
         }
         .buttonStyle(.chrome())

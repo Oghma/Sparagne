@@ -126,7 +126,7 @@ struct RecurringTab: View {
             .id(RecurringSelection.new)
         case nil:
             Text(String(localized: "No recurring templates"))
-                .font(Face.ui(12))
+                .font(Face.row)
                 .foregroundStyle(Ink.text3)
                 .padding(16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

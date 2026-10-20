@@ -67,9 +67,7 @@ struct OnboardingSheet: View {
     }
 }
 
-/// A single text field with Cancel/Save: vault and wallet rename and the
-/// envelope quick-rename. Fuller envelope edits go through
-/// `EditEnvelopeSheet`.
+/// A single text field with Cancel and Save: Rename Vault.
 struct RenameSheet: View {
     let title: String
     let name: String
@@ -114,12 +112,8 @@ struct RenameSheet: View {
     }
 }
 
-/// The confirmation before `DeleteVault`, the one action no undo covers: the
-/// vault goes with its wallets, envelopes, transactions and recurring
-/// templates. It leaves each member's devices as they sync, while the server
-/// keeps its log so the deletion can reach them.
-/// Reached from the Vault menu, the palette and the management sheet, so the
-/// wording lives in one place.
+/// The confirmation before `DeleteVault`, worded once for the Vault menu,
+/// the palette and the management sheet.
 struct DeleteVaultSheet: View {
     let vault: VaultView
     let delete: () -> Void
@@ -145,9 +139,8 @@ struct DeleteVaultSheet: View {
 
 // MARK: - Vault names
 
-/// Vault names are labels: two
-/// vaults may share one, even with the same owner. Nothing refuses a repeated
-/// name; the sheets warn, and the lists tell the two apart.
+/// Vault names are labels: two vaults may share one, even with the same
+/// owner, so the sheets warn and the lists tell the two apart.
 enum VaultNaming {
     /// The name as a list shows it, with the owner appended when another
     /// listed vault has the same name.
@@ -189,8 +182,6 @@ private struct DuplicateNameWarning: View {
         )
     }
 }
-
-// MARK: - Shared pieces
 
 /// The body of a sheet that confirms something it cannot take back: the
 /// question in full-strength text, then what goes with it in `text2`.

@@ -26,11 +26,11 @@ struct RecurringInspector: View {
     @State private var draft: RecurringDraft
     /// A command in flight: Salva, Crea and the rest wait for it.
     @State private var working = false
-    /// The next four dates (`nextDates`), asked of the core when what they
-    /// depend on changes (`PreviewInputs`) rather than on every render: the
+    /// The next four dates, asked of the core when what they depend on
+    /// changes (`RecurringPreview.Inputs`) rather than on every render: the
     /// inspector draws again on every keystroke, in the amount and the note
     /// too. `nil` until the first answer.
-    @State private var preview: Result<NextDates, Error>?
+    @State private var preview: Result<RecurringPreview, Error>?
     /// The periods of the open template already recorded or skipped, left out
     /// of the due periods of a schedule being edited. Empty for a new
     /// template.
@@ -64,24 +64,22 @@ struct RecurringInspector: View {
     private var editable: Bool { store.canWrite && !(template?.archived ?? false) && !working }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    title
-                    amountAndKind
-                    whereGroup
-                    whenGroup
-                    nextDates
-                }
-                .disabled(!editable)
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+        InspectorShell(
+            title: template.map(RecurringTitle.of) ?? String(localized: "New recurring entry"),
+            subtitle: String(localized: "\(ScheduleFormatting.describe(draft.schedule)) \u{00B7} from \(RecurringDayText.full(draft.when.startDate))"),
+            fieldsDisabled: !editable,
+            footerDisabled: working
+        ) {
+            if let template, store.canWrite { moreMenu(template) }
+        } content: {
+            amountAndKind
+            whereGroup
+            ScheduleEditor(draft: $draft.when)
+            nextDates
+        } footer: {
             footer
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .hangingCategoryList(completion)
-        .background(Ink.bg)
         // The saved template moved under the open draft (a save, the table's
         // switch, a sync): an untouched draft follows it, an edited one keeps
         // the user's edits and takes the switch only.
@@ -95,7 +93,7 @@ struct RecurringInspector: View {
             }
         }
         .onChange(of: previewInputs, initial: true) { _, inputs in
-            preview = Self.previewDates(inputs)
+            preview = RecurringPreview.of(inputs, occurrences: CoreSchedule.occurrences)
         }
         // A period recorded or skipped from the due sheet changes the saved
         // template's due list, and with it what has been handled.
@@ -106,29 +104,11 @@ struct RecurringInspector: View {
 
     // MARK: - Heading
 
-    private var title: some View {
-        let cadence = ScheduleFormatting.describe(draft.schedule)
-        return VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 8) {
-                Text(template.map(RecurringTitle.of) ?? String(localized: "New recurring entry"))
-                    .font(Face.ui(16, .semibold))
-                    .foregroundStyle(Ink.text)
-                    .lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 0)
-                if let template, store.canWrite { moreMenu(template) }
-            }
-            Text(String(localized: "\(cadence) \u{00B7} from \(RecurringDayText.full(draft.startDate))"))
-            .font(Face.ui(12))
-            .foregroundStyle(Ink.text2)
-            .lineLimit(2)
-        }
-    }
-
     /// The "…" beside the title: duplicating, and the footer's archive or
     /// restore. Not for a vault that is only read, and not in create mode,
-    /// where there is nothing to copy yet. Outside the `.disabled` of the
-    /// fields, so an archived template can still be restored from it.
+    /// where there is nothing to copy yet. Inside the fields' `.disabled`, as
+    /// the heading has always been: an archived template is restored from
+    /// the footer.
     private func moreMenu(_ template: RecurringView) -> some View {
         Menu {
             Button(String(localized: "Duplicate")) {
@@ -136,11 +116,11 @@ struct RecurringInspector: View {
             }
             if template.archived {
                 Button(String(localized: "Restore")) {
-                    run { await store.restoreRecurring(template.id) }
+                    $working.run { await store.restoreRecurring(template.id) }
                 }
             } else {
                 Button(String(localized: "Archive"), role: .destructive) {
-                    run { await store.archiveRecurring(template.id) }
+                    $working.run { await store.archiveRecurring(template.id) }
                 }
             }
         } label: {
@@ -182,9 +162,8 @@ struct RecurringInspector: View {
 
             RecurringSegments(
                 options: [TransactionKind.expense, .income],
-                selection: draft.kind,
+                selection: $draft.kind,
                 label: Self.kindLabel,
-                select: { draft.kind = $0 },
                 name: String(localized: "Kind")
             )
             // A patch has no kind: once the template exists, it is what it is.
@@ -246,7 +225,7 @@ struct RecurringInspector: View {
             // why Registra is off, until another owner is picked and saved.
             if let template, store.ownerHasLeft(template), draft.owner == template.owner {
                 Text(AppStore.ownerLeftExplanation)
-                    .font(Face.ui(11))
+                    .font(Face.footnote)
                     .foregroundStyle(Ink.negative)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -274,130 +253,6 @@ struct RecurringInspector: View {
         AppStore.distinct(store.assignablePeople + [draft.owner, template?.owner ?? ""])
     }
 
-    // MARK: - Quando
-
-    private var whenGroup: some View {
-        FormGroup(String(localized: "When")) {
-            RecurringSegments(
-                options: RecurringDraft.Cadence.allCases,
-                selection: draft.cadence,
-                label: Self.cadenceLabel,
-                select: { draft.cadence = $0 },
-                name: String(localized: "Frequency")
-            )
-            .padding(.bottom, 2)
-            FormRow(String(localized: "Repeat"), alignment: .firstTextBaseline) {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 4) {
-                        every
-                        on
-                    }
-                    VStack(alignment: .leading, spacing: 5) {
-                        every
-                        on
-                    }
-                }
-            }
-            FormRow(String(localized: "Start")) {
-                DayField(label: String(localized: "Start"), day: $draft.startDate)
-            }
-            FormRow(String(localized: "End")) {
-                HStack(spacing: 8) {
-                    RecurringSegments(
-                        options: [false, true],
-                        selection: draft.hasEndDate,
-                        label: { $0 ? String(localized: "On a day\u{2026}") : String(localized: "Never") },
-                        select: { draft.hasEndDate = $0 },
-                        name: String(localized: "End")
-                    )
-                    if draft.hasEndDate {
-                        DayField(label: String(localized: "End"), day: $draft.endDate)
-                    }
-                }
-            }
-        }
-    }
-
-    private static func cadenceLabel(_ cadence: RecurringDraft.Cadence) -> String {
-        switch cadence {
-        case .daily: String(localized: "Day")
-        case .weekly: String(localized: "Week")
-        case .monthly: String(localized: "Month")
-        case .yearly: String(localized: "Year")
-        }
-    }
-
-    /// "ogni [1] mese,". The spacing is tight on purpose: in English, with
-    /// "month," and "on day", the row only just fits the inspector's 340 pt on
-    /// one line, and it wraps (`ViewThatFits`) at any looser gap.
-    private var every: some View {
-        HStack(spacing: 4) {
-            Text(String(localized: "every"))
-            MiniNumberField(label: String(localized: "Interval"), value: $draft.interval)
-            Text(unitWord + (draft.cadence == .daily ? "" : ","))
-        }
-        .font(Face.ui(12))
-        .foregroundStyle(Ink.text)
-        .fixedSize()
-    }
-
-    /// The unit after the interval, singular for one. Two plain words rather
-    /// than a plural key: the number is in the box before it, not in the
-    /// sentence.
-    private var unitWord: String {
-        let one = draft.interval == 1
-        switch draft.cadence {
-        case .daily: return one ? String(localized: "day") : String(localized: "days")
-        case .weekly: return one ? String(localized: "week") : String(localized: "weeks")
-        case .monthly: return one ? String(localized: "month") : String(localized: "months")
-        case .yearly: return one ? String(localized: "year") : String(localized: "years")
-        }
-    }
-
-    /// The day the cadence falls on: a weekday, a day of the month, or a
-    /// day and a month.
-    @ViewBuilder
-    private var on: some View {
-        HStack(spacing: 4) {
-            switch draft.cadence {
-            case .daily:
-                EmptyView()
-            case .weekly:
-                Text(String(localized: "on"))
-                compactMenu(
-                    label: String(localized: "Weekday"),
-                    value: ScheduleFormatting.weekdayName(UInt8(clamping: draft.weekday))
-                ) {
-                    ForEach(1...7, id: \.self) { day in
-                        Button(ScheduleFormatting.weekdayName(UInt8(day))) { draft.weekday = day }
-                    }
-                }
-            case .monthly:
-                Text(String(localized: "on day"))
-                MiniNumberField(label: String(localized: "Day of the month"), value: $draft.monthDay)
-            case .yearly:
-                Text(String(localized: "on the"))
-                MiniNumberField(label: String(localized: "Day of the month"), value: $draft.yearDay)
-                compactMenu(
-                    label: String(localized: "Month"),
-                    value: ScheduleFormatting.monthName(UInt8(clamping: draft.yearMonth))
-                ) {
-                    ForEach(1...12, id: \.self) { month in
-                        Button(ScheduleFormatting.monthName(UInt8(month))) { draft.yearMonth = month }
-                    }
-                }
-            }
-        }
-        .font(Face.ui(12))
-        .foregroundStyle(Ink.text)
-        .fixedSize()
-    }
-
-    private func compactMenu<Items: View>(label: String, value: String, @ViewBuilder items: () -> Items) -> some View {
-        FormMenu(label: label, value: value) { items() }
-            .fixedSize()
-    }
-
     // MARK: - Prossime date
 
     private var nextDates: some View {
@@ -413,63 +268,31 @@ struct RecurringInspector: View {
                 }
                 if dates.moreDue > 0 {
                     Text(String(localized: "and \(dates.moreDue) more to confirm"))
-                        .font(Face.ui(12))
+                        .font(Face.row)
                         .foregroundStyle(Ink.text3)
                 }
                 if dates.lines.isEmpty {
                     Text(String(localized: "No dates left: the end date has passed"))
-                        .font(Face.ui(12))
+                        .font(Face.row)
                         .foregroundStyle(Ink.text3)
                 }
             case .failure:
                 Text(String(localized: "These settings do not make a schedule"))
-                    .font(Face.ui(12))
+                    .font(Face.row)
                     .foregroundStyle(Ink.negative)
             }
         }
     }
 
-    /// What the preview is worked out from. Cheap to read on every render,
-    /// unlike the answer: the schedule on screen, saved or not; the saved
-    /// due periods while the schedule is the saved one; the periods already
-    /// handled; and whether the template runs, which makes its past periods
-    /// due and today, when not among them, decided (`RecurringNext.of`).
-    /// A new template is created running.
-    private var previewInputs: PreviewInputs {
-        let schedule = draft.schedule
-        let unchanged = template.map { $0.schedule == schedule } ?? false
-        return PreviewInputs(
-            schedule: schedule,
-            savedDue: unchanged ? template.map { store.dueDates(of: $0.id) } : nil,
+    /// Cheap to read on every render, unlike the answer.
+    private var previewInputs: RecurringPreview.Inputs {
+        RecurringPreview.Inputs(
+            schedule: draft.schedule,
+            template: template,
+            savedDue: store.dueDates(of:),
             handled: handled,
-            today: today,
-            running: template.map { $0.enabled && !$0.archived } ?? true
+            today: today
         )
-    }
-
-    /// The next four dates of `inputs`, asked of the core. A schedule being
-    /// edited has its due periods worked out from it, so a start moved back
-    /// shows the periods since then before they are saved as due.
-    private static func previewDates(_ inputs: PreviewInputs) -> Result<NextDates, Error> {
-        let from = inputs.running ? (NaiveDay.adding(1, to: inputs.today) ?? inputs.today) : inputs.today
-        return Result {
-            let due = try inputs.savedDue ?? (inputs.running
-                ? RecurringNext.due(
-                    schedule: inputs.schedule,
-                    today: inputs.today,
-                    handled: inputs.handled,
-                    occurrences: CoreSchedule.occurrences
-                )
-                : [])
-            let lines = try RecurringNext.preview(
-                schedule: inputs.schedule,
-                due: due,
-                from: from,
-                count: 4,
-                occurrences: CoreSchedule.occurrences
-            )
-            return NextDates(lines: lines, moreDue: due.count - lines.filter(\.isDue).count)
-        }
     }
 
     private func previewLine(_ line: RecurringNext.Preview) -> some View {
@@ -478,87 +301,67 @@ struct RecurringInspector: View {
                 .foregroundStyle(Ink.text)
             Spacer(minLength: 8)
             if line.isDue {
-                Text(String(localized: "to confirm"))
-                    .font(Face.ui(10, .semibold))
-                    .foregroundStyle(Ink.accent)
-                    .padding(.horizontal, 5)
-                    .frame(height: 16)
-                    .background(Ink.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
+                RowTag(text: String(localized: "to confirm"), tint: Ink.accent, opacity: 0.14)
             } else if let amount = draft.amount(currency: currency) ?? template?.amount {
                 Text(LedgerMoney.bare(amount)).foregroundStyle(Ink.text3)
             }
         }
-        .font(Face.ui(12))
+        .font(Face.row)
         .frame(height: 22)
-        .overlay(alignment: .bottom) {
-            Line()
-                .stroke(Ink.line, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                .frame(height: 1)
-        }
+        .overlay(alignment: .bottom) { DashedRule() }
         .accessibilityElement(children: .combine)
     }
 
     // MARK: - Footer
 
+    @ViewBuilder
     private var footer: some View {
-        HStack(spacing: 8) {
-            if let template {
-                if store.canWrite {
-                    FormSwitch(label: String(localized: "Enabled"), isOn: draft.enabled && !template.archived) { on in
-                        run { await store.setRecurringEnabled(template.id, on) }
-                    }
-                    .disabled(template.archived || working)
-                    // The switch speaks for itself; the word beside it would
-                    // be a second stop saying the same.
-                    Text(String(localized: "Enabled"))
-                        .font(Face.ui(12))
-                        .foregroundStyle(Ink.text2)
-                        .accessibilityHidden(true)
+        if let template {
+            if store.canWrite {
+                InspectorSwitch(
+                    label: String(localized: "Enabled"),
+                    isOn: draft.enabled && !template.archived,
+                    disabled: template.archived || working
+                ) { on in
+                    $working.run { await store.setRecurringEnabled(template.id, on) }
                 }
-                Spacer(minLength: 8)
-                if store.canWrite {
-                    if template.archived {
-                        Button(String(localized: "Restore")) {
-                            run { await store.restoreRecurring(template.id) }
-                        }
-                        .buttonStyle(.chrome(.ghost, small: true))
-                    } else if !isDirty {
-                        Button {
-                            run { await store.archiveRecurring(template.id) }
-                        } label: {
-                            Text(String(localized: "Archive")).foregroundStyle(Ink.negative)
-                        }
-                        .buttonStyle(.chrome(.ghost, small: true))
-                    }
-                    if isDirty {
-                        Button(String(localized: "Cancel")) { draft = RecurringDraft(template: template) }
-                            .buttonStyle(.chrome(.ghost, small: true))
-                            .keyboardShortcut(shortcut(.cancelAction))
-                        if draft.isValid(currency: currency), isPreviewValid {
-                            Button(String(localized: "Save")) { save(template) }
-                                .buttonStyle(.chrome(.primary, small: true))
-                                .keyboardShortcut(shortcut(.defaultAction))
-                        }
-                    }
-                }
-            } else {
-                Spacer(minLength: 8)
-                Button(String(localized: "Cancel")) { finishedCreating(nil) }
-                    .buttonStyle(.chrome(.ghost, small: true))
-                    .keyboardShortcut(shortcut(.cancelAction))
-                Button(String(localized: "Create")) { create() }
-                    .buttonStyle(.chrome(.primary, small: true))
-                    .keyboardShortcut(shortcut(.defaultAction))
-                    .disabled(!draft.isValid(currency: currency) || !isPreviewValid)
             }
+            Spacer(minLength: 8)
+            if store.canWrite {
+                if template.archived {
+                    Button(String(localized: "Restore")) {
+                        $working.run { await store.restoreRecurring(template.id) }
+                    }
+                    .buttonStyle(.chrome(.ghost, small: true))
+                } else if !isDirty {
+                    Button {
+                        $working.run { await store.archiveRecurring(template.id) }
+                    } label: {
+                        Text(String(localized: "Archive")).foregroundStyle(Ink.negative)
+                    }
+                    .buttonStyle(.chrome(.ghost, small: true))
+                }
+                if isDirty {
+                    Button(String(localized: "Cancel")) { draft = RecurringDraft(template: template) }
+                        .buttonStyle(.chrome(.ghost, small: true))
+                        .keyboardShortcut(shortcut(.cancelAction))
+                    if draft.isValid(currency: currency), isPreviewValid {
+                        Button(String(localized: "Save")) { save(template) }
+                            .buttonStyle(.chrome(.primary, small: true))
+                            .keyboardShortcut(shortcut(.defaultAction))
+                    }
+                }
+            }
+        } else {
+            Spacer(minLength: 8)
+            Button(String(localized: "Cancel")) { finishedCreating(nil) }
+                .buttonStyle(.chrome(.ghost, small: true))
+                .keyboardShortcut(shortcut(.cancelAction))
+            Button(String(localized: "Create")) { create() }
+                .buttonStyle(.chrome(.primary, small: true))
+                .keyboardShortcut(shortcut(.defaultAction))
+                .disabled(!draft.isValid(currency: currency) || !isPreviewValid)
         }
-        .disabled(working)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(minHeight: 44)
-        .overlay(alignment: .top) { Hairline() }
-        .background(Ink.bg)
-        .accessibilityElement(children: .contain)
     }
 
     private var isDirty: Bool {
@@ -584,14 +387,14 @@ struct RecurringInspector: View {
 
     private func save(_ template: RecurringView) {
         let patch = draft.patch(against: template, currency: currency)
-        run { await store.updateRecurring(template.id, patch: patch) }
+        $working.run { await store.updateRecurring(template.id, patch: patch) }
     }
 
     /// Crea, then the new template selected in the table. A refused one (an
     /// envelope gone since) keeps the draft, so it can be fixed.
     private func create() {
         guard let creation = draft.creation(currency: currency) else { return }
-        run {
+        $working.run {
             let created = await store.createRecurring(
                 kind: creation.kind,
                 amount: creation.amount,
@@ -605,31 +408,6 @@ struct RecurringInspector: View {
             if let created { finishedCreating(created) }
         }
     }
-
-    private func run(_ work: @escaping @MainActor () async -> Void) {
-        working = true
-        Task {
-            await work()
-            working = false
-        }
-    }
-}
-
-/// What the inspector's next dates are worked out from, as one value for
-/// `.onChange`.
-private struct PreviewInputs: Equatable {
-    let schedule: Schedule
-    /// `nil` once the schedule on screen is not the saved one.
-    let savedDue: [NaiveDate]?
-    let handled: Set<NaiveDate>
-    let today: NaiveDate
-    let running: Bool
-}
-
-/// The inspector's next dates, and how many due periods did not fit.
-private struct NextDates {
-    let lines: [RecurringNext.Preview]
-    let moreDue: Int
 }
 
 /// When the inspector asks the core again for the periods already handled:
@@ -637,14 +415,4 @@ private struct NextDates {
 private struct HandledKey: Equatable {
     let templateId: Uuid?
     let due: [NaiveDate]
-}
-
-/// A horizontal line through the middle of its frame, for a dashed rule.
-private nonisolated struct Line: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-        return path
-    }
 }

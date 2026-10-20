@@ -11,25 +11,22 @@ struct RecurringAgendaCard: View {
 
     var body: some View {
         let agenda = RecurringAgenda(tiles: store.upcomingRecurring)
-        Panel(padding: 0) {
-            VStack(alignment: .leading, spacing: 0) {
-                RecurringCardHeader(title: String(localized: "Next 30 days")) {
-                    totals(agenda)
-                }
-                if agenda.tiles.isEmpty {
-                    Text(String(localized: "Nothing in the next 30 days"))
-                        .font(Face.ui(12))
-                        .foregroundStyle(Ink.text3)
-                        .padding(.bottom, 2)
-                } else {
-                    LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 6) {
-                        ForEach(agenda.tiles) { tile($0) }
-                    }
+        VStack(alignment: .leading, spacing: 0) {
+            CardHeading(title: String(localized: "Next 30 days")) {
+                totals(agenda)
+            }
+            if agenda.tiles.isEmpty {
+                Text(String(localized: "Nothing in the next 30 days"))
+                    .font(Face.row)
+                    .foregroundStyle(Ink.text3)
+                    .padding(.bottom, 2)
+            } else {
+                LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 6) {
+                    ForEach(agenda.tiles) { tile($0) }
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
         }
+        .headedCard()
     }
 
     private func totals(_ agenda: RecurringAgenda) -> some View {
@@ -51,13 +48,13 @@ struct RecurringAgendaCard: View {
     private func tile(_ period: UpcomingPeriod) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(RecurringDayText.weekday(period.date))
-                .font(Face.ui(11))
+                .font(Face.footnote)
                 .foregroundStyle(Ink.text3)
             Text(RecurringTitle.of(period.template))
                 .font(Face.ui(12.5, .medium))
                 .foregroundStyle(Ink.text)
             Text(RecurringAmount.signed(period.template))
-                .font(Face.ui(12))
+                .font(Face.row)
                 .foregroundStyle(RecurringAmount.color(period.template))
         }
         .lineLimit(1)
