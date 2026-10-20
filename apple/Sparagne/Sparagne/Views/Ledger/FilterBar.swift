@@ -5,7 +5,7 @@ import SparagneCore
 /// shows. Direction, PERSONA, then three chips for what is off by default:
 /// transfers, voided rows and the WALLET column. The month and the search are
 /// in the top bar (`TopBar`), the figures in the tab bar's status line
-/// (`LedgerStatusLine`).
+/// (`SheetStatus`).
 ///
 /// The chips write the store; the window keeps them in step with the View
 /// menu's toggles through the shared preferences (`LedgerWindow`).

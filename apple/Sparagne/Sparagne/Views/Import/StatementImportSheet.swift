@@ -387,58 +387,33 @@ private struct ProblemNote: View {
 }
 
 /// `To import 4 · Already imported 0 · Skipped 4 · Invalid 0 · Rounded 0`:
-/// the preview's counts as the import will make them, drawn like the
-/// window's status line (`StatusLine`), with the invalid rows in the
-/// negative ink and the zeros dimmed. The rows matched to a transaction
-/// already in the vault, and the ones of those to be moved, follow only
-/// when there are any.
+/// the preview's counts as the import will make them, as a status line,
+/// with the invalid rows in the negative ink and the zeros dimmed. The rows
+/// matched to a transaction already in the vault, and the ones of those to
+/// be moved, follow only when there are any.
 private struct StatementCountsLine: View {
     let counts: StatementImportModel.Counts
 
-    private var items: [(label: String, value: Int, tint: Color)] {
-        var items: [(label: String, value: Int, tint: Color)] = [
+    var body: some View {
+        StatusLine(items: items)
+    }
+
+    private var items: [StatusItem] {
+        let always: [(String, Int, Color)] = [
             (String(localized: "To import"), counts.new, Ink.text),
             (String(localized: "Already imported"), counts.alreadyImported, Ink.text),
             (String(localized: "Skipped"), counts.skipped, Ink.text),
             (String(localized: "Invalid"), counts.invalid, Ink.negative),
             (String(localized: "Rounded"), counts.rounded, Ink.text),
         ]
-        if counts.possibleDuplicates > 0 {
-            items.append((String(localized: "Possible duplicates"), counts.possibleDuplicates, Ink.text))
+        let whenAny: [(String, Int, Color)] = [
+            (String(localized: "Possible duplicates"), counts.possibleDuplicates, Ink.text),
+            (String(localized: "Transfers already there"), counts.matchedTransfers, Ink.text),
+            (String(localized: "To move"), counts.moves, Ink.text),
+            (String(localized: "To replace"), counts.replaces, Ink.text),
+        ]
+        return (always + whenAny.filter { $0.1 > 0 }).map { label, value, tint in
+            StatusItem(label: label, value: String(value), tint: value == 0 ? Ink.text3 : tint)
         }
-        if counts.matchedTransfers > 0 {
-            items.append((String(localized: "Transfers already there"), counts.matchedTransfers, Ink.text))
-        }
-        if counts.moves > 0 {
-            items.append((String(localized: "To move"), counts.moves, Ink.text))
-        }
-        if counts.replaces > 0 {
-            items.append((String(localized: "To replace"), counts.replaces, Ink.text))
-        }
-        return items
-    }
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                if index > 0 {
-                    Text(verbatim: "\u{00B7}")
-                        .padding(.horizontal, 7)
-                        .accessibilityHidden(true)
-                }
-                Text(item.label)
-                Text(verbatim: String(item.value))
-                    .fontWeight(.medium)
-                    .foregroundStyle(item.value == 0 ? Ink.text3 : item.tint)
-                    .padding(.leading, 4)
-            }
-        }
-        .font(Face.ui(11.5))
-        .foregroundStyle(Ink.text3)
-        .lineLimit(1)
-        .fixedSize()
-        // One sentence for VoiceOver, as the window's status line reads.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(StatusLine.spoken(items.map { StatusItem(label: $0.label, value: String($0.value)) }))
     }
 }
