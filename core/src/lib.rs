@@ -21,7 +21,6 @@ mod engine;
 mod error;
 mod ffi;
 mod flow;
-pub mod import_v1;
 mod maintenance;
 mod money;
 mod query;
@@ -52,8 +51,8 @@ pub use engine::entities::{AliasView, MergeConflict, MergeConflictKind, MergePre
 pub use error::DomainError;
 pub use ffi::{
     CoreHandle, create_vault_envelope, decode_statement_mapping, detect_statement,
-    encode_statement_mapping, format_money, guess_statement_formats, new_envelope, parse_money,
-    parse_quick_add, resolve_date_spec, statement_presets,
+    encode_statement_mapping, guess_statement_formats, new_envelope, parse_money, parse_quick_add,
+    resolve_date_spec, statement_presets,
 };
 pub use flow::{Flow, FlowMode, UNALLOCATED_NAME, headroom};
 pub use money::Money;

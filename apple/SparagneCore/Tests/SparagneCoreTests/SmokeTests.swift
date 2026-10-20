@@ -118,12 +118,6 @@ func quickAddRoundTrip() throws {
     #expect(all.items.contains { $0.category == "Opening" && $0.kind == .income })
 }
 
-@Test("Money formats with the vault currency")
-func moneyFormatting() {
-    #expect(formatMoney(minor: -1250, currency: .eur) == "-12.50 EUR")
-    #expect(formatMoney(minor: 0, currency: .eur) == "0.00 EUR")
-}
-
 @Test("Money parses major units into minor units")
 func moneyParsing() throws {
     #expect(try parseMoney(text: "12,50", currency: .eur) == 1250)
@@ -275,41 +269,5 @@ func ambiguousNameCarriesTheCandidates() throws {
         #expect(error.code == "ambiguous_name")
         #expect(error.candidates.count == 2)
         #expect(error.message.contains("Bank"))
-    }
-}
-
-@Test("Period totals with no bounds cover the whole ledger")
-func periodTotalsWithoutBounds() throws {
-    let fixture = try Fixture()
-    let parsed = try parseQuickAdd(input: "-12.50 pizza #food", currency: .eur)
-    let resolved = try fixture.core.resolveQuickAdd(
-        vaultId: fixture.vaultId,
-        parsed: parsed,
-        now: Fixture.now,
-        defaults: QuickAddDefaults(),
-        people: []
-    )
-    _ = try fixture.execute(resolved.command)
-
-    let all = try fixture.core.periodTotals(vaultId: fixture.vaultId, from: nil, to: nil)
-    #expect(all.expense == 1250)
-    // The wallet's opening balance is an income of 100.00.
-    #expect(all.income == 10000)
-
-    // A window that ends before the expense sees only the opening balance.
-    let before = try fixture.core.periodTotals(
-        vaultId: fixture.vaultId,
-        from: nil,
-        to: "2026-03-01T10:00:00Z"
-    )
-    #expect(before.expense == 0)
-
-    // from >= to is still refused when both are given.
-    #expect(throws: DomainError.self) {
-        try fixture.core.periodTotals(
-            vaultId: fixture.vaultId,
-            from: "2026-03-02T00:00:00Z",
-            to: "2026-03-01T00:00:00Z"
-        )
     }
 }

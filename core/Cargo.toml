@@ -27,7 +27,7 @@ cli = ["uniffi/cli"]
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde", "clock"] }
-# IANA timezones, used by the v1 importer to give the accounting day its offset.
+# IANA timezones, used by the statement import to give a row's day its offset.
 chrono-tz = "0.10"
 rusqlite = { version = "0.40", features = ["bundled", "uuid"] }
 serde = { version = "1", features = ["derive"] }

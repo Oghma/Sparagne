@@ -92,6 +92,11 @@ schemes:
       config: Debug
       targets:
         - SparagneTests
+      # The test host opens a throwaway database, never the user's: it reads
+      # no keychain token (an unsigned host asking for one hangs the run on
+      # a password dialog) and starts no sync.
+      commandLineArguments:
+        "-SparagneDatabase /private/tmp/sparagne-test-host.sqlite": true
     profile:
       config: Release
     analyze:

@@ -7,7 +7,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{Connection, Transaction, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -55,6 +55,26 @@ pub struct PushResult {
     pub outcome: PushOutcome,
 }
 
+impl PushOutcome {
+    /// What a push answers for one command: its receipt as `Applied`, a
+    /// domain refusal as `Rejected`; a storage failure is the caller's, since
+    /// it says nothing about the command.
+    pub fn of(result: Result<Receipt>) -> Result<Self> {
+        match result {
+            Ok(receipt) => Ok(Self::Applied {
+                seq: receipt.seq,
+                result_id: receipt.result_id,
+            }),
+            Err(DomainError::Storage(detail)) => Err(DomainError::Storage(detail)),
+            Err(err) => Ok(Self::Rejected {
+                code: err.code().to_string(),
+                message: err.to_string(),
+                detail: None,
+            }),
+        }
+    }
+}
+
 /// Response of `POST /vaults/{vault_id}/push`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PushResponse {
@@ -72,6 +92,17 @@ pub struct SyncRecord {
     pub result_id: Option<Uuid>,
     /// Unix seconds, when the server accepted it.
     pub created_at: i64,
+}
+
+impl From<CommandRecord> for SyncRecord {
+    fn from(record: CommandRecord) -> Self {
+        Self {
+            envelope: record.envelope,
+            seq: record.seq,
+            result_id: record.result_id,
+            created_at: record.created_at,
+        }
+    }
 }
 
 /// Response of `GET /vaults/{vault_id}/pull`.
@@ -190,21 +221,9 @@ impl Core {
         }
         let mut results = Vec::with_capacity(request.commands.len());
         for envelope in &request.commands {
-            let outcome = match self.execute(envelope.clone()) {
-                Ok(receipt) => PushOutcome::Applied {
-                    seq: receipt.seq,
-                    result_id: receipt.result_id,
-                },
-                Err(DomainError::Storage(detail)) => return Err(DomainError::Storage(detail)),
-                Err(err) => PushOutcome::Rejected {
-                    code: err.code().to_string(),
-                    message: err.to_string(),
-                    detail: None,
-                },
-            };
             results.push(PushResult {
                 command_id: envelope.id,
-                outcome,
+                outcome: PushOutcome::of(self.execute(envelope.clone()))?,
             });
         }
         Ok(PushResponse {
@@ -218,20 +237,7 @@ impl Core {
     /// for reasons the log does not record (who is a member) asks first, so
     /// that pushing the same command twice keeps answering the same seq.
     pub fn receipt(&self, command_id: Uuid) -> Result<Option<Receipt>> {
-        let row = self
-            .conn
-            .query_row(
-                "SELECT seq, result_id FROM commands WHERE id = ?1",
-                params![command_id],
-                |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<Uuid>>(1)?)),
-            )
-            .optional()?;
-        Ok(row.map(|(seq, result_id)| Receipt {
-            command_id,
-            seq,
-            result_id,
-            deduplicated: true,
-        }))
+        crate::engine::existing_receipt(&self.conn, command_id)
     }
 
     /// The server side of a pull: applied commands with `seq > since`, at
@@ -240,15 +246,7 @@ impl Core {
         let mut records = self.commands_since(vault_id, since)?;
         records.truncate(limit);
         Ok(PullResponse {
-            commands: records
-                .into_iter()
-                .map(|record| SyncRecord {
-                    envelope: record.envelope,
-                    seq: record.seq,
-                    result_id: record.result_id,
-                    created_at: record.created_at,
-                })
-                .collect(),
+            commands: records.into_iter().map(SyncRecord::from).collect(),
             last_seq: self.last_seq(vault_id)?,
         })
     }

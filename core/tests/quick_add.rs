@@ -571,3 +571,31 @@ fn a_day_and_month_on_a_line_looks_back_across_the_new_year() {
         other => panic!("unexpected {other:?}"),
     }
 }
+
+#[test]
+fn an_entry_built_as_a_transfer_is_refused_instead_of_panicking() {
+    let f = build_fixture();
+    for kind in [
+        TransactionKind::TransferWallet,
+        TransactionKind::TransferFlow,
+    ] {
+        let parsed = QuickAdd::Entry {
+            kind,
+            amount: 100,
+            note: None,
+            category: None,
+            wallet: None,
+            flow: None,
+            date: None,
+            person: None,
+        };
+        let err =
+            f.fx.core
+                .resolve_quick_add(f.fx.vault, &parsed, at(T0), &no_defaults(), &[])
+                .unwrap_err();
+        assert!(
+            matches!(err, QuickAddError::Domain { ref code, .. } if code == "invalid_command"),
+            "{err:?}"
+        );
+    }
+}

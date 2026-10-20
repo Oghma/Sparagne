@@ -10,7 +10,7 @@ mod recurring;
 mod update;
 
 use chrono::{DateTime, FixedOffset, Utc};
-use rusqlite::{OptionalExtension, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use uuid::Uuid;
 
 use crate::{
@@ -26,20 +26,8 @@ impl Core {
     /// returns the original receipt (idempotency).
     pub fn execute(&mut self, env: CommandEnvelope) -> Result<Receipt> {
         let tx = self.conn.transaction()?;
-        let existing = tx
-            .query_row(
-                "SELECT seq, result_id FROM commands WHERE id = ?1",
-                params![env.id],
-                |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<Uuid>>(1)?)),
-            )
-            .optional()?;
-        if let Some((seq, result_id)) = existing {
-            return Ok(Receipt {
-                command_id: env.id,
-                seq,
-                result_id,
-                deduplicated: true,
-            });
+        if let Some(receipt) = existing_receipt(&tx, env.id)? {
+            return Ok(receipt);
         }
 
         let now = Utc::now().timestamp();
@@ -53,6 +41,45 @@ impl Core {
             deduplicated: false,
         })
     }
+}
+
+/// The receipt of a command already in the log (`deduplicated`), `None` for
+/// one the log does not hold.
+pub(crate) fn existing_receipt(conn: &Connection, command_id: Uuid) -> Result<Option<Receipt>> {
+    let row = conn
+        .query_row(
+            "SELECT seq, result_id FROM commands WHERE id = ?1",
+            params![command_id],
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<Uuid>>(1)?)),
+        )
+        .optional()?;
+    Ok(row.map(|(seq, result_id)| Receipt {
+        command_id,
+        seq,
+        result_id,
+        deduplicated: true,
+    }))
+}
+
+/// An amount posted by a command must be positive.
+pub(crate) fn check_amount(amount: i64) -> Result<()> {
+    if amount > 0 {
+        Ok(())
+    } else {
+        Err(DomainError::InvalidAmount("amount must be > 0".to_string()))
+    }
+}
+
+/// A flow a command names must be active.
+pub(crate) fn require_active_flow(
+    tx: &Transaction<'_>,
+    vault_id: Uuid,
+    flow_id: Uuid,
+) -> Result<()> {
+    if load_flow(tx, vault_id, flow_id)?.archived {
+        return Err(DomainError::InvalidCommand("flow is archived".to_string()));
+    }
+    Ok(())
 }
 
 /// Next free local position in a vault's log. Rejected rows count: seq is a

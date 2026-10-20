@@ -49,6 +49,52 @@ pub fn setup() -> Fx {
     }
 }
 
+impl Fx {
+    /// Executes `cmd` on the fixture's vault as alice; panics on refusal.
+    pub fn run(&mut self, cmd: Command) -> Receipt {
+        run(&mut self.core, self.vault, cmd)
+    }
+
+    /// Executes `cmd` on the fixture's vault as alice, refusal and all.
+    pub fn try_run(&mut self, cmd: Command) -> Result<Receipt, DomainError> {
+        try_run(&mut self.core, self.vault, cmd)
+    }
+
+    /// Executes `cmd` and returns the id of what it created.
+    pub fn id(&mut self, cmd: Command) -> Uuid {
+        self.run(cmd).result_id.unwrap()
+    }
+}
+
+/// A fresh core with `vault`'s log replayed into it, checked to agree with
+/// `core` on the snapshot, every transaction, the categories and the log
+/// itself.
+pub fn replayed(core: &Core, vault: Uuid) -> Core {
+    let log = core.commands_since(vault, 0).unwrap();
+    let mut fresh = Core::open_in_memory().unwrap();
+    sparagne_core::replay(&log, &mut fresh).unwrap();
+    assert_eq!(
+        fresh.snapshot(vault).unwrap(),
+        core.snapshot(vault).unwrap()
+    );
+    assert_eq!(list(&fresh, vault, &all()), list(core, vault, &all()));
+    assert_eq!(
+        fresh.categories(vault, true).unwrap(),
+        core.categories(vault, true).unwrap()
+    );
+    let key = |r: &sparagne_core::CommandRecord| (r.seq, r.envelope.id, r.result_id);
+    assert_eq!(
+        fresh
+            .commands_since(vault, 0)
+            .unwrap()
+            .iter()
+            .map(key)
+            .collect::<Vec<_>>(),
+        log.iter().map(key).collect::<Vec<_>>()
+    );
+    fresh
+}
+
 pub fn run(core: &mut Core, vault: Uuid, cmd: Command) -> Receipt {
     core.execute(CommandEnvelope::new(vault, "alice", cmd))
         .unwrap()

@@ -190,22 +190,3 @@ delete `sparagne.sqlite-wal` and `sparagne.sqlite-shm` if present, and replace
 `~/Library/Containers/it.oghma.sparagne/Data/Library/Application Support/Sparagne/`
 for a signed (sandboxed) build and in `~/Library/Application Support/Sparagne/`
 for an unsigned one; `lsof -p $(pgrep -x Sparagne) | grep sqlite` tells which.
-
-### Import from v1
-
-A Sparagne v1 database is replayed into a v2 one as commands, so the history
-arrives with the rules of v2 applied to it:
-
-```sh
-cargo run -p sparagne_core --example import_v1 -- \
-    <v1.sqlite> \
-    ~/Library/Containers/it.oghma.sparagne/Data/Library/Application\ Support/Sparagne/sparagne.sqlite \
-    --author <username> [--vault <name>] [--tz Europe/Rome]
-```
-
-The v1 file is opened read-only; close the app before writing to its database.
-The import is idempotent, so running it again changes nothing. It prints a
-report with the counts per entity, the v1 fields that have no v2 counterpart
-and the commands the core refused. The imported commands sit in the outbox and
-reach the server at the first sync.
-

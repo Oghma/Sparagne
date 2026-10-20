@@ -1,8 +1,8 @@
-//! App-facing read queries: vault listing, single-transaction lookup, recent
-//! picker usage and period totals.
+//! App-facing read queries: vault listing, single-transaction lookup and
+//! recent picker usage.
 
 use chrono::{DateTime, FixedOffset, Offset, Utc};
-use rusqlite::{OptionalExtension, params, params_from_iter, types::Value};
+use rusqlite::{OptionalExtension, params};
 use uuid::Uuid;
 
 use crate::{
@@ -24,8 +24,6 @@ pub struct VaultView {
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct RecentUsage {
     pub categories: Vec<Uuid>,
-    pub wallets: Vec<Uuid>,
-    pub flows: Vec<Uuid>,
 }
 
 /// Sums of `transactions.amount` by kind over a `[from, to)` range, either
@@ -138,10 +136,9 @@ impl Core {
         })
     }
 
-    /// Ids of the most recently used categories, wallets and flows among
-    /// non-voided, non-transfer transactions with `occurred_at >= since`, at
-    /// most `limit` per list. System categories and the Unallocated flow are
-    /// excluded, as are archived wallets and flows.
+    /// Ids of the most recently used categories among non-voided,
+    /// non-transfer transactions with `occurred_at >= since`, at most `limit`.
+    /// System categories are excluded.
     pub fn recent_usage(
         &self,
         vault_id: Uuid,
@@ -166,104 +163,7 @@ impl Core {
             .query_map(params![vault_id, since, limit], |r| r.get(0))?
             .collect::<std::result::Result<Vec<Uuid>, _>>()?;
 
-        let mut wallet_stmt = self.conn.prepare(
-            "SELECT l.target_id
-             FROM legs l JOIN transactions t ON t.id = l.transaction_id
-             WHERE l.target_kind = 'wallet' AND t.vault_id = ?1 AND t.voided_at IS NULL
-               AND t.kind NOT IN ('transfer_wallet', 'transfer_flow')
-               AND t.occurred_at >= ?2
-               AND EXISTS (SELECT 1 FROM wallets w WHERE w.id = l.target_id AND w.archived = 0)
-             GROUP BY l.target_id
-             ORDER BY MAX(t.occurred_at) DESC, MAX(t.id) DESC
-             LIMIT ?3",
-        )?;
-        let wallets = wallet_stmt
-            .query_map(params![vault_id, since, limit], |r| r.get(0))?
-            .collect::<std::result::Result<Vec<Uuid>, _>>()?;
-
-        let mut flow_stmt = self.conn.prepare(
-            "SELECT l.target_id
-             FROM legs l JOIN transactions t ON t.id = l.transaction_id
-             WHERE l.target_kind = 'flow' AND t.vault_id = ?1 AND t.voided_at IS NULL
-               AND t.kind NOT IN ('transfer_wallet', 'transfer_flow')
-               AND t.occurred_at >= ?2
-               AND EXISTS (
-                   SELECT 1 FROM flows f WHERE f.id = l.target_id AND f.archived = 0
-                   AND (f.system_kind IS NULL OR f.system_kind != 'unallocated')
-               )
-             GROUP BY l.target_id
-             ORDER BY MAX(t.occurred_at) DESC, MAX(t.id) DESC
-             LIMIT ?3",
-        )?;
-        let flows = flow_stmt
-            .query_map(params![vault_id, since, limit], |r| r.get(0))?
-            .collect::<std::result::Result<Vec<Uuid>, _>>()?;
-
-        Ok(RecentUsage {
-            categories,
-            wallets,
-            flows,
-        })
-    }
-
-    /// Sums of `transactions.amount` by kind over `[from, to)`, non-voided,
-    /// transfers ignored. Either bound may be `None`; both `None` is all time.
-    pub fn period_totals(
-        &self,
-        vault_id: Uuid,
-        from: Option<DateTime<Utc>>,
-        to: Option<DateTime<Utc>>,
-    ) -> Result<PeriodTotals> {
-        if let (Some(from), Some(to)) = (from, to)
-            && from >= to
-        {
-            return Err(DomainError::InvalidCommand(
-                "invalid range: from must be < to".to_string(),
-            ));
-        }
-
-        let mut sql = String::from(
-            "SELECT t.kind, SUM(t.amount)
-             FROM transactions t
-             WHERE t.vault_id = ? AND t.voided_at IS NULL
-               AND t.kind NOT IN ('transfer_wallet', 'transfer_flow')",
-        );
-        let mut args: Vec<Value> = vec![Value::Blob(vault_id.as_bytes().to_vec())];
-        if let Some(from) = from {
-            sql.push_str(" AND t.occurred_at >= ?");
-            args.push(Value::Integer(from.timestamp()));
-        }
-        if let Some(to) = to {
-            sql.push_str(" AND t.occurred_at < ?");
-            args.push(Value::Integer(to.timestamp()));
-        }
-        sql.push_str(" GROUP BY t.kind");
-
-        let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt
-            .query_map(params_from_iter(args.iter()), |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
-        let mut income = 0i64;
-        let mut expense = 0i64;
-        let mut refund = 0i64;
-        for (kind, sum) in rows {
-            match kind.as_str() {
-                "income" => income = sum,
-                "expense" => expense = sum,
-                "refund" => refund = sum,
-                _ => {}
-            }
-        }
-
-        Ok(PeriodTotals {
-            income,
-            expense,
-            refund,
-            net_expense: (expense - refund).max(0),
-        })
+        Ok(RecentUsage { categories })
     }
 }
 

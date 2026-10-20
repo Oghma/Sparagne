@@ -9,6 +9,8 @@
 use rusqlite::{OptionalExtension, Transaction, params};
 use uuid::Uuid;
 
+use super::require_active_flow;
+
 use crate::{
     CommandEnvelope, DomainError, Result, TransactionKind, TransactionPatch,
     command::explicit_person,
@@ -237,13 +239,6 @@ fn amount_on(legs: &[Leg], kind: Target, id: Uuid) -> i64 {
         .filter(|leg| leg.kind == kind && leg.id == id)
         .map(|leg| leg.amount)
         .sum()
-}
-
-fn require_active_flow(tx: &Transaction<'_>, vault_id: Uuid, flow_id: Uuid) -> Result<()> {
-    if super::load_flow(tx, vault_id, flow_id)?.archived {
-        return Err(DomainError::InvalidCommand("flow is archived".to_string()));
-    }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------

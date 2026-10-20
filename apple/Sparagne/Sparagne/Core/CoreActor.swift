@@ -250,10 +250,6 @@ actor CoreActor {
         try await visit { try $0.flowBalanceRanges(vaultId: vaultId, from: from) }
     }
 
-    func categories(vaultId: Uuid, includeArchived: Bool = false) async throws -> [CategoryView] {
-        try await visit { try $0.categories(vaultId: vaultId, includeArchived: includeArchived) }
-    }
-
     func aliases(vaultId: Uuid) async throws -> [AliasView] {
         try await visit { try $0.aliases(vaultId: vaultId) }
     }
@@ -338,32 +334,9 @@ actor CoreActor {
         try await visit { try $0.listRecurring(vaultId: vaultId, includeArchived: includeArchived) }
     }
 
-    /// Templates with periods still waiting for a decision, as of `today`
-    /// (the app passes "today" in the system timezone).
-    func pendingRecurring(vaultId: Uuid, today: NaiveDate) async throws -> [PendingRecurring] {
-        try await visit { try $0.pendingRecurring(vaultId: vaultId, today: today) }
-    }
-
     /// The periods of one template already recorded or skipped, oldest first.
     func recurringRuns(vaultId: Uuid, recurringId: Uuid) async throws -> [RecurringRunView] {
         try await visit { try $0.recurringRuns(vaultId: vaultId, recurringId: recurringId) }
-    }
-
-    // MARK: - Allocation plan
-    //
-    // The plan, its period due and the base it would share out also come
-    // with every `load`; these are for the screens that need them again.
-
-    func allocationPlan(vaultId: Uuid) async throws -> AllocationPlanView? {
-        try await visit { try $0.allocationPlan(vaultId: vaultId) }
-    }
-
-    func pendingAllocation(vaultId: Uuid, today: NaiveDate) async throws -> PendingAllocation? {
-        try await visit { try $0.pendingAllocation(vaultId: vaultId, today: today) }
-    }
-
-    func allocationBase(vaultId: Uuid) async throws -> AllocationBase {
-        try await visit { try $0.allocationBase(vaultId: vaultId) }
     }
 
     /// `lines` worked out on `total` against the envelopes as they are now;
@@ -384,16 +357,6 @@ actor CoreActor {
         cursor: String?
     ) async throws -> Page {
         try await visit { try $0.listTransactions(vaultId: vaultId, filter: filter, limit: limit, cursor: cursor) }
-    }
-
-    /// `nil` bounds mean "open end": both nil is all time.
-    func totals(vaultId: Uuid, from: UtcDateTime?, to: UtcDateTime?) async throws -> PeriodTotals {
-        try await visit { try $0.periodTotals(vaultId: vaultId, from: from, to: to) }
-    }
-
-    /// The people who appear in the PERSONA column.
-    func people(vaultId: Uuid) async throws -> [String] {
-        try await visit { try $0.people(vaultId: vaultId) }
     }
 
     /// Turns a parsed quick-add line into a command plus the ids its names
@@ -585,14 +548,6 @@ actor CoreActor {
     /// exist yet.
     func backup(to path: String) async throws {
         try await visit { try $0.backupTo(path: path) }
-    }
-
-    func rejectedCommands(vaultId: Uuid) async throws -> [RejectedCommand] {
-        try await visit { try $0.rejectedCommands(vaultId: vaultId) }
-    }
-
-    func dismissRejected(vaultId: Uuid, commandId: Uuid) async throws {
-        try await visit { try $0.dismissRejected(vaultId: vaultId, commandId: commandId) }
     }
 
     /// The outbox count over every vault and everything still held as

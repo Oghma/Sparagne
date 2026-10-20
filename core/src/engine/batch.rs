@@ -7,10 +7,8 @@
 //! results and rebases all work row by row on the log, keyed by command id.
 
 use chrono::Utc;
-use rusqlite::{OptionalExtension, params};
-use uuid::Uuid;
 
-use super::{apply_envelope, next_seq};
+use super::{apply_envelope, existing_receipt, next_seq};
 use crate::{CommandEnvelope, Core, DomainError, Receipt, Result};
 
 impl Core {
@@ -38,20 +36,8 @@ impl Core {
         let now = Utc::now().timestamp();
         let mut receipts = Vec::with_capacity(envelopes.len());
         for env in &envelopes {
-            let existing = tx
-                .query_row(
-                    "SELECT seq, result_id FROM commands WHERE id = ?1",
-                    params![env.id],
-                    |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<Uuid>>(1)?)),
-                )
-                .optional()?;
-            if let Some((seq, result_id)) = existing {
-                receipts.push(Receipt {
-                    command_id: env.id,
-                    seq,
-                    result_id,
-                    deduplicated: true,
-                });
+            if let Some(receipt) = existing_receipt(&tx, env.id)? {
+                receipts.push(receipt);
                 continue;
             }
             // Dropping `tx` on the early return rolls back every command

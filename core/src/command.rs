@@ -635,6 +635,18 @@ impl CommandEnvelope {
         }
     }
 
+    /// Envelope under an id the caller derived, so that writing the same
+    /// thing twice is one command: a statement row, a claim, a replacement.
+    #[must_use]
+    pub fn with_id(id: Uuid, vault_id: Uuid, author: impl Into<String>, command: Command) -> Self {
+        Self {
+            id,
+            vault_id,
+            author: author.into(),
+            command,
+        }
+    }
+
     /// `CreateVault` envelope: the vault id equals the command id.
     #[must_use]
     pub fn create_vault(
@@ -668,7 +680,7 @@ pub struct Receipt {
 }
 
 /// A command as stored in the log.
-#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CommandRecord {
     pub envelope: CommandEnvelope,
     /// Position in the local log.

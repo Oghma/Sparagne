@@ -11,6 +11,8 @@ use chrono::{DateTime, FixedOffset, NaiveDate};
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use uuid::Uuid;
 
+use super::check_amount;
+
 use crate::{
     CommandEnvelope, Core, DomainError, RecurringPatch, Result, TransactionKind,
     command::explicit_person,
@@ -497,14 +499,6 @@ fn check_kind(kind: TransactionKind) -> Result<()> {
     match kind {
         TransactionKind::Income | TransactionKind::Expense => Ok(()),
         _ => Err(invalid("recurring kind must be income or expense")),
-    }
-}
-
-fn check_amount(amount: i64) -> Result<()> {
-    if amount > 0 {
-        Ok(())
-    } else {
-        Err(DomainError::InvalidAmount("amount must be > 0".to_string()))
     }
 }
 

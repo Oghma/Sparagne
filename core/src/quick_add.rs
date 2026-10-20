@@ -671,7 +671,10 @@ impl Core {
                     TransactionKind::Expense => Command::Expense(entry),
                     TransactionKind::Refund => Command::Refund(entry),
                     TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
-                        unreachable!("quick_add entries are never transfers")
+                        return Err(DomainError::InvalidCommand(
+                            "a quick-add entry cannot be a transfer".to_string(),
+                        )
+                        .into());
                     }
                 };
                 Ok(ResolvedQuickAdd {

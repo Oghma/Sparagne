@@ -22,13 +22,13 @@ use uuid::Uuid;
 use crate::{
     AliasView, AllocationBase, AllocationLine, AllocationPlanView, AllocationPreview,
     AllocationRunView, BucketCategoryTotals, BucketPersonTotals, BucketTargetTotals,
-    CategorySuggestion, CategoryTotals, CategoryView, Command, CommandEnvelope, CommandRecord,
-    Core, Currency, DomainError, FlowBalanceRange, FlowPersonTotals, MergePreview, Money, Page,
-    PendingAllocation, PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView,
-    RecurringView, RejectedCommand, Schedule, StatementColumnValue, StatementDetection,
-    StatementFormatGuess, StatementMapping, StatementOptions, StatementPreset, StatementPreview,
-    StatementReport, StatementRowOverride, SyncReport, SyncState, TargetKind, TopExpense,
-    TransactionFilter, TransactionView, VaultSnapshot, VaultView,
+    CategorySuggestion, CategoryTotals, CategoryView, Command, CommandEnvelope, Core, Currency,
+    DomainError, FlowBalanceRange, FlowPersonTotals, MergePreview, Money, Page, PendingAllocation,
+    PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView, RecurringView,
+    RejectedCommand, Schedule, StatementColumnValue, StatementDetection, StatementFormatGuess,
+    StatementMapping, StatementOptions, StatementPreset, StatementPreview, StatementReport,
+    StatementRowOverride, SyncReport, SyncState, TargetKind, TopExpense, TransactionFilter,
+    VaultSnapshot, VaultView,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
     statement,
 };
@@ -215,15 +215,6 @@ impl CoreHandle {
             .list_transactions(vault_id, &filter, to_usize(limit), cursor.as_deref())
     }
 
-    /// One transaction with its legs, voided included.
-    pub fn transaction(
-        &self,
-        vault_id: Uuid,
-        transaction_id: Uuid,
-    ) -> Result<TransactionView, DomainError> {
-        self.lock()?.transaction(vault_id, transaction_id)
-    }
-
     /// Ids of the entities used most recently, for picker ordering.
     pub fn recent_usage(
         &self,
@@ -243,18 +234,6 @@ impl CoreHandle {
         since: UtcDateTime,
     ) -> Result<Vec<Option<CategorySuggestion>>, DomainError> {
         self.lock()?.suggest_categories(vault_id, &notes, since)
-    }
-
-    /// Sums by kind over `[from, to)`. Either bound may be `nil`; both `nil`
-    /// is all time.
-    #[uniffi::method(default(from = None, to = None))]
-    pub fn period_totals(
-        &self,
-        vault_id: Uuid,
-        from: Option<UtcDateTime>,
-        to: Option<UtcDateTime>,
-    ) -> Result<PeriodTotals, DomainError> {
-        self.lock()?.period_totals(vault_id, from, to)
     }
 
     // -- analytics -------------------------------------------------------
@@ -413,15 +392,6 @@ impl CoreHandle {
         limit: u32,
     ) -> Result<Vec<AllocationRunView>, DomainError> {
         self.lock()?.allocation_runs(vault_id, limit)
-    }
-
-    /// Log entries of a vault with `seq > since_seq`, in order.
-    pub fn commands_since(
-        &self,
-        vault_id: Uuid,
-        since_seq: i64,
-    ) -> Result<Vec<CommandRecord>, DomainError> {
-        self.lock()?.commands_since(vault_id, since_seq)
     }
 
     // -- Sync ---------------------------------------------------------------
@@ -593,14 +563,6 @@ pub fn create_vault_envelope(author: String, name: String, currency: Currency) -
 #[uniffi::export]
 pub fn parse_quick_add(input: String, currency: Currency) -> Result<QuickAdd, QuickAddError> {
     quick_add::parse(&input, currency)
-}
-
-/// `<sign><major>.<minor> <CODE>`, e.g. `-12.50 EUR`. Debug and test output;
-/// the app formats for display with the system formatter.
-#[must_use]
-#[uniffi::export]
-pub fn format_money(minor: i64, currency: Currency) -> String {
-    Money::new(minor).format(currency)
 }
 
 /// Parses a major-unit amount into minor units. No grouping separators.

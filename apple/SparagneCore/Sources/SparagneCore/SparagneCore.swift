@@ -647,11 +647,6 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func categoryTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime, person: String?) throws  -> [CategoryTotals]
     
     /**
-     * Log entries of a vault with `seq > since_seq`, in order.
-     */
-    func commandsSince(vaultId: Uuid, sinceSeq: Int64) throws  -> [CommandRecord]
-    
-    /**
      * Vaults a `DeleteVault` removed whose log is still here: their outbox
      * has to be pushed like any other, the deletion first of all.
      */
@@ -730,12 +725,6 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
      * Distinct persons of live transactions: the PERSONA segmented control.
      */
     func people(vaultId: Uuid) throws  -> [String]
-    
-    /**
-     * Sums by kind over `[from, to)`. Either bound may be `nil`; both `nil`
-     * is all time.
-     */
-    func periodTotals(vaultId: Uuid, from: UtcDateTime?, to: UtcDateTime?) throws  -> PeriodTotals
     
     /**
      * `lines` worked out on `total` against the vault's envelopes as they
@@ -830,11 +819,6 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
      * The heaviest expenses of `[from, to)`, largest first.
      */
     func topExpenses(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime, person: String?, limit: UInt32) throws  -> [TopExpense]
-    
-    /**
-     * One transaction with its legs, voided included.
-     */
-    func transaction(vaultId: Uuid, transactionId: Uuid) throws  -> TransactionView
     
     /**
      * One vault by id, `nil` when the database does not hold it.
@@ -1090,20 +1074,6 @@ open func categoryTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime, pers
 }
     
     /**
-     * Log entries of a vault with `seq > since_seq`, in order.
-     */
-open func commandsSince(vaultId: Uuid, sinceSeq: Int64)throws  -> [CommandRecord]  {
-    return try  FfiConverterSequenceTypeCommandRecord.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
-        uniffiCallStatus in
-    uniffi_sparagne_core_fn_method_corehandle_commands_since(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(vaultId),
-        FfiConverterInt64.lower(sinceSeq),uniffiCallStatus
-    )
-})
-}
-    
-    /**
      * Vaults a `DeleteVault` removed whose log is still here: their outbox
      * has to be pushed like any other, the deletion first of all.
      */
@@ -1313,22 +1283,6 @@ open func people(vaultId: Uuid)throws  -> [String]  {
     uniffi_sparagne_core_fn_method_corehandle_people(
             self.uniffiCloneHandle(),
         FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
-    )
-})
-}
-    
-    /**
-     * Sums by kind over `[from, to)`. Either bound may be `nil`; both `nil`
-     * is all time.
-     */
-open func periodTotals(vaultId: Uuid, from: UtcDateTime? = nil, to: UtcDateTime? = nil)throws  -> PeriodTotals  {
-    return try  FfiConverterTypePeriodTotals_lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
-        uniffiCallStatus in
-    uniffi_sparagne_core_fn_method_corehandle_period_totals(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(vaultId),
-        FfiConverterOptionTypeUtcDateTime.lower(from),
-        FfiConverterOptionTypeUtcDateTime.lower(to),uniffiCallStatus
     )
 })
 }
@@ -1587,20 +1541,6 @@ open func topExpenses(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime, person:
         FfiConverterTypeUtcDateTime_lower(to),
         FfiConverterOptionString.lower(person),
         FfiConverterUInt32.lower(limit),uniffiCallStatus
-    )
-})
-}
-    
-    /**
-     * One transaction with its legs, voided included.
-     */
-open func transaction(vaultId: Uuid, transactionId: Uuid)throws  -> TransactionView  {
-    return try  FfiConverterTypeTransactionView_lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
-        uniffiCallStatus in
-    uniffi_sparagne_core_fn_method_corehandle_transaction(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(vaultId),
-        FfiConverterTypeUuid_lower(transactionId),uniffiCallStatus
     )
 })
 }
@@ -2871,87 +2811,6 @@ public func FfiConverterTypeCommandEnvelope_lower(_ value: CommandEnvelope) -> R
 
 
 /**
- * A command as stored in the log.
- */
-public struct CommandRecord: Equatable, Hashable, Codable {
-    public var envelope: CommandEnvelope
-    /**
-     * Position in the local log.
-     */
-    public var seq: Int64
-    public var createdAt: Int64
-    public var resultId: Uuid?
-    /**
-     * Position the server gave it; `None` while the command is in the outbox.
-     */
-    public var serverSeq: Int64?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(envelope: CommandEnvelope, 
-        /**
-         * Position in the local log.
-         */seq: Int64, createdAt: Int64, resultId: Uuid?, 
-        /**
-         * Position the server gave it; `None` while the command is in the outbox.
-         */serverSeq: Int64?) {
-        self.envelope = envelope
-        self.seq = seq
-        self.createdAt = createdAt
-        self.resultId = resultId
-        self.serverSeq = serverSeq
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension CommandRecord: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCommandRecord: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommandRecord {
-        return
-            try CommandRecord(
-                envelope: FfiConverterTypeCommandEnvelope.read(from: &buf), 
-                seq: FfiConverterInt64.read(from: &buf), 
-                createdAt: FfiConverterInt64.read(from: &buf), 
-                resultId: FfiConverterOptionTypeUuid.read(from: &buf), 
-                serverSeq: FfiConverterOptionInt64.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: CommandRecord, into buf: inout [UInt8]) {
-        FfiConverterTypeCommandEnvelope.write(value.envelope, into: &buf)
-        FfiConverterInt64.write(value.seq, into: &buf)
-        FfiConverterInt64.write(value.createdAt, into: &buf)
-        FfiConverterOptionTypeUuid.write(value.resultId, into: &buf)
-        FfiConverterOptionInt64.write(value.serverSeq, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCommandRecord_lift(_ buf: RustBuffer) throws -> CommandRecord {
-    return try FfiConverterTypeCommandRecord.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCommandRecord_lower(_ value: CommandRecord) -> RustBuffer {
-    return FfiConverterTypeCommandRecord.lower(value)
-}
-
-
-/**
  * Payload shared by income, expense and refund.
  */
 public struct Entry: Equatable, Hashable, Codable {
@@ -4024,15 +3883,11 @@ public func FfiConverterTypeReceipt_lower(_ value: Receipt) -> RustBuffer {
  */
 public struct RecentUsage: Equatable, Hashable, Codable {
     public var categories: [Uuid]
-    public var wallets: [Uuid]
-    public var flows: [Uuid]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(categories: [Uuid], wallets: [Uuid], flows: [Uuid]) {
+    public init(categories: [Uuid]) {
         self.categories = categories
-        self.wallets = wallets
-        self.flows = flows
     }
 
     
@@ -4051,16 +3906,12 @@ public struct FfiConverterTypeRecentUsage: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RecentUsage {
         return
             try RecentUsage(
-                categories: FfiConverterSequenceTypeUuid.read(from: &buf), 
-                wallets: FfiConverterSequenceTypeUuid.read(from: &buf), 
-                flows: FfiConverterSequenceTypeUuid.read(from: &buf)
+                categories: FfiConverterSequenceTypeUuid.read(from: &buf)
         )
     }
 
     public static func write(_ value: RecentUsage, into buf: inout [UInt8]) {
         FfiConverterSequenceTypeUuid.write(value.categories, into: &buf)
-        FfiConverterSequenceTypeUuid.write(value.wallets, into: &buf)
-        FfiConverterSequenceTypeUuid.write(value.flows, into: &buf)
     }
 }
 
@@ -10678,31 +10529,6 @@ fileprivate struct FfiConverterSequenceTypeCommandEnvelope: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeCommandRecord: FfiConverterRustBuffer {
-    typealias SwiftType = [CommandRecord]
-
-    public static func write(_ value: [CommandRecord], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeCommandRecord.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CommandRecord] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [CommandRecord]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeCommandRecord.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterSequenceTypeFlowBalanceRange: FfiConverterRustBuffer {
     typealias SwiftType = [FlowBalanceRange]
 
@@ -11706,19 +11532,6 @@ public func encodeStatementMapping(mapping: StatementMapping) -> String  {
 })
 }
 /**
- * `<sign><major>.<minor> <CODE>`, e.g. `-12.50 EUR`. Debug and test output;
- * the app formats for display with the system formatter.
- */
-public func formatMoney(minor: Int64, currency: Currency) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_sparagne_core_fn_func_format_money(
-        FfiConverterInt64.lower(minor),
-        FfiConverterTypeCurrency_lower(currency),uniffiCallStatus
-    )
-})
-}
-/**
  * The date format and decimal mark the values of a statement's date and
  * amount columns are written in, for a mapping that starts blank.
  */
@@ -11855,9 +11668,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_func_encode_statement_mapping() != 8699) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sparagne_core_checksum_func_format_money() != 19538) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_sparagne_core_checksum_func_guess_statement_formats() != 62778) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -11915,9 +11725,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_method_corehandle_category_totals() != 11373) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sparagne_core_checksum_method_corehandle_commands_since() != 55432) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_sparagne_core_checksum_method_corehandle_deleted_vaults() != 28486) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -11961,9 +11768,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_people() != 47772) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_sparagne_core_checksum_method_corehandle_period_totals() != 68) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_preview_allocation() != 37697) {
@@ -12015,9 +11819,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_top_expenses() != 20349) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_sparagne_core_checksum_method_corehandle_transaction() != 29047) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_vault() != 58182) {
