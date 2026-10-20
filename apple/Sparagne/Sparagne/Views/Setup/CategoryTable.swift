@@ -71,7 +71,7 @@ struct CategoryTable: View {
             newName = ""
             focus = nil
         }
-        .onChange(of: focus) { _, new in Task { await commitIfLeft(new) } }
+        .onChange(of: focus) { old, new in Task { await commitIfLeft(from: old, to: new) } }
         // Turned read-only under an open row: it could not be saved.
         .onChange(of: store.isReadOnly) { _, _ in cancel() }
         .task(id: newName) {
@@ -236,9 +236,17 @@ struct CategoryTable: View {
     }
 
     /// The commit on blur a spreadsheet does: a click on another row, on the
-    /// empty line or away from the table all write the line being left.
-    private func commitIfLeft(_ new: CategoryCellFocus?) async {
-        guard let editing, new?.row != editing else { return }
+    /// empty line or away from the table all write the line being left, as
+    /// `EnvelopeTable.focusMoved` does. The row's own context menu resigns
+    /// the field without giving the focus to anything: a blur while the
+    /// pointer is over the open row is not a departure.
+    private func commitIfLeft(from old: CategoryCellFocus?, to new: CategoryCellFocus?) async {
+        guard let editing else { return }
+        if let new {
+            guard new.row != editing else { return }
+        } else {
+            guard old?.row == editing, hovered != editing else { return }
+        }
         await commit(editing)
     }
 
