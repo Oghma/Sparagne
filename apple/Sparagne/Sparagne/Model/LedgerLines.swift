@@ -154,11 +154,7 @@ extension LedgerDate {
     /// number in the DATA column, in the locale's own case and without the
     /// trailing dot some locales add, as `shortMonth` does.
     static func weekday(_ date: Date, calendar: Calendar = .current, locale: Locale = .autoupdatingCurrent) -> String {
-        var symbols = Calendar(identifier: .gregorian)
-        symbols.locale = locale
-        let names = symbols.shortStandaloneWeekdaySymbols
-        let index = calendar.component(.weekday, from: date) - 1
-        guard names.indices.contains(index) else { return "" }
-        return names[index].replacingOccurrences(of: ".", with: "")
+        weekdayName(calendar.component(.weekday, from: date), style: .shortStandalone, locale: locale)
+            .replacingOccurrences(of: ".", with: "")
     }
 }

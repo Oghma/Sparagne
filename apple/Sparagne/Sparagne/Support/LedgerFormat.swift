@@ -93,22 +93,56 @@ enum LedgerDate {
 
     /// `"ago"`, lowercased and stripped of the trailing dot some locales add.
     static func shortMonth(_ month: Int, locale: Locale = .autoupdatingCurrent) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = locale
-        let symbols = calendar.shortStandaloneMonthSymbols
-        let index = month - 1
-        guard symbols.indices.contains(index) else { return "\(month)" }
-        return symbols[index].replacingOccurrences(of: ".", with: "").lowercased()
+        monthName(month, style: .shortStandalone, locale: locale)
+            .replacingOccurrences(of: ".", with: "")
+            .lowercased()
     }
 
     /// `"AGOSTO"`.
     static func fullMonth(_ month: Int, locale: Locale = .autoupdatingCurrent) -> String {
+        monthName(month, style: .standalone, locale: locale).uppercased()
+    }
+
+    /// Which of the Gregorian calendar's names: as a date writes it
+    /// (`.format`, "5 settembre"), on its own (`.standalone`, a heading), or
+    /// abbreviated on its own (`.shortStandalone`, a column). They differ in
+    /// the languages that inflect a month inside a date.
+    enum NameStyle {
+        case format, standalone, shortStandalone
+    }
+
+    /// The locale's name of a 1-based `month`, in the locale's own case; the
+    /// number itself when it is out of range.
+    static func monthName(_ month: Int, style: NameStyle, locale: Locale = .autoupdatingCurrent) -> String {
+        let calendar = gregorian(locale)
+        let symbols = switch style {
+        case .format: calendar.monthSymbols
+        case .standalone: calendar.standaloneMonthSymbols
+        case .shortStandalone: calendar.shortStandaloneMonthSymbols
+        }
+        let index = month - 1
+        return symbols.indices.contains(index) ? symbols[index] : "\(month)"
+    }
+
+    /// The locale's name of a `weekday` numbered as `Calendar` numbers them,
+    /// Sunday = 1 … Saturday = 7, in the locale's own case; the number
+    /// itself when it is out of range. An ISO weekday (Monday = 1 … Sunday
+    /// = 7) is `iso % 7 + 1`.
+    static func weekdayName(_ weekday: Int, style: NameStyle, locale: Locale = .autoupdatingCurrent) -> String {
+        let calendar = gregorian(locale)
+        let symbols = switch style {
+        case .format: calendar.weekdaySymbols
+        case .standalone: calendar.standaloneWeekdaySymbols
+        case .shortStandalone: calendar.shortStandaloneWeekdaySymbols
+        }
+        let index = weekday - 1
+        return symbols.indices.contains(index) ? symbols[index] : "\(weekday)"
+    }
+
+    private static func gregorian(_ locale: Locale) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = locale
-        let symbols = calendar.standaloneMonthSymbols
-        let index = month - 1
-        guard symbols.indices.contains(index) else { return "\(month)" }
-        return symbols[index].uppercased()
+        return calendar
     }
 
     /// `"A"`: the single letter under a bar in the twelve-month strip.

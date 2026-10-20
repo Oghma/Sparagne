@@ -201,6 +201,48 @@ struct ScheduleFormattingTests {
     }
 }
 
+/// The month and weekday names the date labels are made of, one source for
+/// all of them.
+struct CalendarNameTests {
+    private static let english = Locale(identifier: "en_US")
+    private static let italian = Locale(identifier: "it_IT")
+
+    @Test("A month is named in the locale's own case, in each style")
+    func monthNames() {
+        #expect(LedgerDate.monthName(9, style: .format, locale: Self.english) == "September")
+        #expect(LedgerDate.monthName(9, style: .standalone, locale: Self.italian) == "settembre")
+        #expect(LedgerDate.monthName(8, style: .shortStandalone, locale: Self.english) == "Aug")
+        #expect(LedgerDate.shortMonth(8, locale: Self.italian) == "ago")
+        #expect(LedgerDate.fullMonth(8, locale: Self.italian) == "AGOSTO")
+        for month in 1...12 {
+            #expect(LedgerDate.monthName(month, style: .format, locale: Self.italian)
+                == ScheduleFormatting.monthName(UInt8(month), locale: Self.italian))
+            #expect(LedgerDate.monthName(month, style: .standalone, locale: Self.italian)
+                == SummaryText.monthName(month, locale: Self.italian))
+        }
+    }
+
+    @Test("A weekday counts from Sunday, as Calendar does, and an ISO weekday maps onto it")
+    func weekdayNames() {
+        #expect(LedgerDate.weekdayName(1, style: .format, locale: Self.english) == "Sunday")
+        #expect(LedgerDate.weekdayName(2, style: .format, locale: Self.italian) == "lunedì")
+        #expect(LedgerDate.weekdayName(5, style: .shortStandalone, locale: Self.english) == "Thu")
+        for iso in UInt8(1)...7 {
+            #expect(LedgerDate.weekdayName(Int(iso) % 7 + 1, style: .format, locale: Self.italian)
+                == ScheduleFormatting.weekdayName(iso, locale: Self.italian))
+        }
+    }
+
+    @Test("A number out of range is written as the number")
+    func outOfRange() {
+        #expect(LedgerDate.monthName(13, style: .format, locale: Self.english) == "13")
+        #expect(LedgerDate.monthName(0, style: .standalone, locale: Self.english) == "0")
+        #expect(LedgerDate.weekdayName(8, style: .format, locale: Self.english) == "8")
+        #expect(LedgerDate.shortMonth(13, locale: Self.english) == "13")
+        #expect(LedgerDate.fullMonth(0, locale: Self.english) == "0")
+    }
+}
+
 /// Savings as a share of income, on the summary card and the ledger's panel.
 struct SavingsRateTests {
     @Test("A rate is a whole percent; with no income there is none, for a dash")
