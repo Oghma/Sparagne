@@ -18,7 +18,7 @@ use crate::{
     config::Config,
     db::ServerDb,
     error::{ApiError, ApiResult},
-    ratelimit::{Limits, RateLimiter},
+    ratelimit::RateLimiter,
 };
 
 const VAULTS_DB: &str = "vaults.sqlite";
@@ -85,7 +85,7 @@ impl AppState {
                 config,
                 argon,
                 dummy_hash,
-                limiter: RateLimiter::new(Limits::from(&config)),
+                limiter: RateLimiter::new(config),
             }),
         })
     }

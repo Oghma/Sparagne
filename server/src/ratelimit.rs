@@ -1,20 +1,11 @@
-//! Brakes on guessing passwords and on mass registration, in memory
-//! (`docs/DEPLOY.md` §2).
-//!
-//! Three kinds of bucket share one map: logins per username, logins per
-//! client address, registrations per client address. A bucket counts hits
-//! inside a window that opens with its first hit; the hit that reaches the
-//! limit blocks the key for a whole window from then on. While a key is
-//! blocked the request is refused with `429` before any password is hashed,
-//! the right password included.
-//!
-//! A login is counted when it starts, not when it fails: a burst of parallel
-//! guesses cannot all slip past the check before the first one is recorded.
-//! A login that succeeds gives its hit back to the address and clears the
-//! username's bucket.
-//!
-//! Every method takes `now`, so tests move the clock by hand. The map lives
-//! in the process: a restart forgets it.
+//! In-memory brakes on guessing passwords and on mass registration
+//! (`docs/DEPLOY.md` §2): logins count per username and per client address,
+//! registrations per address. A bucket counts hits in a window that opens
+//! with its first hit; the hit that reaches the limit blocks the key for a
+//! whole window, during which the request is `429` before any password is
+//! hashed. A login counts when it starts, so a burst of parallel guesses
+//! cannot slip past the check, and one that succeeds gives its hit back.
+//! Every method takes `now`, so tests move the clock; a restart forgets it all.
 
 use std::{
     collections::HashMap,
@@ -30,31 +21,8 @@ use crate::{
 
 /// Above this many buckets, the expired ones are dropped.
 const PRUNE_ABOVE: usize = 10_000;
-/// Registration attempts per client address per [`REGISTER_WINDOW`].
-pub const REGISTER_MAX_ATTEMPTS: u32 = 10;
-pub const REGISTER_WINDOW: Duration = Duration::from_secs(3_600);
-
-/// The limits, from [`Config`] except for registration, which is fixed.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Limits {
-    pub login_max_failures: u32,
-    pub ip_max_failures: u32,
-    pub login_window: Duration,
-    pub register_max_attempts: u32,
-    pub register_window: Duration,
-}
-
-impl From<&Config> for Limits {
-    fn from(config: &Config) -> Self {
-        Self {
-            login_max_failures: config.login_max_failures,
-            ip_max_failures: config.ip_max_failures,
-            login_window: Duration::from_secs(config.login_window_secs),
-            register_max_attempts: REGISTER_MAX_ATTEMPTS,
-            register_window: REGISTER_WINDOW,
-        }
-    }
-}
+const REGISTER_MAX_ATTEMPTS: u32 = 10;
+const REGISTER_WINDOW: Duration = Duration::from_secs(3_600);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum Key {
@@ -98,53 +66,29 @@ impl Bucket {
 /// The per-process limiter held by [`AppState`](crate::AppState).
 #[derive(Debug)]
 pub struct RateLimiter {
-    limits: Limits,
+    config: Config,
     buckets: Mutex<HashMap<Key, Bucket>>,
 }
 
 impl RateLimiter {
     #[must_use]
-    pub fn new(limits: Limits) -> Self {
+    pub fn new(config: Config) -> Self {
         Self {
-            limits,
+            config,
             buckets: Mutex::new(HashMap::new()),
         }
     }
 
-    /// Starts a login (or a password change) for `username` from `from`:
-    /// `429` while either is blocked, otherwise the attempt is counted
-    /// against both. `username` is `None` for a name no account can have,
-    /// which gets no bucket of its own.
+    /// Starts a login (or a password change) for `username` from `from`,
+    /// counted against both. `username` is `None` for a name no account can
+    /// have, which gets no bucket of its own.
     pub fn begin_login(&self, username: Option<&str>, from: IpAddr, now: Instant) -> ApiResult<()> {
-        let limits = self.limits;
-        let user_key = username.map(|name| Key::Username(name.to_string()));
-        let ip_key = Key::LoginFrom(network(from));
-        let mut buckets = self.lock();
-        let waits = [user_key.as_ref(), Some(&ip_key)]
-            .into_iter()
-            .flatten()
-            .filter_map(|key| buckets.get(key).and_then(|b| b.blocked_for(now)));
-        if let Some(wait) = waits.max() {
-            return Err(too_many(wait));
-        }
-        if let Some(key) = user_key {
-            hit(
-                &mut buckets,
-                key,
-                limits.login_max_failures,
-                limits.login_window,
-                now,
-            );
-        }
-        hit(
-            &mut buckets,
-            ip_key,
-            limits.ip_max_failures,
-            limits.login_window,
-            now,
-        );
-        prune(&mut buckets, now);
-        Ok(())
+        let config = &self.config;
+        let user =
+            username.map(|name| (Key::Username(name.to_string()), config.login_max_failures));
+        let address = (Key::LoginFrom(network(from)), config.ip_max_failures);
+        let window = Duration::from_secs(config.login_window_secs);
+        self.begin(user.into_iter().chain([address]).collect(), window, now)
     }
 
     /// The password was right: the username starts over and the address gets
@@ -154,40 +98,32 @@ impl RateLimiter {
         buckets.remove(&Key::Username(username.to_string()));
         if let Some(bucket) = buckets.get_mut(&Key::LoginFrom(network(from))) {
             bucket.hits = bucket.hits.saturating_sub(1);
-            if bucket.hits < self.limits.ip_max_failures {
+            if bucket.hits < self.config.ip_max_failures {
                 bucket.blocked_until = None;
             }
         }
     }
 
-    /// Counts a registration attempt from `from`, `429` past the limit.
     pub fn begin_register(&self, from: IpAddr, now: Instant) -> ApiResult<()> {
-        let limits = self.limits;
         let key = Key::RegisterFrom(network(from));
+        self.begin(vec![(key, REGISTER_MAX_ATTEMPTS)], REGISTER_WINDOW, now)
+    }
+
+    /// `429` while any of the keys is blocked, for the longest wait;
+    /// otherwise one hit on each, against its own limit.
+    fn begin(&self, keys: Vec<(Key, u32)>, window: Duration, now: Instant) -> ApiResult<()> {
         let mut buckets = self.lock();
-        if let Some(wait) = buckets.get(&key).and_then(|b| b.blocked_for(now)) {
+        let waits = keys
+            .iter()
+            .filter_map(|(key, _)| buckets.get(key)?.blocked_for(now));
+        if let Some(wait) = waits.max() {
             return Err(too_many(wait));
         }
-        hit(
-            &mut buckets,
-            key,
-            limits.register_max_attempts,
-            limits.register_window,
-            now,
-        );
+        for (key, max) in keys {
+            hit(&mut buckets, key, max, window, now);
+        }
         prune(&mut buckets, now);
         Ok(())
-    }
-
-    /// How many buckets are held, for tests of the pruning.
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.lock().len()
-    }
-
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 
     /// Nothing is left half written under this lock, so a poisoned one is
@@ -253,12 +189,11 @@ mod tests {
     const AWAY: IpAddr = IpAddr::V4(Ipv4Addr::new(198, 51, 100, 7));
 
     fn limiter(login: u32, ip: u32) -> RateLimiter {
-        RateLimiter::new(Limits {
+        RateLimiter::new(Config {
             login_max_failures: login,
             ip_max_failures: ip,
-            login_window: WINDOW,
-            register_max_attempts: 3,
-            register_window: Duration::from_secs(3_600),
+            login_window_secs: WINDOW.as_secs(),
+            ..Config::default()
         })
     }
 
@@ -344,10 +279,10 @@ mod tests {
     }
 
     #[test]
-    fn registration_is_limited_per_address() {
+    fn registrations_are_counted_per_address() {
         let limiter = limiter(5, 30);
         let t0 = Instant::now();
-        for _ in 0..3 {
+        for _ in 0..REGISTER_MAX_ATTEMPTS {
             assert!(limiter.begin_register(HOME, t0).is_ok());
         }
         let err = limiter.begin_register(HOME, t0).expect_err("limited");
@@ -363,7 +298,7 @@ mod tests {
         for _ in 0..50 {
             assert!(limiter.begin_login(Some("alice"), HOME, t0).is_ok());
         }
-        assert!(limiter.is_empty());
+        assert!(limiter.lock().is_empty());
     }
 
     #[test]
@@ -376,13 +311,13 @@ mod tests {
         }
         // Exactly one over: the next insert prunes, but nothing has expired.
         assert!(limiter.begin_login(Some("late"), HOME, t0).is_ok());
-        assert_eq!(limiter.len(), PRUNE_ABOVE + 2);
+        assert_eq!(limiter.lock().len(), PRUNE_ABOVE + 2);
         // A window later every old bucket is gone.
         assert!(
             limiter
                 .begin_login(Some("later"), HOME, t0 + WINDOW)
                 .is_ok()
         );
-        assert_eq!(limiter.len(), 1);
+        assert_eq!(limiter.lock().len(), 1);
     }
 }
