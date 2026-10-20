@@ -134,23 +134,36 @@ struct Panel<Content: View>: View {
     }
 }
 
-/// A horizontal proportional bar, as under each category in the summary.
+/// A horizontal proportional bar, as under each category in the summary:
+/// `tint` filling `fraction` of a `track` as wide as it is offered.
+/// `rounded` draws both as capsules, as the category, fund and cap bars
+/// are; a fixed length is a `.frame(width:)` around it.
 struct MeterBar: View {
     /// 0...1; values outside are clamped.
     let fraction: Double
     var tint: Color = Ink.chartExpense
+    var track: Color = Ink.line
     var height: CGFloat = 3
+    var rounded = false
 
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
-                Rectangle().fill(Ink.line)
-                Rectangle()
-                    .fill(tint)
+                piece(track)
+                piece(tint)
                     .frame(width: geometry.size.width * min(max(fraction, 0), 1))
             }
         }
         .frame(height: height)
+    }
+
+    @ViewBuilder
+    private func piece(_ color: Color) -> some View {
+        if rounded {
+            Capsule().fill(color)
+        } else {
+            Rectangle().fill(color)
+        }
     }
 }
 

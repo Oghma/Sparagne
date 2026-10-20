@@ -208,9 +208,11 @@ struct DayLabel: View {
 }
 
 /// A small label after a description (`.tag`): "rimborso", "da confermare".
+/// `opacity` is the tint's strength in the ground behind the text.
 struct RowTag: View {
     let text: String
     let tint: Color
+    var opacity = 0.12
 
     var body: some View {
         Text(text)
@@ -219,7 +221,7 @@ struct RowTag: View {
             .lineLimit(1)
             .padding(.horizontal, 5)
             .frame(height: 16)
-            .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+            .background(tint.opacity(opacity), in: RoundedRectangle(cornerRadius: 4))
             // Its whole width before the text beside it gets any, and "…"
             // only once that text is gone: in a narrow cell it shortens
             // rather than spilling into the next column.

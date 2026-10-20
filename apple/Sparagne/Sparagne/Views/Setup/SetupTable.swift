@@ -91,15 +91,28 @@ struct SetupTableBody<Content: View>: View {
 }
 
 /// The column headings: 11 pt, medium, `text3`, over a `line2` rule.
+/// `horizontalPadding` insets them as a table's rows are inset;
+/// `accessibilityHeader` reads them to VoiceOver as one heading, for a
+/// table whose card does not already have one.
 struct SetupHeaderRow<Content: View>: View {
+    var horizontalPadding: CGFloat = 0
+    var accessibilityHeader = false
     @ViewBuilder var content: Content
 
     var body: some View {
-        HStack(spacing: 0) { content }
+        let row = HStack(spacing: 0) { content }
             .font(Face.label)
             .foregroundStyle(Ink.text3)
+            .padding(.horizontal, horizontalPadding)
             .frame(height: Metrics.headerHeight)
             .overlay(alignment: .bottom) { Rectangle().fill(Ink.line2).frame(height: 1) }
+        if accessibilityHeader {
+            row
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isHeader)
+        } else {
+            row
+        }
     }
 }
 
@@ -139,18 +152,22 @@ struct SetupRow<Content: View>: View {
     }
 }
 
-/// A small label in a `raised` pill: "system", "archived".
+/// A small label in a `raised` pill: "system", "archived". With `fixed`
+/// off it takes the width it is offered, and shortens with "…" in a narrow
+/// cell.
 struct SetupTag: View {
     let text: String
+    var fixed = true
 
     var body: some View {
         Text(text)
             .font(Face.ui(10, .semibold))
             .foregroundStyle(Ink.text3)
+            .lineLimit(1)
             .padding(.horizontal, 5)
             .frame(height: 16)
             .background(Ink.raised, in: RoundedRectangle(cornerRadius: 4))
-            .fixedSize()
+            .fixedSize(horizontal: fixed, vertical: fixed)
     }
 }
 
@@ -175,12 +192,16 @@ struct SetupIconButton: View {
     let symbol: String
     let help: String
     let label: String
+    /// Smaller and heavier for a glyph that reads as a mark (`xmark`) rather
+    /// than a picture.
+    var symbolSize: CGFloat = 11
+    var symbolWeight: Font.Weight = .medium
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: symbolSize, weight: symbolWeight))
                 .foregroundStyle(Ink.text3)
                 .frame(width: 20, height: 20)
                 .contentShape(Rectangle())
