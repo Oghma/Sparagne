@@ -330,12 +330,22 @@ fn leave_out(planned: &mut [Planned], overrides: &Overrides<'_>) {
     }
 }
 
-/// A row the user's `skip` leaves out.
-pub(super) fn skipped_by_you() -> StatementRowStatus {
+pub(super) fn skipped(code: &str, reason: String) -> StatementRowStatus {
     StatementRowStatus::Skipped {
-        code: "skipped_by_you".to_string(),
-        reason: "skipped by you".to_string(),
+        code: code.to_string(),
+        reason,
     }
+}
+
+fn invalid(code: &str, message: String) -> StatementRowStatus {
+    StatementRowStatus::Invalid {
+        code: code.to_string(),
+        message,
+    }
+}
+
+pub(super) fn skipped_by_you() -> StatementRowStatus {
+    skipped("skipped_by_you", "skipped by you".to_string())
 }
 
 /// The id of the row whose full key (occurrence index included) is `key`.
@@ -364,10 +374,6 @@ pub(super) fn delimiter(value: &str) -> Result<char> {
     Ok(c)
 }
 
-// ---------------------------------------------------------------------------
-// Reading one row
-// ---------------------------------------------------------------------------
-
 /// A row read on its own, before the file-wide pass gives it an id and
 /// [`Context::decide`] says what becomes of it.
 struct Draft<'a> {
@@ -388,16 +394,8 @@ struct Draft<'a> {
     /// The row's status, when `skip_statuses` holds it.
     skipped_status: Option<String>,
     /// The first reason the row cannot be imported, whatever it is taken
-    /// for. Never [`Outcome::Import`].
-    problem: Option<Outcome>,
-}
-
-/// What a row becomes when its id is not in the log yet. `Skip` and
-/// `Invalid` carry the code of [`StatementRowStatus`] and the English detail.
-enum Outcome {
-    Import(Command),
-    Skip(&'static str, String),
-    Invalid(&'static str, String),
+    /// for.
+    problem: Option<StatementRowStatus>,
 }
 
 /// Who said what a row is, for the reason of a skip.
@@ -410,15 +408,14 @@ enum By<'r> {
 }
 
 impl By<'_> {
-    fn skip(&self) -> Outcome {
-        match self {
-            Self::User => Outcome::Skip("skipped_by_you", "skipped by you".to_string()),
-            Self::Rule(text) => Outcome::Skip(
-                "skipped_by_rule",
-                format!("description contains \"{text}\" is skipped"),
-            ),
-            Self::Mapping(type_value) => Outcome::Skip("skipped_by_rule", skip_reason(*type_value)),
-        }
+    fn skip(&self) -> StatementRowStatus {
+        let reason = match self {
+            Self::User => return skipped_by_you(),
+            Self::Rule(text) => format!("description contains \"{text}\" is skipped"),
+            Self::Mapping(None) => "skipped by the mapping".to_string(),
+            Self::Mapping(Some(value)) => format!("type {value} is skipped"),
+        };
+        skipped("skipped_by_rule", reason)
     }
 }
 
@@ -824,36 +821,29 @@ impl<'a> Context<'a> {
         currency: Option<&str>,
         date: std::result::Result<StatementDate, String>,
         amount: std::result::Result<Amount, String>,
-    ) -> Option<Outcome> {
+    ) -> Option<StatementRowStatus> {
         let date = match date {
             Ok(date) => date,
-            Err(message) => return Some(Outcome::Invalid("invalid_date", message)),
+            Err(message) => return Some(invalid("invalid_date", message)),
         };
         if let Some(since) = self.since
             && date.at.date_naive() < since
         {
-            return Some(Outcome::Skip(
-                "before_start",
-                format!("dated before {since}, the day the import starts"),
-            ));
+            let reason = format!("dated before {since}, the day the import starts");
+            return Some(skipped("before_start", reason));
         }
         if let Some(currency) = currency
             && !currency.eq_ignore_ascii_case(self.currency.code())
         {
-            return Some(Outcome::Invalid(
-                "currency_mismatch",
-                format!(
-                    "the row is in {currency}, the vault in {}",
-                    self.currency.code()
-                ),
-            ));
+            let vault = self.currency.code();
+            let message = format!("the row is in {currency}, the vault in {vault}");
+            return Some(invalid("currency_mismatch", message));
         }
         match amount {
-            Err(message) => Some(Outcome::Invalid("invalid_amount", message)),
-            Ok(amount) if amount.minor == 0 => Some(Outcome::Skip(
-                "zero_amount",
-                "the amount is zero".to_string(),
-            )),
+            Err(message) => Some(invalid("invalid_amount", message)),
+            Ok(amount) if amount.minor == 0 => {
+                Some(skipped("zero_amount", "the amount is zero".to_string()))
+            }
             Ok(_) => None,
         }
     }
@@ -874,10 +864,7 @@ impl<'a> Context<'a> {
             ..
         } = draft;
         if let Some(message) = broken {
-            row.status = StatementRowStatus::Invalid {
-                code: "invalid_row".to_string(),
-                message,
-            };
+            row.status = invalid("invalid_row", message);
             return Planned::new(row, None);
         }
         // The user's action, else the description rule's, else the type
@@ -888,7 +875,7 @@ impl<'a> Context<'a> {
         let mapped = ruled.as_ref().map_or(base, |(action, _)| *action);
         let invalid = *mapped != StatementAction::Skip
             && skipped_status.is_none()
-            && matches!(problem, Some(Outcome::Invalid(..)));
+            && matches!(problem, Some(StatementRowStatus::Invalid { .. }));
         let user = user.filter(|_| !invalid);
         let (action, by) = match (user.and_then(|user| user.action.as_ref()), ruled) {
             (Some(action), _) => (action, By::User),
@@ -899,73 +886,59 @@ impl<'a> Context<'a> {
         row.action = action.clone();
         row.kind = outflow.and_then(|outflow| kind_of(action, outflow));
         row.counter_wallet_id = counter_wallet(action);
-
+        let Some(wallet) = row.wallet_id else {
+            let account = row.account.as_deref().unwrap_or_default();
+            row.status = skipped("skipped_account", format!("account {account} is left out"));
+            return Planned::new(row, None);
+        };
         // In the order a user expects to read it: what the mapping or the
         // user skip, then what cannot be read, then what is missing.
-        let outcome = if row.wallet_id.is_none() {
-            Outcome::Skip(
-                "skipped_account",
-                format!(
-                    "account {} is left out",
-                    row.account.as_deref().unwrap_or_default()
-                ),
-            )
-        } else if *action == StatementAction::Skip {
-            by.skip()
+        let outcome = if *action == StatementAction::Skip {
+            Err(by.skip())
         } else if let Some(status) = skipped_status {
-            Outcome::Skip("skipped_status", format!("status {status} is skipped"))
+            Err(skipped(
+                "skipped_status",
+                format!("status {status} is skipped"),
+            ))
         } else if let Some(problem) = problem {
-            problem
+            Err(problem)
         } else {
-            self.import(&row, action, &by, outflow, user)
+            self.import(&row, wallet, action, &by, user)
         };
-        let mut command = None;
-        row.status = match outcome {
-            Outcome::Import(planned) => {
-                command = Some(planned);
-                StatementRowStatus::New
-            }
-            Outcome::Skip(code, reason) => StatementRowStatus::Skipped {
-                code: code.to_string(),
-                reason,
-            },
-            Outcome::Invalid(code, message) => StatementRowStatus::Invalid {
-                code: code.to_string(),
-                message,
-            },
-        };
-        Planned::new(row, command)
+        match outcome {
+            Ok(command) => Planned::new(row, Some(command)),
+            Err(status) => Planned::new(StatementRow { status, ..row }, None),
+        }
     }
 
-    /// The command of a row whose date and amount were read, taken for the
-    /// action `by` whoever said it, or why it waits for a wallet.
+    /// The command of a row whose date and amount were read, going to
+    /// `wallet` as the action `by` whoever said it, or why it waits for a
+    /// wallet.
     fn import(
         &self,
         row: &StatementRow,
+        wallet: Uuid,
         action: &StatementAction,
         by: &By<'_>,
-        outflow: Option<bool>,
         user: Option<&StatementRowOverride>,
-    ) -> Outcome {
+    ) -> std::result::Result<Command, StatementRowStatus> {
+        // Read whenever no problem was found.
         let Some(occurred_at) = row.occurred_at else {
-            return Outcome::Invalid("invalid_date", "the date cannot be read".to_string());
-        };
-        // The row's own wallet: its account's, else the options'.
-        let Some(wallet) = row.wallet_id else {
-            return Outcome::Skip("skipped_account", "the account is left out".to_string());
+            return Err(invalid(
+                "invalid_date",
+                "the date cannot be read".to_string(),
+            ));
         };
         let text = user
             .and_then(|user| user.note.as_deref())
             .unwrap_or(&row.note);
         let note = compose_note(text, row.original.as_deref());
-        let transfer = |from_wallet_id, to_wallet_id| {
-            Outcome::Import(Command::TransferWallet {
-                amount: row.amount,
-                from_wallet_id,
-                to_wallet_id,
-                note: note.clone(),
-                occurred_at,
-            })
+        let transfer = |from_wallet_id, to_wallet_id| Command::TransferWallet {
+            amount: row.amount,
+            from_wallet_id,
+            to_wallet_id,
+            note: note.clone(),
+            occurred_at,
         };
         let entry = || Entry {
             amount: row.amount,
@@ -986,58 +959,46 @@ impl<'a> Context<'a> {
         // A sign that contradicts the action (a refund written as money out)
         // keeps the action: the rule names what the row is, the amount is
         // taken as absolute.
-        match action {
-            StatementAction::TransferIn { from_wallet_id } => {
-                match self.other_wallet(*from_wallet_id, wallet, "came from") {
-                    Ok(from) => transfer(from, wallet),
-                    Err(reason) => Outcome::Skip("needs_wallet", reason),
-                }
-            }
+        Ok(match action {
+            StatementAction::TransferIn { from_wallet_id } => transfer(
+                self.other_wallet(*from_wallet_id, wallet, "came from")?,
+                wallet,
+            ),
             StatementAction::TransferOut { to_wallet_id } => {
-                match self.other_wallet(*to_wallet_id, wallet, "went to") {
-                    Ok(to) => transfer(wallet, to),
-                    Err(reason) => Outcome::Skip("needs_wallet", reason),
-                }
+                transfer(wallet, self.other_wallet(*to_wallet_id, wallet, "went to")?)
             }
-            StatementAction::Skip => by.skip(),
-            StatementAction::BySign if outflow == Some(true) => {
-                Outcome::Import(Command::Expense(entry()))
-            }
-            StatementAction::BySign | StatementAction::Income => {
-                Outcome::Import(Command::Income(entry()))
-            }
-            StatementAction::Expense => Outcome::Import(Command::Expense(entry())),
-            StatementAction::Refund => Outcome::Import(Command::Refund(entry())),
-        }
+            StatementAction::Skip => return Err(by.skip()),
+            StatementAction::BySign if row.outflow => Command::Expense(entry()),
+            StatementAction::BySign | StatementAction::Income => Command::Income(entry()),
+            StatementAction::Expense => Command::Expense(entry()),
+            StatementAction::Refund => Command::Refund(entry()),
+        })
     }
 
-    /// The other wallet of a transfer, or why the row waits for one: none
-    /// named, or one the money cannot move to or from (the row's `own`
-    /// wallet, one not in the vault, an archived one). `way` is `came from`
-    /// or `went to`.
+    /// The other wallet of a transfer, or why the row waits for one
+    /// (`needs_wallet`): none named, or one the money cannot move to or from
+    /// (the row's `own` wallet, one not in the vault, an archived one). `way`
+    /// is `came from` or `went to`.
     fn other_wallet(
         &self,
         named: Option<Uuid>,
         own: Uuid,
         way: &str,
-    ) -> std::result::Result<Uuid, String> {
-        let Some(id) = named else {
-            return Err(format!("choose the wallet the money {way}"));
-        };
-        if id == own {
-            return Err(format!(
+    ) -> std::result::Result<Uuid, StatementRowStatus> {
+        let reason = match named {
+            None => format!("choose the wallet the money {way}"),
+            Some(id) if id == own => format!(
                 "the money cannot move between the imported wallet and itself: choose the wallet it {way}"
-            ));
-        }
-        match self.wallets.get(&id) {
-            None => Err(format!(
-                "wallet {id} is not in the vault: choose the wallet the money {way}"
-            )),
-            Some(true) => Err(format!(
-                "the wallet the money {way} is archived: choose another"
-            )),
-            Some(false) => Ok(id),
-        }
+            ),
+            Some(id) => match self.wallets.get(&id) {
+                None => {
+                    format!("wallet {id} is not in the vault: choose the wallet the money {way}")
+                }
+                Some(true) => format!("the wallet the money {way} is archived: choose another"),
+                Some(false) => return Ok(id),
+            },
+        };
+        Err(skipped("needs_wallet", reason))
     }
 
     /// The envelope of an entry: the user's when it is an active envelope of
@@ -1191,13 +1152,6 @@ fn counter_wallet(action: &StatementAction) -> Option<Uuid> {
         StatementAction::TransferOut { to_wallet_id } => *to_wallet_id,
         _ => None,
     }
-}
-
-fn skip_reason(type_value: Option<&str>) -> String {
-    type_value.map_or_else(
-        || "skipped by the mapping".to_string(),
-        |value| format!("type {value} is skipped"),
-    )
 }
 
 /// The parts, trimmed, joined with a space, with inner runs of spaces

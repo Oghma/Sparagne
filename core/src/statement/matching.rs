@@ -34,7 +34,7 @@ use chrono::NaiveDate;
 use rusqlite::{params, params_from_iter, types::Value};
 use uuid::{Uuid, Version};
 
-use super::plan::{Overrides, Planned};
+use super::plan::{Overrides, Planned, account_key, skipped, skipped_by_you};
 use super::{
     StatementAction, StatementLookalike, StatementMatchChoice, StatementOptions, StatementRow,
     StatementRowOverride, StatementRowStatus,
@@ -244,8 +244,7 @@ const LEG_DAYS: i64 = 1;
 /// may be one move: two accounts, at most a day apart. The halves of an
 /// amount come in date order, so the cheapest edge is also the earliest.
 fn leg_edge(out: &StatementRow, other: &StatementRow, local: usize) -> Option<Edge> {
-    let same = out.account.as_deref().map(super::plan::account_key)
-        == other.account.as_deref().map(super::plan::account_key);
+    let same = out.account.as_deref().map(account_key) == other.account.as_deref().map(account_key);
     let (at, then) = (out.occurred_at?, other.occurred_at?);
     let days = (at.date_naive() - then.date_naive()).num_days().abs();
     (!same && days <= LEG_DAYS).then(|| {
@@ -271,10 +270,8 @@ fn join(planned: &mut [Planned], out: usize, other: usize) {
     if from == to {
         for (at, line) in [(out, in_line), (other, out_line)] {
             let item = &mut planned[at];
-            item.row.status = StatementRowStatus::Skipped {
-                code: "internal_transfer".to_string(),
-                reason: format!("a move between two accounts of one wallet, with line {line}"),
-            };
+            let reason = format!("a move between two accounts of one wallet, with line {line}");
+            item.row.status = skipped("internal_transfer", reason);
             item.command = None;
         }
         return;
@@ -300,10 +297,8 @@ fn join(planned: &mut [Planned], out: usize, other: usize) {
     half.row.counter_wallet_id = Some(to);
     half.paired_in = Some(in_row);
     let half = &mut planned[other];
-    half.row.status = StatementRowStatus::Skipped {
-        code: "transfer_pair".to_string(),
-        reason: format!("the other half of the transfer on line {out_line}"),
-    };
+    let reason = format!("the other half of the transfer on line {out_line}");
+    half.row.status = skipped("transfer_pair", reason);
     half.command = None;
     half.row.action = StatementAction::TransferIn {
         from_wallet_id: Some(from),
@@ -778,7 +773,7 @@ fn settle(
     item.row.default_choice = Some(default);
     item.replaces_other_row = found == Found::Replace && edge.hints.other_row;
     if user.is_some_and(|user| user.skip) {
-        item.row.status = super::plan::skipped_by_you();
+        item.row.status = skipped_by_you();
         item.command = None;
         return;
     }
