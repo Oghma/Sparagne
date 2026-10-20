@@ -427,6 +427,22 @@ struct SyncEngineTests {
         return peer
     }
 
+    /// alice's vault shared with a new account `member` as `role`, which has
+    /// synced it once.
+    private static func shared(
+        with member: String = "bob",
+        as role: MemberRole = .editor
+    ) async throws -> (server: FakeServerTransport, alice: Peer, member: Peer, vaultId: Uuid) {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let alice = try await Self.alice(server)
+        let vaultId = try #require(alice.vaultId)
+        let peer = try await Peer(server: server)
+        await peer.engine.register(username: member, password: "supersecret")
+        try await alice.engine.setMember(vaultId: vaultId, username: member, role: role)
+        await peer.engine.syncNow()
+        return (server, alice, peer, vaultId)
+    }
+
     @Test("Logging in re-signs the outbox, so the server accepts it")
     func loginRelabelsTheOutbox() async throws {
         let server = FakeServerTransport(core: try CoreHandle.openInMemory())
@@ -586,13 +602,7 @@ struct SyncEngineTests {
 
     @Test("Writes made on both sides converge after two syncs each")
     func interleavedWritesConverge() async throws {
-        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
-        let alice = try await Self.alice(server)
-        let vaultId = try #require(alice.vaultId)
-        let bob = try await Peer(server: server)
-        await bob.engine.register(username: "bob", password: "supersecret")
-        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
-        await bob.engine.syncNow()
+        let (server, alice, bob, vaultId) = try await Self.shared()
 
         await alice.store.submit(quickAdd: "-12.50 pizza @Cash >Food")
         await bob.store.submit(quickAdd: "-3.00 milk @Cash >Food")
@@ -620,13 +630,7 @@ struct SyncEngineTests {
 
     @Test("A command the server refuses is listed, dropped from the table, and can be dismissed")
     func rejectedCommandSurfacesAndDismisses() async throws {
-        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
-        let alice = try await Self.alice(server)
-        let vaultId = try #require(alice.vaultId)
-        let bob = try await Peer(server: server)
-        await bob.engine.register(username: "bob", password: "supersecret")
-        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
-        await bob.engine.syncNow()
+        let (_, alice, bob, vaultId) = try await Self.shared()
 
         // Both spend 40.00 out of an envelope holding 50.00: each is fine
         // locally, but the second one to reach the server is not.
@@ -679,13 +683,7 @@ struct SyncEngineTests {
 
     @Test("A viewer's vault is read-only here too: the write is refused before it enters the log")
     func viewerCannotWrite() async throws {
-        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
-        let alice = try await Self.alice(server)
-        let vaultId = try #require(alice.vaultId)
-        let carol = try await Peer(server: server)
-        await carol.engine.register(username: "carol", password: "supersecret")
-        try await alice.engine.setMember(vaultId: vaultId, username: "carol", role: .viewer)
-        await carol.engine.syncNow()
+        let (server, _, carol, vaultId) = try await Self.shared(with: "carol", as: .viewer)
 
         #expect(carol.store.currentVault?.id == vaultId)
         #expect(carol.store.isReadOnly)
@@ -701,13 +699,7 @@ struct SyncEngineTests {
 
     @Test("A vault whose role became viewer skips the push, refuses its outbox and keeps pulling")
     func viewerSkipsThePush() async throws {
-        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
-        let alice = try await Self.alice(server)
-        let vaultId = try #require(alice.vaultId)
-        let carol = try await Peer(server: server)
-        await carol.engine.register(username: "carol", password: "supersecret")
-        try await alice.engine.setMember(vaultId: vaultId, username: "carol", role: .editor)
-        await carol.engine.syncNow()
+        let (server, alice, carol, vaultId) = try await Self.shared(with: "carol")
 
         // Written while still an editor, not sent before the demotion.
         await carol.store.submit(quickAdd: "-1.00 gum @Cash >Food")
@@ -733,13 +725,7 @@ struct SyncEngineTests {
 
     @Test("A push refused with 403 refuses the outbox locally, and the vault still pulls")
     func refusedPushStillPulls() async throws {
-        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
-        let alice = try await Self.alice(server)
-        let vaultId = try #require(alice.vaultId)
-        let bob = try await Peer(server: server)
-        await bob.engine.register(username: "bob", password: "supersecret")
-        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
-        await bob.engine.syncNow()
+        let (server, alice, bob, vaultId) = try await Self.shared()
 
         await bob.store.submit(quickAdd: "-3.00 milk @Cash >Food")
         await alice.store.renameVault(vaultId, name: "Casa")
@@ -908,13 +894,7 @@ struct SyncEngineTests {
 
     @Test("A rename reaches the editor and the server's listing at the next sync")
     func renameReachesTheEditor() async throws {
-        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
-        let alice = try await Self.alice(server)
-        let vaultId = try #require(alice.vaultId)
-        let bob = try await Peer(server: server)
-        await bob.engine.register(username: "bob", password: "supersecret")
-        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
-        await bob.engine.syncNow()
+        let (server, alice, bob, vaultId) = try await Self.shared()
 
         await alice.store.renameVault(vaultId, name: "Casa")
         await alice.engine.syncNow()
@@ -956,13 +936,7 @@ struct SyncEngineTests {
 
     @Test("The owner's deletion reaches the editor, whose pending row is refused")
     func deletionReachesTheEditor() async throws {
-        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
-        let alice = try await Self.alice(server)
-        let vaultId = try #require(alice.vaultId)
-        let bob = try await Peer(server: server)
-        await bob.engine.register(username: "bob", password: "supersecret")
-        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
-        await bob.engine.syncNow()
+        let (_, alice, bob, vaultId) = try await Self.shared()
         #expect(bob.store.currentVault?.id == vaultId)
 
         // bob may not delete it himself: the app does not offer it, and the
@@ -1005,13 +979,7 @@ struct SyncEngineTests {
 
     @Test("A deleted vault leaves the device once its deletion is confirmed")
     func deletedVaultIsForgotten() async throws {
-        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
-        let alice = try await Self.alice(server)
-        let vaultId = try #require(alice.vaultId)
-        let bob = try await Peer(server: server)
-        await bob.engine.register(username: "bob", password: "supersecret")
-        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
-        await bob.engine.syncNow()
+        let (_, alice, bob, vaultId) = try await Self.shared()
 
         await alice.store.deleteVault(vaultId)
         #expect(try await alice.core.deletedVaults() == [vaultId])
@@ -1032,13 +1000,7 @@ struct SyncEngineTests {
 
     @Test("A vault no longer shared is kept read-only and marked, never dropped behind the user's back")
     func lostAccessIsMarked() async throws {
-        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
-        let alice = try await Self.alice(server)
-        let vaultId = try #require(alice.vaultId)
-        let bob = try await Peer(server: server)
-        await bob.engine.register(username: "bob", password: "supersecret")
-        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
-        await bob.engine.syncNow()
+        let (server, alice, bob, vaultId) = try await Self.shared()
 
         await bob.store.submit(quickAdd: "-3.00 milk @Cash >Food")
         try await alice.engine.removeMember(vaultId: vaultId, username: "bob")
@@ -1074,13 +1036,7 @@ struct SyncEngineTests {
 
     @Test("Shared again, a lost vault is writable again")
     func regainedAccess() async throws {
-        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
-        let alice = try await Self.alice(server)
-        let vaultId = try #require(alice.vaultId)
-        let bob = try await Peer(server: server)
-        await bob.engine.register(username: "bob", password: "supersecret")
-        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
-        await bob.engine.syncNow()
+        let (_, alice, bob, vaultId) = try await Self.shared()
         try await alice.engine.removeMember(vaultId: vaultId, username: "bob")
         await bob.engine.syncNow()
         #expect(bob.engine.hasLostAccess(to: vaultId))
@@ -1101,13 +1057,7 @@ struct SyncEngineTests {
 
     @Test("Leaving sends what is pending, drops the membership and the local copy")
     func leaveVault() async throws {
-        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
-        let alice = try await Self.alice(server)
-        let vaultId = try #require(alice.vaultId)
-        let bob = try await Peer(server: server)
-        await bob.engine.register(username: "bob", password: "supersecret")
-        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
-        await bob.engine.syncNow()
+        let (server, alice, bob, vaultId) = try await Self.shared()
         #expect(bob.engine.mayLeaveVault(vaultId))
 
         await bob.store.submit(quickAdd: "-3.00 milk @Cash >Food")
@@ -1132,13 +1082,7 @@ struct SyncEngineTests {
 
     @Test("A leave the server refuses forgets nothing and says why")
     func failedLeaveKeepsTheVault() async throws {
-        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
-        let alice = try await Self.alice(server)
-        let vaultId = try #require(alice.vaultId)
-        let bob = try await Peer(server: server)
-        await bob.engine.register(username: "bob", password: "supersecret")
-        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .viewer)
-        await bob.engine.syncNow()
+        let (server, alice, bob, vaultId) = try await Self.shared(as: .viewer)
 
         await server.setFailingRemovals(true)
         await #expect(throws: ServerError.self) {
