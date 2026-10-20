@@ -252,7 +252,7 @@ async fn unknown_route_is_not_found() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn register_returns_a_token_and_me_reports_the_username() {
+async fn register_returns_a_token_that_opens_the_api() {
     let api = Api::new();
     let res = api.raw_register("alice", PASSWORD).await;
     assert_eq!(res.status, StatusCode::CREATED);
@@ -261,9 +261,9 @@ async fn register_returns_a_token_and_me_reports_the_username() {
     assert!(token.expires_at > Utc::now().timestamp());
     assert!(!token.token.is_empty());
 
-    let me = api.get("/me", &token.token).await;
-    assert_eq!(me.status, StatusCode::OK);
-    assert_eq!(me.body, json!({ "username": "alice" }));
+    let vaults = api.get("/vaults", &token.token).await;
+    assert_eq!(vaults.status, StatusCode::OK);
+    assert_eq!(vaults.body, json!([]));
 }
 
 #[tokio::test]
@@ -328,7 +328,10 @@ async fn login_checks_the_password() {
     let ok = api.login("alice", PASSWORD).await;
     assert_eq!(ok.status, StatusCode::OK);
     let token: TokenResponse = ok.json();
-    assert_eq!(api.get("/me", &token.token).await.status, StatusCode::OK);
+    assert_eq!(
+        api.get("/vaults", &token.token).await.status,
+        StatusCode::OK
+    );
 
     let wrong = api.login("alice", "not my password").await;
     assert_eq!(wrong.status, StatusCode::UNAUTHORIZED);
@@ -345,9 +348,9 @@ async fn logout_revokes_the_token() {
     let res = api.post("/auth/logout", &token, json!({})).await;
     assert_eq!(res.status, StatusCode::NO_CONTENT);
 
-    let me = api.get("/me", &token).await;
-    assert_eq!(me.status, StatusCode::UNAUTHORIZED);
-    assert_eq!(me.code(), "unauthorized");
+    let res = api.get("/vaults", &token).await;
+    assert_eq!(res.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(res.code(), "unauthorized");
 }
 
 #[tokio::test]
@@ -358,20 +361,20 @@ async fn an_expired_token_is_refused() {
     });
     let res = api.raw_register("alice", PASSWORD).await;
     let token: TokenResponse = res.json();
-    let me = api.get("/me", &token.token).await;
-    assert_eq!(me.status, StatusCode::UNAUTHORIZED);
-    assert_eq!(me.code(), "unauthorized");
+    let res = api.get("/vaults", &token.token).await;
+    assert_eq!(res.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(res.code(), "unauthorized");
 }
 
 #[tokio::test]
 async fn a_missing_or_unknown_token_is_refused() {
     let api = Api::new();
     assert_eq!(
-        api.call(Method::GET, "/me", None, None).await.status,
+        api.call(Method::GET, "/vaults", None, None).await.status,
         StatusCode::UNAUTHORIZED
     );
     assert_eq!(
-        api.get("/me", "made-up-token").await.status,
+        api.get("/vaults", "made-up-token").await.status,
         StatusCode::UNAUTHORIZED
     );
 }

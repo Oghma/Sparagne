@@ -255,12 +255,12 @@ async fn changing_the_password_revokes_the_other_tokens_and_keeps_this_one() {
         .await;
     assert_eq!(res.status, StatusCode::NO_CONTENT, "{:?}", res.body);
 
-    assert_eq!(api.get("/me", &laptop).await.status, StatusCode::OK);
-    let revoked = api.get("/me", &phone).await;
+    assert_eq!(api.get("/vaults", &laptop).await.status, StatusCode::OK);
+    let revoked = api.get("/vaults", &phone).await;
     assert_eq!(revoked.status, StatusCode::UNAUTHORIZED);
     assert_eq!(revoked.code(), "unauthorized");
     // Somebody else's session is not touched.
-    assert_eq!(api.get("/me", &bob).await.status, StatusCode::OK);
+    assert_eq!(api.get("/vaults", &bob).await.status, StatusCode::OK);
 
     assert_eq!(
         api.login("alice", PASSWORD).await.status,
@@ -560,7 +560,7 @@ async fn the_cli_manages_the_accounts_of_a_running_server() {
     let out = admin(&dir, &["user", "passwd", "alice"], "a new passphrase\r\n").unwrap();
     assert_eq!(out, "changed the password of alice, revoked 1 token\n");
     assert_eq!(
-        api.get("/me", &first).await.status,
+        api.get("/vaults", &first).await.status,
         StatusCode::UNAUTHORIZED
     );
     assert_eq!(
@@ -575,7 +575,7 @@ async fn the_cli_manages_the_accounts_of_a_running_server() {
     let out = admin(&dir, &["user", "revoke", "ALICE"], "").unwrap();
     assert_eq!(out, "revoked 1 token of alice\n");
     assert_eq!(
-        api.get("/me", &second).await.status,
+        api.get("/vaults", &second).await.status,
         StatusCode::UNAUTHORIZED
     );
     let res = api.login("alice", "a new passphrase").await;
