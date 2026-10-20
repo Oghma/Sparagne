@@ -4,7 +4,6 @@
 //! changes and the log row commit together or not at all.
 
 mod allocation;
-mod batch;
 pub(crate) mod entities;
 mod recurring;
 mod update;
@@ -40,6 +39,48 @@ impl Core {
             result_id,
             deduplicated: false,
         })
+    }
+
+    /// Applies `envelopes` in order, all of them or none: the first domain
+    /// error rolls the batch back and is returned unchanged. Every envelope
+    /// must target the same vault (`InvalidCommand` otherwise); an id already
+    /// in the log, or repeated in the batch, is deduplicated like in
+    /// [`Core::execute`]; an empty batch writes nothing.
+    ///
+    /// Atomic on this device only: every command keeps its own seq and log
+    /// row, so the outbox pushes them one by one and the server (or a later
+    /// rebase) accepts or refuses each on its own.
+    pub fn execute_batch(&mut self, envelopes: Vec<CommandEnvelope>) -> Result<Vec<Receipt>> {
+        let Some(first) = envelopes.first() else {
+            return Ok(Vec::new());
+        };
+        let vault_id = first.vault_id;
+        if let Some(stray) = envelopes.iter().find(|env| env.vault_id != vault_id) {
+            return Err(DomainError::InvalidCommand(format!(
+                "batch: command {} belongs to vault {}, not {vault_id}",
+                stray.id, stray.vault_id
+            )));
+        }
+
+        let tx = self.conn.transaction()?;
+        let now = Utc::now().timestamp();
+        let mut receipts = Vec::with_capacity(envelopes.len());
+        for env in &envelopes {
+            if let Some(receipt) = existing_receipt(&tx, env.id)? {
+                receipts.push(receipt);
+                continue;
+            }
+            let seq = next_seq(&tx, vault_id)?;
+            let result_id = apply_envelope(&tx, env, seq, None, now)?;
+            receipts.push(Receipt {
+                command_id: env.id,
+                seq,
+                result_id,
+                deduplicated: false,
+            });
+        }
+        tx.commit()?;
+        Ok(receipts)
     }
 }
 
