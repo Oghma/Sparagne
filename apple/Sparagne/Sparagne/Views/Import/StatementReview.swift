@@ -489,20 +489,11 @@ private struct StatementReviewRow: View {
             // Why the row is imported by default, on a line of its own so
             // the match above it is never cut for it.
             if let hint, included {
-                HStack(spacing: 0) {
-                    Color.clear.frame(width: ReviewColumn.lead(accounts: hasAccounts), height: 1)
-                    GridCell {
-                        Text(verbatim: hint)
-                            .italic()
-                            .foregroundStyle(Ink.text3)
-                            .padding(.leading, 14)
-                            .help(hint)
-                            .accessibilityHidden(true)
-                    }
-                    Color.clear.frame(width: ReviewColumn.choice + ReviewColumn.trail + 2 * GridColumn.padding, height: 1)
-                }
-                .frame(height: 16)
-                .padding(.bottom, 2)
+                // VoiceOver already hears it as the match's hint.
+                hintRow(hint)
+                    .accessibilityHidden(true)
+                    .frame(height: 16)
+                    .padding(.bottom, 2)
             }
         }
         .font(Face.footnote)
@@ -512,6 +503,14 @@ private struct StatementReviewRow: View {
     /// A quiet line under a row that matched nothing, as the match line's
     /// hint is drawn: half of a move whose other half the file lacks.
     private func hintLine(_ hint: String) -> some View {
+        hintRow(hint)
+            .font(Face.footnote)
+            .frame(height: 18)
+            .overlay(alignment: .bottom) { Rectangle().fill(Ink.rowLine).frame(height: 1) }
+    }
+
+    /// `hint` in italic and the dim ink, from the description's column on.
+    private func hintRow(_ hint: String) -> some View {
         HStack(spacing: 0) {
             Color.clear.frame(width: ReviewColumn.lead(accounts: hasAccounts), height: 1)
             GridCell {
@@ -523,9 +522,6 @@ private struct StatementReviewRow: View {
             }
             Color.clear.frame(width: ReviewColumn.choice + ReviewColumn.trail + 2 * GridColumn.padding, height: 1)
         }
-        .font(Face.footnote)
-        .frame(height: 18)
-        .overlay(alignment: .bottom) { Rectangle().fill(Ink.rowLine).frame(height: 1) }
     }
 }
 
