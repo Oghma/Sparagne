@@ -11,7 +11,7 @@ mod common;
 
 use common::{
     T0, all, at, create_vault, entry, flow_cmd,
-    sync::{ALL, exec, projection, pull, rename, spend, sync, vault_of},
+    sync::{ALL, exec, other_vault, projection, pull, rename, spend, sync, vault_of},
     wallet_cmd,
 };
 use sparagne_core::{
@@ -195,6 +195,30 @@ fn integrate_pull_ignores_records_at_or_below_the_watermark() {
         .serve_push(vault, &PushRequest { commands: vec![] })
         .unwrap();
     assert_eq!(server.last_seq(vault).unwrap(), 3);
+}
+
+#[test]
+fn a_push_mixing_two_vaults_is_refused_before_any_command_is_applied() {
+    let mut server = Core::open_in_memory().unwrap();
+    let (mut alice, vault) = vault_of("alice", "Casa");
+    server
+        .serve_push(vault, &alice.push_request(vault, ALL).unwrap())
+        .unwrap();
+    let (other, _) = other_vault(&mut alice);
+
+    let mixed = PushRequest {
+        commands: vec![
+            CommandEnvelope::new(vault, "alice", wallet_cmd("Cash", 0)),
+            CommandEnvelope::new(other, "alice", wallet_cmd("Bank", 0)),
+        ],
+    };
+    let err = server.serve_push(vault, &mixed).unwrap_err();
+    assert!(
+        matches!(&err, DomainError::InvalidCommand(message) if message.starts_with("push: command")),
+        "{err:?}"
+    );
+    // Not even the command of the right vault reached the log.
+    assert_eq!(server.last_seq(vault).unwrap(), 1);
 }
 
 #[test]

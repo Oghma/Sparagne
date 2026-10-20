@@ -247,14 +247,6 @@ fn without_openings((mut sql, mut args): (String, Vec<Value>)) -> (String, Vec<V
     (sql, args)
 }
 
-/// `legs.target_kind` of the side a [`TargetKind`] names.
-const fn leg_kind(target: TargetKind) -> &'static str {
-    match target {
-        TargetKind::Wallet => "wallet",
-        TargetKind::Flow => "flow",
-    }
-}
-
 /// `WHERE` shared by every aggregation: one vault, live rows, entries only,
 /// inside the range, optionally one person: who the rows are for
 /// (`transactions.person`), not who recorded them.
@@ -664,7 +656,7 @@ impl Core {
                            WHERE t.vault_id = ?2 AND t.voided_at IS NULL
                              AND t.occurred_at >= ?3 AND t.occurred_at < ?4";
                 let args = vec![
-                    Value::Text(leg_kind(target).to_string()),
+                    Value::Text(target.as_str().to_string()),
                     blob(vault_id),
                     Value::Integer(from.timestamp()),
                     Value::Integer(to.timestamp()),
