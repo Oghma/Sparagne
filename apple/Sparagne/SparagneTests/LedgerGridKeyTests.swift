@@ -36,9 +36,16 @@ struct LedgerGridKeyTests {
         #expect(!grid.editor.isEditing)
         #expect(grid.store.rows.map(\.note) == ["panino", "latte", "caffè"])
         #expect(grid.host.fieldEditor == nil)
+        // The search field, the next view in the window's loop, never got it.
+        #expect(!grid.probe.searchFocused)
+
+        grid.host.post(.backTab)
+        await grid.host.settle { grid.editor.cursor == grid.cell(line: 0, .note) }
+        #expect(grid.editor.cursor == grid.cell(line: 0, .note))
+        #expect(!grid.probe.searchFocused)
     }
 
-    @Test("However soon the second key follows the first on DATA, the day is the two of them, and ↩ saves it", arguments: [0, 5, 10, 15, 20, 30])
+    @Test("However soon the second key follows the first on DATA, the day is the two of them, and ↩ saves it", arguments: [0, 5, 10, 15, 20, 30, 40])
     func dayTypedFast(delay: Int) async throws {
         let grid = try await GridUnderTest()
         defer { grid.close() }

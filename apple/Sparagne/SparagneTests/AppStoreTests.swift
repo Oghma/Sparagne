@@ -339,6 +339,17 @@ struct AppStoreTests {
         await store.createWallet(name: "Card", openingBalance: 0)
         #expect(store.presentedError == nil)
         #expect(store.savedAt != nil)
+
+        let afterWallet = store.savedAt
+        await store.createCategory(name: "Spesa")
+        #expect(store.presentedError == nil)
+        #expect(store.savedAt != afterWallet)
+
+        let afterCategory = store.savedAt
+        let vault = try #require(store.currentVault)
+        await store.renameVault(vault.id, name: "Home")
+        #expect(store.presentedError == nil)
+        #expect(store.savedAt != afterCategory)
     }
 
     @Test("Updating an envelope's cap shows up in the snapshot")

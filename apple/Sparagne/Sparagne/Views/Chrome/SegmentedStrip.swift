@@ -43,7 +43,7 @@ struct SegmentedStrip<Option: Hashable>: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(label(option))
                 .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
-                .accessibilityAction { selection = option }
+                .accessibilityAction { if isEnabled { selection = option } }
             }
         }
         .padding(1)

@@ -70,6 +70,28 @@ struct SetupTableKeysTests {
         #expect(sheet.stored() == sheet.typedValue)
     }
 
+    @Test("Archiving the open category from its menu closes the row, and what was typed is not sent")
+    func archivingTheOpenCategory() async throws {
+        let sheet = try await TableUnderTest(.categories)
+        defer { sheet.close() }
+
+        await sheet.type(sheet.typed, into: sheet.edited)
+        sheet.host.hover(at: sheet.hoverPoint(sheet.edited))
+        sheet.host.window.makeFirstResponder(nil)
+        await sheet.settle()
+        // What the menu's Archive sends.
+        let id = try #require(sheet.store.windowCategories.first { $0.name == sheet.original }).id
+        await sheet.store.archiveCategory(id)
+        await sheet.settle { sheet.store.windowCategories.first { $0.id == id }?.archived == true }
+        #expect(sheet.host.fieldEditor == nil)
+
+        sheet.host.postClick(at: sheet.point(sheet.other))
+        await sheet.settle()
+        #expect(sheet.stored() == sheet.original)
+        #expect(sheet.store.windowCategories.first { $0.id == id }?.archived == true)
+        #expect(sheet.store.presentedError == nil)
+    }
+
     @Test("⌥↑ and ⌥↓ move the plan's open line, which stays open")
     func optionArrowsMoveTheLine() async throws {
         let sheet = try await TableUnderTest(.plan)

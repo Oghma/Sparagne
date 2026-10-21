@@ -42,8 +42,8 @@ enum SheetStatus {
 
     /// How many templates run and how many are archived, and what the running
     /// ones cost and bring in a month (`RecurringMonthly`, hence "≈": a daily
-    /// or weekly template is spread over the average month). The tab loads
-    /// the templates (`RecurringTab`), so the figures are of what it shows.
+    /// or weekly template is spread over the average month). Every reload
+    /// brings the templates, so the figures are of what the tab shows.
     private static func recurring(_ templates: [RecurringView]) -> [StatusItem] {
         let monthly = RecurringMonthly.totals(templates)
         return [

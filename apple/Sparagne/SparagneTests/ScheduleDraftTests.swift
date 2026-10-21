@@ -145,8 +145,8 @@ struct ScheduleDraftTests {
         for edit in edits {
             var draft = ScheduleDraft(today: "2026-10-07")
             edit(&draft)
-            let accepted = (try? RecurringFixture.core(draft.schedule, draft.startDate, 1)) != nil
-            #expect(draft.isValid == accepted, "\(draft.schedule)")
+            let dates = try? RecurringFixture.core(draft.schedule, draft.startDate, 1)
+            #expect(draft.isValid == (dates?.isEmpty == false), "\(draft.schedule)")
         }
     }
 

@@ -568,8 +568,13 @@ struct StatementMappingEditor: View {
                     model.addDescriptionRule()
                 } label: {
                     addRuleLabel
+                        .font(Face.label)
+                        .foregroundStyle(Ink.text2)
+                        .padding(.horizontal, 8)
+                        .frame(height: 22)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.chrome(.ghost, small: true))
+                .buttonStyle(.plain)
                 .fixedSize()
             }
             if model.mapping.descriptionRules.isEmpty {

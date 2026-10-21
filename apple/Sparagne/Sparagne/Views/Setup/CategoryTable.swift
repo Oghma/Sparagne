@@ -97,9 +97,13 @@ struct CategoryTable: View {
             }
         } else {
             line.contextMenu {
-                Button(String(localized: "Merge Into…")) { merging = MergeSubject(category: category) }
+                Button(String(localized: "Merge Into…")) {
+                    dropIfOpen(category.id)
+                    merging = MergeSubject(category: category)
+                }
                 Divider()
                 Button(String(localized: "Archive"), role: .destructive) {
+                    dropIfOpen(category.id)
                     Task { await store.archiveCategory(category.id) }
                 }
             }
@@ -107,7 +111,7 @@ struct CategoryTable: View {
     }
 
     private func line(_ category: CategoryView, aliases: [String]) -> some View {
-        let isEditing = editing == category.id
+        let isEditing = editing == category.id && CategoryDraft.isEditable(category)
         return CategoryRowView(
             category: category,
             aliases: aliases,
@@ -119,7 +123,10 @@ struct CategoryTable: View {
             onOpen: { field in Task { await open(category, at: field) } },
             onCommit: { Task { await submit(category.id) } },
             onCancel: cancel,
-            onArchive: { Task { await store.archiveCategory(category.id) } },
+            onArchive: {
+                dropIfOpen(category.id)
+                Task { await store.archiveCategory(category.id) }
+            },
             onRestore: { Task { await store.restoreCategory(category.id) } }
         )
         .hoverId($hovered, category.id)
@@ -190,6 +197,12 @@ struct CategoryTable: View {
         focus = nil
     }
 
+    /// Archive and Merge Into… act on the row as it is stored: what was typed
+    /// into it goes, as the menu never saves.
+    private func dropIfOpen(_ categoryId: Uuid) {
+        if editing == categoryId { cancel() }
+    }
+
     /// ↩: save the row and close it.
     private func submit(_ categoryId: Uuid) async {
         if await commit(categoryId) { focus = nil }
@@ -203,6 +216,11 @@ struct CategoryTable: View {
         guard editing == categoryId else { return true }
         guard let category = store.windowCategories.first(where: { $0.id == categoryId }) else {
             // Merged away, or gone with a sync while the row was open.
+            editing = nil
+            return true
+        }
+        guard CategoryDraft.isEditable(category) else {
+            // Archived meanwhile, by the menu or a sync: nothing to write.
             editing = nil
             return true
         }
