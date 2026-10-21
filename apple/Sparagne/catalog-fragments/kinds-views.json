@@ -1,1 +1,11 @@
-{}
+{
+  "Change Kind": { "en": "Change Kind", "it": "Cambia tipo" },
+  "Change to Expense": { "en": "Change to Expense", "it": "Cambia in uscita" },
+  "Change to Income": { "en": "Change to Income", "it": "Cambia in entrata" },
+  "Change to Refund": { "en": "Change to Refund", "it": "Cambia in rimborso" },
+  "Edit From / To…": { "en": "Edit From / To…", "it": "Modifica Da / A…" },
+  "From / To": { "en": "From / To", "it": "Da / A" },
+  "space": { "en": "space", "it": "spazio" },
+  "swap": { "en": "swap", "it": "scambia" },
+  "Swap From and To": { "en": "Swap From and To", "it": "Scambia Da e A" }
+}

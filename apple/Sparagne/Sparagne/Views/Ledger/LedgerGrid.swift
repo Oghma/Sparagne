@@ -143,6 +143,11 @@ struct LedgerGrid: View {
         .onChange(of: editor.isEditing) { _, _ in followEditor() }
         .onChange(of: editor.cursor) { _, _ in followEditor() }
         .onChange(of: focus) { old, new in focusMoved(from: old, to: new) }
+        // The "Da → A" popover had the keys: closed, written or not, they
+        // come back to the cell it was opened from.
+        .onChange(of: editor.endsRowId) { _, open in
+            if open == nil, editor.cursor != nil, !editor.isEditing { gridFocused = true }
+        }
         .onAppear {
             followEditor()
             // ⌘A works from the start, before any cell was clicked.
@@ -286,7 +291,8 @@ struct LedgerGrid: View {
 
     /// A key typed on the selected cell: it replaces what the cell says, or
     /// with "" (⌫) empties it, and the cell's field takes the caret after
-    /// it. A cell that cannot be typed into beeps.
+    /// it. A cell that cannot be typed into beeps, a transfer's route among
+    /// them: it opens on ↩, not on a key.
     private func typeOnCursor(_ characters: String) {
         let starting = !editor.isEditing
         guard editor.type(characters) else {
@@ -298,7 +304,9 @@ struct LedgerGrid: View {
     }
 
     /// ↩, F2, a double click or VoiceOver's Edit: `cell` (the cursor's, when
-    /// `nil`) is typed into from what it says, the caret after it.
+    /// `nil`) is typed into from what it says, the caret after it. On a
+    /// transfer's route the editor opens the "Da → A" popover instead, which
+    /// takes the keyboard: no caret, as no field opened.
     ///
     /// Refused, it beeps when the cell cannot be typed into, and then it is
     /// selected; a cell being left that refused to be saved has said why
@@ -309,6 +317,7 @@ struct LedgerGrid: View {
             if editor.cursor == target, !editor.isEditing { NSSound.beep() }
             return
         }
+        guard editor.endsRowId == nil else { return }
         typed = false
         placeCaret()
     }
@@ -597,7 +606,8 @@ struct LedgerGrid: View {
             completion: completion,
             envelopes: envelopes,
             onClick: { field in click(CellFocus(row: row.id, field: field)) },
-            onDelete: trashAction(for: row, editing: isEditing)
+            onDelete: trashAction(for: row, editing: isEditing),
+            showsEnds: editor.endsRowId == row.id
         )
         .background(background(selected: isSelected, hovered: hovered == row.id))
         .hoverId($hovered, row.id)
@@ -632,13 +642,27 @@ struct LedgerGrid: View {
     /// history, struck through when the chip shows it and out of every total.
     /// "Annulla", the old Italian word for it, was also Cancel and the
     /// system's Undo.
+    ///
+    /// A transfer's two ends do not fit the empty line (`RowDraft.duplicate`):
+    /// its Duplicate writes the copy at once, and its ends are picked in the
+    /// "Da → A" popover. Neither is there in a vault only read, and neither
+    /// works on a deleted transfer.
     @ViewBuilder
     private func rowMenu(_ row: TransactionRow) -> some View {
-        // A transfer's two ends do not fit the empty line, so it has no copy
-        // to offer (`RowDraft.duplicate`).
-        if !row.isTransfer {
+        if row.isTransfer {
+            if !store.isReadOnly {
+                Button(String(localized: "Edit From / To\u{2026}")) { editor.openEnds(of: row.id) }
+                    .disabled(row.voided)
+                Button(String(localized: "Duplicate")) { duplicateTransfer(row) }
+                    .disabled(row.voided)
+                Divider()
+            }
+        } else {
             Button(String(localized: "Duplicate")) { duplicate(row) }
                 .disabled(store.isReadOnly)
+            ChangeKindMenu(targets: store.kindTargets(of: row.id)) { kind in
+                Task { await ChangeKindMenu.change(row.id, to: kind, in: store) }
+            }
             Divider()
         }
         Button(String(localized: "Delete"), role: .destructive) {
@@ -667,8 +691,19 @@ struct LedgerGrid: View {
             if !row.voided {
                 Button(String(localized: "Edit")) { edit(CellFocus(row: row.id, field: .note)) }
             }
-            if !row.isTransfer {
+            if row.isTransfer {
+                if !row.voided {
+                    Button(String(localized: "Edit From / To\u{2026}")) { editor.openEnds(of: row.id) }
+                    Button(String(localized: "Duplicate")) { duplicateTransfer(row) }
+                }
+            } else {
                 Button(String(localized: "Duplicate")) { duplicate(row) }
+            }
+            // Cambia tipo's kinds, an action each, named as ⌘K names them.
+            ForEach(store.kindTargets(of: row.id), id: \.self) { kind in
+                Button(CommandPaletteModel.kindTitle(kind)) {
+                    Task { await ChangeKindMenu.change(row.id, to: kind, in: store) }
+                }
             }
             if !row.voided {
                 Button(String(localized: "Delete")) { Task { await store.void(transactionId: row.id) } }
@@ -686,6 +721,7 @@ struct LedgerGrid: View {
             .disabled(targets == 0)
         Button(String(localized: "Set Envelope\u{2026}")) { showsBulkEnvelope = true }
             .disabled(targets == 0)
+        ChangeKindMenu(selectionOf: store)
         Divider()
         Button(String(localized: "Delete \(targets) Rows"), role: .destructive) {
             Task { await store.voidSelection() }
@@ -764,6 +800,19 @@ struct LedgerGrid: View {
     private func duplicate(_ row: TransactionRow) {
         guard !store.isReadOnly else { return }
         editor.duplicate(row)
+    }
+
+    /// The context menu's Duplicate on a transfer: the copy is written at
+    /// once, dated today (`AppStore.duplicateTransfer`), and the cursor goes
+    /// to its IMPORTO while it is on screen, as a copy into the empty line
+    /// takes it there. Selected, not typed into: the copy is stored already,
+    /// and ⌘Z right after takes it back.
+    private func duplicateTransfer(_ row: TransactionRow) {
+        guard !store.isReadOnly else { return }
+        Task {
+            guard let id = await store.duplicateTransfer(row.id), store.rows.contains(where: { $0.id == id }) else { return }
+            editor.select(CellFocus(row: id, field: .amount))
+        }
     }
 
     /// ⌘D with nothing selected duplicates the last row of the month that is
