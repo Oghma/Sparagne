@@ -619,7 +619,7 @@ extension View {
     /// SwiftUI gives a key to the handler applied last first, the one
     /// furthest from the field: the CATEGORY and ENVELOPE cells apply their
     /// lists' keys after these, so that a list, while open, takes ↑ ↓ ↩ ⇥
-    /// and esc before the grid does (`GridEventMechanicsTests`).
+    /// and esc before the grid does.
     func cellKeys(_ edited: EditedCell, key: CellFocus) -> some View {
         onSubmit { edited.editor.confirm() }
             .onKeyPress(phases: [.down, .repeat], action: edited.keys)
