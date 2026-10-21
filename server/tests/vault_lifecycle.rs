@@ -189,6 +189,14 @@ async fn the_owner_deletes_the_vault_for_everyone() {
         state.last_server_seq,
         api.state.core().last_seq(vault).unwrap()
     );
+    // The rejection can still be read and dismissed once the vault is gone.
+    let kept = bob.core.rejected_commands(vault).unwrap();
+    assert_eq!(
+        (kept.len(), kept[0].command_id, kept[0].code.as_str()),
+        (1, doomed, "not_found")
+    );
+    bob.core.dismiss_rejected(vault, doomed).unwrap();
+    assert_eq!(bob.core.sync_state(vault).unwrap().rejected, 0);
 
     // Whatever anyone pushes from now on is refused, command by command.
     let late = CommandEnvelope::new(vault, "alice", wallet_cmd("Late", 0));

@@ -103,7 +103,8 @@ the import writes it with the claims of both its sides in one batch, the
 money-in half's under that half's claim id, so both read as imported from
 then on. A half the user changed (its action, or left out) is no half, and a
 half whose account is left out leaves the other unpaired. An unpaired half
-is imported as what its type says, matched against the vault as any row is.
+is imported as what its type says, matched against the vault as any row is;
+the user may make it a transfer with an action of their own.
 
 ## 4. Rows already in the vault
 
@@ -122,7 +123,8 @@ sides of a transfer are, as a bank's start day is not the others'.
   transfer between wallets of the same amount at most 4 days away that goes
   the row's way: out of the imported wallet for money going out, into it
   for money coming in, and to or from the wallet the row names, if it names
-  one. An expense, income or refund action never matches a transfer. The
+  one. Only the imported wallet's transfers count. An expense, income or
+  refund action never matches a transfer. The
   matched row reads as the transfer it is: kind `TransferWallet`, the other
   wallet in `counter_wallet_id`.
 - **A row typed by hand** (3 days): a new income, expense or refund matches
@@ -156,12 +158,15 @@ Whose the match is decides whether it may stand for the row:
 
 Opening balances, voided rows and the transactions that stand for the rows
 of this statement already imported (their own, or the one their claim,
-move or replacement names) never match. Each amount is paired in one pass
+move or replacement names) never match: a row is never its own duplicate,
+nor are the rows next to it in an overlapping export. Each amount is paired
+in one pass
 for every kind of match, one to one: as many rows as can be get a
 transaction, and among the ways to pair that many, the one closest in all,
 fewest days apart summed, then fewest seconds; on a tie a transfer, then an
 entry of the row's kind, then an entry standing for a transfer. So rows on
-the 10th and the 13th both pair with rows typed on the 8th and the 11th.
+the 10th and the 13th both pair with rows typed on the 8th and the 11th,
+and a row typed on the same day wins over a transfer three days away.
 
 The default choice on a matched row is `ImportAnyway` for a match near the
 file's edges that stands for another export's row, `MoveExisting` for a
@@ -197,8 +202,10 @@ it.
 `lookalikes` is advice, and matching never reads it: for every wallet
 neither imported into, nor checked, nor a statement's, the new rows that
 matched nothing and would match one of its entries as a duplicate in a
-wallet checked would. A statement's wallet is never advised: checked, its
-own rows would be moved out of it.
+wallet checked would. Twelve rows looking like entries of Cash say Cash
+should be checked: forgotten, it makes every one of them a second movement,
+which importing again does not undo. A statement's wallet is never advised:
+checked, its own rows would be moved out of it.
 
 ## 5. The import
 
@@ -209,8 +216,9 @@ accounts of the file is written as one batch (§3). A row replacing its
 match is written as one batch, all of it or nothing on this device: its
 transfer, the `VoidTransaction` of the entry (`replace`), the claim of its
 own side and, when the entry stood for the named wallet's statement row,
-the claim of that wallet's side under the entry's own claim id, so a
-preview of the other statement follows the entry its row names to the
+the claim of that wallet's side under the entry's own claim id (the other
+row's id when its import wrote the entry), so a preview of the other
+statement follows the entry its row names to the
 transfer. Then, oldest first, every flagged row left out is recorded:
 
 - a duplicate whose choice is `MoveExisting` is moved into the imported
@@ -249,7 +257,9 @@ instant (`2026-09-16T08:54:40Z`) when the date column fixes one, else the
 wall-clock time or the day as written, so importing from another timezone
 finds the same rows; the type column's value, or without a type column the
 kind the type rules and the default action give the row, never the one a
-description rule or the user give it; the amount in minor units signed as
+description rule or the user give it (ids handed out before either existed
+stay what they were, and changing what a row is never makes it new again);
+the amount in minor units signed as
 the file wrote it; the payee lowercased; and `n` the number of rows with
 the same key earlier in the file, so two identical rows in the same second
 both import. The start day, the envelope or a match never change an id.

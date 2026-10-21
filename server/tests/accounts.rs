@@ -428,8 +428,12 @@ async fn a_member_cannot_remove_another_member() {
     api.register("carol").await;
     let uri = format!("/vaults/{vault}/members");
     api.add_member(&alice.token, vault, "carol", "viewer").await;
+    api.register("dave").await;
 
-    for target in ["carol", "alice"] {
+    // The refusal comes before the target is looked up: a member, a
+    // registered outsider and an unknown name all read the same, so a
+    // non-owner cannot probe who is a member.
+    for target in ["carol", "alice", "dave", "nobody"] {
         let res = api.delete(&format!("{uri}/{target}"), &bob.token).await;
         assert_eq!(res.status, StatusCode::FORBIDDEN, "{target}");
         assert_eq!(res.code(), "forbidden");

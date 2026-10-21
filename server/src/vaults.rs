@@ -60,8 +60,8 @@ pub async fn list(
 }
 
 /// `POST /vaults/{vault_id}/push`. The first push of a vault the server has
-/// never seen creates it ([`claim`]); a command naming somebody outside the
-/// vault is refused on its own ([`stranger`]).
+/// never seen creates it (`claim`); a command naming somebody outside the
+/// vault is refused on its own (`stranger`).
 pub async fn push(
     State(state): State<AppState>,
     user: CurrentUser,
