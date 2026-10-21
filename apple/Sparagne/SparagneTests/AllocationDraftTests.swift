@@ -195,10 +195,10 @@ struct AllocationDraftTests {
     @Test("The Busta menu offers the active envelopes but Unallocated, less those another line has")
     func offeredEnvelopes() {
         let flows = [
-            Self.envelope("unallocated", unallocated: true),
-            Self.envelope(Self.rent),
-            Self.envelope(Self.savings),
-            Self.envelope("flow-vacanze"),
+            EnvelopeYearTests.flow("unallocated", unallocated: true),
+            EnvelopeYearTests.flow(Self.rent),
+            EnvelopeYearTests.flow(Self.savings),
+            EnvelopeYearTests.flow("flow-vacanze"),
         ]
         let lines = Array(Self.lines.prefix(2))
         #expect(AllocationLineDraft.offered(flows, lines: lines, keeping: nil).map(\.id) == ["flow-vacanze"])
@@ -208,26 +208,13 @@ struct AllocationDraftTests {
 
     @Test("Al tetto stands for the cap of the envelope picked, and for nothing without one")
     func capOfTheEnvelope() {
-        let flows = [Self.envelope(Self.food, mode: .netCapped(cap: 30_000)), Self.envelope(Self.rent)]
+        let flows = [EnvelopeYearTests.flow(Self.food, mode: .netCapped(cap: 30_000)), EnvelopeYearTests.flow(Self.rent)]
         var draft = AllocationLineDraft()
         #expect(draft.cap(in: flows) == nil)
         draft.flowId = Self.food
         #expect(draft.cap(in: flows) == 30_000)
         draft.flowId = Self.rent
         #expect(draft.cap(in: flows) == nil)
-    }
-
-    private static func envelope(_ id: Uuid, mode: FlowMode = .unlimited, unallocated: Bool = false) -> FlowView {
-        FlowView(
-            id: id,
-            name: id,
-            balance: 0,
-            mode: mode,
-            incomeTotal: nil,
-            allowNegative: false,
-            archived: false,
-            isUnallocated: unallocated
-        )
     }
 
     private static func field(of draft: AllocationLineDraft) -> AllocationField? {

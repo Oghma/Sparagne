@@ -678,15 +678,13 @@ private final class GridUnderTest {
     /// The middle of a cell, from the column widths the grid lays out.
     func point(line: Int, _ field: RowField) -> CGPoint {
         let columns = store.ledgerColumns
-        let left = GridColumn.ordinal + 2 * GridColumn.padding
         let right = [LedgerColumn.person, .amount].map { columns.outer($0) }.reduce(GridColumn.action, +)
             + (store.showWalletColumn ? columns.outer(.wallet) : 0)
         let x: CGFloat = switch field {
-        case .date: left + columns.outer(.date) / 2
-        case .flow: left + columns.outer(.date) + columns.outer(.flow) / 2
-        case .category: left + columns.outer(.date) + columns.outer(.flow) + columns.outer(.category) / 2
-        case .note:
-            (left + columns.outer(.date) + columns.outer(.flow) + columns.outer(.category) + Self.size.width - right) / 2
+        case .date: left(of: field) + columns.outer(.date) / 2
+        case .flow: left(of: field) + columns.outer(.flow) / 2
+        case .category: left(of: field) + columns.outer(.category) / 2
+        case .note: (left(of: field) + Self.size.width - right) / 2
         case .wallet: Self.size.width - right + columns.outer(.wallet) / 2
         case .person: Self.size.width - GridColumn.action - columns.outer(.amount) - columns.outer(.person) / 2
         case .amount: Self.size.width - GridColumn.action - columns.outer(.amount) / 2
@@ -695,7 +693,7 @@ private final class GridUnderTest {
         return CGPoint(x: x, y: y)
     }
 
-    /// The left edge of a column, as `point` lays the columns out.
+    /// The left edge of a column; past DESCRIZIONE, the middle of the cell.
     func left(of field: RowField) -> CGFloat {
         let columns = store.ledgerColumns
         let start = GridColumn.ordinal + 2 * GridColumn.padding
@@ -752,11 +750,9 @@ private final class GridUnderTest {
     /// cell of `line`: the list starts three points into the cell and a
     /// point up into it, and its first entry is under the group's label.
     func firstCategoryEntry(below line: Int) -> CGPoint {
-        let columns = store.ledgerColumns
-        let left = GridColumn.ordinal + 2 * GridColumn.padding + columns.outer(.date) + columns.outer(.flow)
         let rowBottom = Self.searchHeight + Metrics.headerHeight + CGFloat(line + 1) * Metrics.rowHeight
         return CGPoint(
-            x: left + 3 + FloatingList.width / 2,
+            x: left(of: .category) + 3 + FloatingList.width / 2,
             y: rowBottom - 1 + 4 + FloatingList.groupHeight + FloatingList.rowHeight / 2
         )
     }

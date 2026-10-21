@@ -31,6 +31,16 @@ struct StatementReviewTests {
         overrides.sorted { $0.line < $1.line }
     }
 
+    /// Line 2 as a possible duplicate of the `forno bianco` typed in Card,
+    /// kept by default.
+    private static func duplicate(_ model: StatementImportModel, in store: AppStore) async throws -> StatementRow {
+        var row = try StatementFixture.row(model, line: 2)
+        row.status = .possibleDuplicate
+        row.existing = try #require(try await StatementFixture.transactions(store).first { $0.note == "forno bianco" })
+        row.matchChoice = .skip
+        return row
+    }
+
     // MARK: - Overrides
 
     @Test("Each edit of a row goes to the import as one override carrying only what changed")
@@ -380,15 +390,10 @@ struct StatementReviewTests {
     func matchChoices() async throws {
         let (store, card, bank, _) = try await Self.vault()
         let model = try await StatementFixture.cardModel(store, wallet: card)
-        let all = try await StatementFixture.transactions(store)
-        let existing = try #require(all.first { $0.note == "forno bianco" })
-        #expect(existing.walletId == card)
         #expect(!StatementImportModel.isFlagged(try StatementFixture.row(model, line: 3)))
 
-        var duplicate = try StatementFixture.row(model, line: 2)
-        duplicate.status = .possibleDuplicate
-        duplicate.existing = existing
-        duplicate.matchChoice = .skip
+        var duplicate = try await Self.duplicate(model, in: store)
+        #expect(duplicate.existing?.walletId == card)
         #expect(StatementImportModel.isFlagged(duplicate))
         #expect(!model.canMove(duplicate))
         #expect(model.defaultChoice(for: duplicate) == .skip)
@@ -432,12 +437,7 @@ struct StatementReviewTests {
     func staleMatchChoices() async throws {
         let (store, card, bank, _) = try await Self.vault()
         let model = try await StatementFixture.cardModel(store, wallet: card)
-        let all = try await StatementFixture.transactions(store)
-        let existing = try #require(all.first { $0.note == "forno bianco" })
-        var duplicate = try StatementFixture.row(model, line: 2)
-        duplicate.status = .possibleDuplicate
-        duplicate.existing = existing
-        duplicate.matchChoice = .skip
+        let duplicate = try await Self.duplicate(model, in: store)
 
         func choose() {
             model.setMatchChoice(.importAnyway, for: duplicate)
@@ -497,12 +497,7 @@ struct StatementReviewTests {
     func matchedRowsTicked() async throws {
         let (store, card, bank, _) = try await Self.vault()
         let model = try await StatementFixture.cardModel(store, wallet: card)
-        let all = try await StatementFixture.transactions(store)
-        let existing = try #require(all.first { $0.note == "forno bianco" })
-        var duplicate = try StatementFixture.row(model, line: 2)
-        duplicate.status = .possibleDuplicate
-        duplicate.existing = existing
-        duplicate.matchChoice = .skip
+        let duplicate = try await Self.duplicate(model, in: store)
         #expect(StatementImportModel.takesTick(duplicate))
         var transfer = duplicate
         transfer.status = .matchedTransfer

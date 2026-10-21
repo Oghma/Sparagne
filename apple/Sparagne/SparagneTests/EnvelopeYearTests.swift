@@ -9,7 +9,8 @@ import Testing
 struct EnvelopeYearTests {
     private static let june = MonthKey(year: 2026, month: 6)
 
-    private static func flow(_ name: String, mode: FlowMode = .unlimited, unallocated: Bool = false) -> FlowView {
+    /// An envelope whose id is its name, empty.
+    static func flow(_ name: String, mode: FlowMode = .unlimited, unallocated: Bool = false) -> FlowView {
         FlowView(
             id: name,
             name: name,
