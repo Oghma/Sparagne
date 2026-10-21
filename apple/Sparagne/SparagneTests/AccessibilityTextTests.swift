@@ -53,14 +53,10 @@ struct SummaryTextTests {
         #expect(SummaryText.percent(0.125, decimals: 1) == "12,5%")
     }
 
-    @Test("A category of the vault keeps its name, even one called like a system category")
-    func userCategoryKeepsItsName() {
+    @Test("The two system categories are named in the user's language, whatever the core's case; the vault's own keep their name, even one called like a system category")
+    func systemCategoriesAreLocalized() {
         #expect(SummaryText.categoryName("spesa", isSystem: false) == "spesa")
         #expect(SummaryText.categoryName("Uncategorized", isSystem: false) == "Uncategorized")
-    }
-
-    @Test("The two system categories are named in the user's language, whatever the core's case")
-    func systemCategoriesAreLocalized() {
         #expect(SummaryText.categoryName("uncategorized", isSystem: true) == String(localized: "Uncategorized"))
         #expect(SummaryText.categoryName("Opening", isSystem: true) == String(localized: "Opening"))
         #expect(SummaryText.categoryName("Something new", isSystem: true) == "Something new")
@@ -117,64 +113,30 @@ struct SummaryTextTests {
     }
 }
 
-/// A string catalog built on disk for one language, with the strip's keys:
-/// the chips are read through `SummaryText.todo`'s `bundle`, so the plural
-/// rules are checked whatever the app's own catalog holds.
+/// The strip's keys in a catalog of their own (`CatalogBundle`).
 private enum SummaryCatalog {
     static func english() throws -> Bundle {
-        try bundle(language: "en", plurals: [
-            "%lld recurring to confirm": ("%lld recurring to confirm", "%lld recurring to confirm"),
-            "%lld rows without a category": ("%lld row without a category", "%lld rows without a category"),
-            "%lld earlier": ("%lld earlier", "%lld earlier"),
-        ])
+        try CatalogBundle.make(
+            language: "en",
+            plurals: [
+                "%lld recurring to confirm": ("%lld recurring to confirm", "%lld recurring to confirm"),
+                "%lld rows without a category": ("%lld row without a category", "%lld rows without a category"),
+                "%lld earlier": ("%lld earlier", "%lld earlier"),
+            ],
+            name: "summary"
+        )
     }
 
     static func italian() throws -> Bundle {
-        try bundle(
+        try CatalogBundle.make(
             language: "it",
             plurals: [
                 "%lld recurring to confirm": ("%lld ricorrenza da confermare", "%lld ricorrenze da confermare"),
                 "%lld rows without a category": ("%lld riga senza categoria", "%lld righe senza categoria"),
                 "%lld earlier": ("%lld precedente", "%lld precedenti"),
             ],
-            strings: ["Allocation due \u{00B7} %@": "Riparto in attesa \u{00B7} %@"]
+            strings: ["Allocation due \u{00B7} %@": "Riparto in attesa \u{00B7} %@"],
+            name: "summary"
         )
-    }
-
-    private static func bundle(
-        language: String,
-        plurals: [String: (one: String, other: String)],
-        strings: [String: String] = [:]
-    ) throws -> Bundle {
-        let root = FileManager.default.temporaryDirectory
-            .appending(path: "sparagne-summary-\(UUID().uuidString).bundle", directoryHint: .isDirectory)
-        let contents = root.appending(path: "Contents", directoryHint: .isDirectory)
-        let lproj = contents.appending(path: "Resources/\(language).lproj", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: lproj, withIntermediateDirectories: true)
-        let info: [String: Any] = [
-            "CFBundleIdentifier": "it.oghma.sparagne.tests.summary.\(language)",
-            "CFBundleDevelopmentRegion": language,
-            "CFBundlePackageType": "BNDL",
-        ]
-        try plist(info).write(to: contents.appending(path: "Info.plist"))
-        var rules: [String: Any] = [:]
-        for (key, forms) in plurals {
-            rules[key] = [
-                "NSStringLocalizedFormatKey": "%#@count@",
-                "count": [
-                    "NSStringFormatSpecTypeKey": "NSStringPluralRuleType",
-                    "NSStringFormatValueTypeKey": "lld",
-                    "one": forms.one,
-                    "other": forms.other,
-                ],
-            ]
-        }
-        try plist(rules).write(to: lproj.appending(path: "Localizable.stringsdict"))
-        try plist(strings).write(to: lproj.appending(path: "Localizable.strings"))
-        return try #require(Bundle(url: root))
-    }
-
-    private static func plist(_ value: Any) throws -> Data {
-        try PropertyListSerialization.data(fromPropertyList: value, format: .xml, options: 0)
     }
 }

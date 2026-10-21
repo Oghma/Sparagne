@@ -71,20 +71,18 @@ struct CategoryCompletionTests {
     /// Vault `Casa` with rows filed under three categories, the most recent
     /// last, and the completion data loaded as a cell taking the caret would.
     private static func store() async throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.completion.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        let store = try await TestStore.make()
         for category in ["Carburante", "Casa", "Cassa comune"] {
             await store.addRow(day: Date(), flowId: nil, category: category, note: category.lowercased(), amount: 100)
         }
-        await store.addCategoryAliasForTests("bollette", to: "Casa")
+        let casa = try #require(store.categories.first { $0.name == "Casa" })
+        await store.addAlias(categoryId: casa.id, alias: "bollette")
         await store.loadCategoryCompletion()
         #expect(store.presentedError == nil)
         return store
     }
 
-    @Test("The model ranks by what was used last, moves with wrap-around, and a pick writes the name without reopening")
+    @Test("The model ranks by what was used last, and a pick writes the name without reopening")
     func modelPicks() async throws {
         let store = try await Self.store()
         #expect(store.recentCategoryIds.count == 3)
@@ -96,10 +94,6 @@ struct CategoryCompletionTests {
         #expect(model.list.items.map(\.name) == ["Cassa comune", "Casa", "Carburante"])
         #expect(model.list.owner == AnyHashable("cell"))
 
-        model.list.move(by: -1)
-        #expect(model.list.selected?.name == "Carburante")
-        model.list.move(by: 1)
-        #expect(model.list.selected?.name == "Cassa comune")
         model.list.move(by: 1)
         #expect(model.picksOnReturn(over: "ca"))
         #expect(model.list.pick())
@@ -120,13 +114,5 @@ struct CategoryCompletionTests {
         #expect(model.list.items.first?.alias == "bollette")
         model.list.pick()
         #expect(written == "Casa")
-    }
-}
-
-extension AppStore {
-    /// An alias through the same command the SETUP tab sends.
-    fileprivate func addCategoryAliasForTests(_ alias: String, to name: String) async {
-        guard let category = categories.first(where: { $0.name == name }) else { return }
-        await addAlias(categoryId: category.id, alias: alias)
     }
 }

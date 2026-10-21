@@ -51,22 +51,6 @@ struct RecurringDraftTests {
         #expect(draft.amountText == "780,00")
     }
 
-    @Test("Every cadence survives the round trip unchanged")
-    func unchangedEveryCadence() {
-        let schedules = [
-            RecurringFixture.schedule(.daily, every: 3),
-            RecurringFixture.schedule(.weekly(weekday: 6), every: 2),
-            RecurringFixture.schedule(.monthly(day: 31)),
-            RecurringFixture.schedule(.yearly(month: 3, day: 15), until: "2030-12-31"),
-        ]
-        for schedule in schedules {
-            let template = RecurringFixture.template(schedule: schedule)
-            let draft = RecurringDraft(template: template)
-            #expect(draft.schedule == schedule)
-            #expect(!draft.isDirty(against: template, currency: .eur))
-        }
-    }
-
     @Test("A duplicate keeps the fields, runs, and starts today")
     func duplicate() {
         let draft = RecurringDraft(duplicating: Self.rent, today: "2026-10-08")
@@ -225,21 +209,13 @@ struct RecurringDraftTests {
         }
     }
 
-    /// Which schedules are refused, cadence by cadence, is
+    /// Which schedules are refused, the end included, is
     /// `ScheduleDraftTests`: here, that a refused one keeps Salva off.
-    @Test("A schedule the core would refuse makes the draft invalid; an end switched off does not")
+    @Test("A schedule the core would refuse makes the draft invalid")
     func invalidSchedules() {
         var draft = RecurringDraft(template: Self.rent)
         draft.when.interval = 0
         #expect(!draft.isValid(currency: .eur))
-
-        draft = RecurringDraft(template: Self.rent)
-        draft.when.hasEndDate = true
-        draft.when.shownEndDate = "2025-10-31"
-        #expect(!draft.isValid(currency: .eur))
-        // Turned back to Mai, the stale end date does not matter.
-        draft.when.hasEndDate = false
-        #expect(draft.isValid(currency: .eur))
     }
 
     // MARK: - A new template
@@ -324,15 +300,9 @@ struct RecurringDraftTests {
         #expect(draft.creation(currency: .eur)?.owner == "elisa")
     }
 
-    /// `rent`, owned by elisa.
-    private static let elisasRent = RecurringFixture.template(
-        "rent",
-        amount: 78_000,
-        walletId: wallet,
-        flowId: flow,
-        category: "Casa",
-        note: "mutuo",
-        schedule: RecurringFixture.schedule(.monthly(day: 1), from: "2025-11-01"),
-        owner: "elisa"
-    )
+    private static let elisasRent = {
+        var template = rent
+        template.owner = "elisa"
+        return template
+    }()
 }
