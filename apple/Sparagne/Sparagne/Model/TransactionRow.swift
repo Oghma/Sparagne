@@ -47,6 +47,10 @@ nonisolated struct TransactionRow: Identifiable, Hashable, Sendable {
     private(set) var walletId: Uuid?
     /// Entries: the envelope leg. Transfers between envelopes: the source.
     private(set) var flowId: Uuid?
+    /// A transfer's two ends, wallets or envelopes by its kind; `nil` for an
+    /// entry.
+    private(set) var fromId: Uuid?
+    private(set) var toId: Uuid?
 
     private(set) var walletDisplay: String
     private(set) var envelopeDisplay: String
@@ -88,6 +92,8 @@ nonisolated struct TransactionRow: Identifiable, Hashable, Sendable {
         recordedBy = view.createdBy
         voided = view.voided
 
+        fromId = view.fromId
+        toId = view.toId
         // The core already sorted the legs out by kind (`core/src/query.rs`).
         switch view.kind {
         case .transferWallet:

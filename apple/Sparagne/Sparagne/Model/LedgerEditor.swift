@@ -28,6 +28,9 @@ final class LedgerEditor {
     var text = ""
     /// ENVELOPE's pick while that cell is being edited.
     var flowId: Uuid?
+    /// The transfer whose two ends are being picked: the grid shows its
+    /// "Da → A" popover (`TransferEndsPopover`) while this names it.
+    private(set) var endsRowId: Uuid?
     /// The new line's cells, as they stand while the line is not registered:
     /// what it shows, and what it registers.
     var newLine = RowDraft()
@@ -190,6 +193,19 @@ final class LedgerEditor {
         place(at: CellFocus(row: nil, field: .amount))
         begin(with: copy.amount)
     }
+
+    /// Opens the "Da → A" popover on the transfer with `rowId`: ↩ or a double
+    /// click on the cell that shows its route, or the row's menu.
+    func openEnds(of rowId: Uuid) {}
+
+    /// Closes the popover with nothing written.
+    func closeEnds() {}
+
+    /// Writes the transfer's two ends as one cell, both ids together, and
+    /// closes the popover. Says whether the write was sent: `false` for ends
+    /// that equal each other or the stored ones.
+    @discardableResult
+    func saveEnds(of rowId: Uuid, from: Uuid, to: Uuid) -> Bool { false }
 
     /// Waits for the writes the editor has sent: `AppStore.settle` and
     /// quitting do.

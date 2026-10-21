@@ -297,6 +297,9 @@ final class AppStore {
     var allocationReopening = false
     /// The history is asking before a reopen; the toast steps aside meanwhile.
     var allocationConfirmingReopen = false
+    /// The last kind change that took rows out of the list on screen, while
+    /// its toast offers to show them (`AppStore+KindChange.swift`).
+    var kindMoveNotice: KindMoveNotice?
 
     /// Rows per category id over the last 12 months, voided excluded: the
     /// usage column of the SETUP categories. Written only by its loader
@@ -1708,6 +1711,23 @@ final class AppStore {
             if vaultId == currentVault?.id { await reload() }
         }
         return created
+    }
+
+    /// Envelopes minted with `core.envelope(vaultId:_:)`, as one batch, all of
+    /// them or none, then reloads: for a batch whose later commands name what
+    /// an earlier one creates, or whose caller needs the new ids up front.
+    /// Says whether it went through; a refusal is already on the alert.
+    @discardableResult
+    func apply(envelopes: [CommandEnvelope], in vaultId: Uuid) async -> Bool {
+        guard !envelopes.isEmpty, !refusedAsReadOnly() else { return false }
+        var applied = false
+        await guarded {
+            try await core.executeBatch(envelopes: envelopes)
+            applied = true
+            savedAt = Date()
+            if vaultId == currentVault?.id { await reload() }
+        }
+        return applied
     }
 
     // MARK: - Errors

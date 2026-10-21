@@ -100,6 +100,12 @@ struct RowDraft {
         return draft
     }
 
+    /// The patch that gives a transfer the ends `from` and `to`, always both
+    /// ids: the core checks that they differ on the result, so a swap sent
+    /// one end at a time would be refused. `nil` for an entry, for two equal
+    /// ends, or for the ends the row already has.
+    static func endsPatch(of row: TransactionRow, from: Uuid, to: Uuid) -> TransactionPatch? { nil }
+
     /// The fields of a new row, resolved and parsed. `nil` when the amount
     /// cell is still empty: tabbing to the end of a blank line and pressing ↩
     /// is not an error, it is nothing.
