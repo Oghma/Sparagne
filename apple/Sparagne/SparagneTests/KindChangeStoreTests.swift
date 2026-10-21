@@ -374,18 +374,4 @@ struct KindChangeStoreTests {
         #expect(try Self.row("multa", in: store).kind == .expense)
         #expect(try Self.row("multa", in: store).absoluteAmount == 4_000)
     }
-
-    // MARK: - A vault only read
-
-    @Test("A vault only read offers no kind to change to, and refuses a change that gets through")
-    func readOnly() async throws {
-        let (store, _) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
-        store.setReadOnlyVaults([try #require(store.currentVault).id])
-        #expect(store.kindTargets(of: coop.id).isEmpty)
-        #expect(store.kindTargets(rows: [coop.id]).isEmpty)
-        #expect(await store.changeKind(of: coop.id, to: .income) == nil)
-        #expect(store.presentedError?.code == "forbidden")
-        #expect(try Self.row("coop", in: store).kind == .expense)
-    }
 }

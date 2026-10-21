@@ -243,7 +243,7 @@ struct LedgerStoreTests {
         #expect(copies.allSatisfy { $0.kind == .refund })
     }
 
-    @Test("A transfer offers no duplicate, and ⌘D passes over it")
+    @Test("A transfer is not copied into the new line, and ⌘D passes over it")
     func transfersAreNotDuplicated() async throws {
         let (store, _) = try await Self.household()
         await store.createWallet(name: "Contanti", openingBalance: 0)
@@ -257,6 +257,48 @@ struct LedgerStoreTests {
         #expect(transfer.isTransfer)
         #expect(RowDraft.duplicate(of: transfer, store: store) == nil)
         #expect(store.lastRow?.note == "coop")
+    }
+
+    @Test("Its menu copies a transfer at once, dated today at its time, with its ends, amount and note; ⌘Z deletes the copy")
+    func duplicateTransfer() async throws {
+        let (store, envelope) = try await Self.household()
+        let manager = try LedgerHistoryTests.attachManager(to: store)
+        let vault = try #require(store.currentVault)
+        let unallocated = try #require(store.flows.first { $0.isUnallocated })
+        // Another day of the month on screen, at half past nine.
+        let calendar = Calendar.current
+        let today = calendar.dateComponents([.year, .month, .day], from: Date())
+        let then = try #require(calendar.date(from: DateComponents(
+            year: today.year, month: today.month, day: today.day == 1 ? 2 : 1, hour: 9, minute: 30
+        )))
+        #expect(await store.apply(
+            [.transferFlow(amount: 2_000, fromFlowId: unallocated.id, toFlowId: envelope.id, note: "giro", occurredAt: CoreDate.offset(then))],
+            in: vault.id
+        ))
+        store.showTransfers = true
+        await store.settle()
+        let transfer = try #require(store.rows.first { $0.isTransfer })
+
+        let copyId = try #require(await store.duplicateTransfer(transfer.id))
+        #expect(store.presentedError == nil)
+        let copy = try #require(store.rows.first { $0.id == copyId })
+        #expect(copy.kind == .transferFlow)
+        #expect(copy.fromId == unallocated.id && copy.toId == envelope.id)
+        #expect(copy.absoluteAmount == 2_000)
+        #expect(copy.note == "giro")
+        #expect(calendar.isDateInToday(copy.occurredAt))
+        #expect(calendar.component(.hour, from: copy.occurredAt) == 9)
+        #expect(calendar.component(.minute, from: copy.occurredAt) == 30)
+        #expect(manager.undoActionName == String(localized: "Add Row"))
+        // An entry has no transfer to copy.
+        let coop = try #require(store.rows.first { $0.note == "coop" })
+        #expect(await store.duplicateTransfer(coop.id) == nil)
+
+        manager.undo()
+        await store.settle()
+        #expect(store.presentedError == nil)
+        #expect(!store.rows.contains { $0.id == copyId })
+        #expect(store.rows.contains { $0.id == transfer.id })
     }
 
     @Test("A row typed with no amount is not a row")

@@ -163,10 +163,12 @@ final class LedgerEditor {
     }
 
     /// The cursor leaves the grid: the cell being edited is saved and the
-    /// new line registered if it has an amount; the cursor goes. `false`
-    /// when a save was refused, and then nothing moves.
+    /// new line registered if it has an amount; the cursor goes, and the
+    /// "Da → A" popover with it. `false` when a save was refused, and then
+    /// nothing moves.
     @discardableResult
     func finish() -> Bool {
+        closeEnds()
         guard cursor != nil else { return true }
         guard leave(for: nil, wrapping: true) else { return false }
         place(at: nil)
