@@ -68,9 +68,11 @@ extension AppStore {
     /// would come due again.
     ///
     /// Only a running template has periods waiting. A paused one's past
-    /// periods are not on the due list until it runs again, so they go to
-    /// the copy, paused too, and come due there when it is resumed, as they
-    /// would have on the template.
+    /// periods are not on the due list until it runs again: those after the
+    /// last one decided go to the copy, paused too, and come due there when
+    /// it is resumed, as they would have on the template. One before it
+    /// would be lost, since the copy starts after that, so it holds the
+    /// change back until the template is resumed and it is decided.
     private func recurringKindPlan(
         _ templateId: Uuid,
         today: NaiveDate = CoreDate.day(Date())
@@ -84,14 +86,15 @@ extension AppStore {
         if ownerHasLeft(template) { return .failure(.ownerLeft) }
         let runs = try await core.recurringRuns(vaultId: vault.id, recurringId: templateId)
         let decided = Set(runs.map(\.periodDate))
-        if template.enabled {
-            let waiting = try RecurringNext.due(
-                schedule: template.schedule,
-                today: today,
-                handled: decided,
-                occurrences: CoreSchedule.occurrences
-            )
-            if !waiting.isEmpty { return .failure(.pendingPeriods) }
+        let undecided = try RecurringNext.due(
+            schedule: template.schedule,
+            today: today,
+            handled: decided,
+            occurrences: CoreSchedule.occurrences
+        )
+        if template.enabled, !undecided.isEmpty { return .failure(.pendingPeriods) }
+        if !template.enabled, let latest = decided.max(), undecided.contains(where: { $0 < latest }) {
+            return .failure(.periodsBehindPaused)
         }
         guard let start = RecurringKindChange.start(of: template.schedule, decided: decided) else {
             return .failure(.noPeriodsLeft)

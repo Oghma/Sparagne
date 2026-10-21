@@ -12,6 +12,10 @@ nonisolated enum RecurringKindChange {
     enum Refusal: Error, Equatable, Sendable {
         /// Periods are waiting: they would not move to the copy.
         case pendingPeriods
+        /// A paused template has a past period it never decided before the
+        /// last one it did: the copy starts after that one, and would never
+        /// bring it back. Only a resumed template lists it, to be decided.
+        case periodsBehindPaused
         /// The owner left the vault: the copy could not name them.
         case ownerLeft
         case readOnly
@@ -24,6 +28,7 @@ nonisolated enum RecurringKindChange {
         var reason: String {
             switch self {
             case .pendingPeriods: String(localized: "Record or skip the pending periods first")
+            case .periodsBehindPaused: String(localized: "Resume it, then record or skip its pending periods")
             case .ownerLeft: String(localized: "Its owner is no longer a member")
             case .readOnly: String(localized: "This vault is shared with you to read, not to change.")
             case .archived: String(localized: "Restore the template first")

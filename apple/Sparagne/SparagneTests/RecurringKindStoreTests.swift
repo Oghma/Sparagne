@@ -146,6 +146,33 @@ struct RecurringKindStoreTests {
         #expect(store.dueDates(of: id) == [yesterday, Self.today])
     }
 
+    @Test("A paused template with a period never decided before its last one decided keeps the kind until it is resumed and decided")
+    func pausedWithAnEarlierPeriodLeft() async throws {
+        let store = try await Self.onboarded()
+        let gym = try await Self.dailyExpense(store)
+        // Today recorded from the due sheet, the two days before left, then
+        // paused: a copy from tomorrow would never bring those two back.
+        await store.executeRecurring(gym.id, periodDate: Self.today)
+        await store.setRecurringEnabled(gym.id, false)
+        #expect(await store.recurringKindRefusal(gym.id) == .periodsBehindPaused)
+        let before = try await Self.outbox(store)
+
+        #expect(await store.changeRecurringKind(gym.id) == nil)
+
+        #expect(store.presentedError?.message == RecurringKindChange.Refusal.periodsBehindPaused.reason)
+        #expect(!(try Self.template(store, gym.id).archived))
+        #expect(store.recurringTemplates.count == 1)
+        #expect(try await Self.outbox(store) == before)
+        store.presentedError = nil
+
+        // Resumed, they are waiting like any period; decided, the kind changes.
+        await store.setRecurringEnabled(gym.id, true)
+        #expect(await store.recurringKindRefusal(gym.id) == .pendingPeriods)
+        await store.skipRecurring(gym.id, periodDate: try Self.day(-2))
+        await store.skipRecurring(gym.id, periodDate: try Self.day(-1))
+        #expect(await store.recurringKindStart(gym.id) == .success(try Self.day(1)))
+    }
+
     // MARK: - Refused
 
     @Test("Periods waiting keep the kind, and nothing is written")
