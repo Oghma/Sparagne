@@ -4,11 +4,9 @@ import Testing
 
 @testable import Sparagne
 
-/// The core lives on its own actor, off the main one.
-///
-/// These are the properties the move is for: the window is never blocked while
-/// the core works, and two things asking at once are answered one at a time
-/// rather than racing.
+/// The core lives on its own actor, off the main one: the window is never
+/// blocked while the core works, and two things asking at once are answered
+/// one at a time rather than racing.
 struct CoreActorTests {
     /// Vault `Main`, wallet `Cash` with 100.00, envelope `Food` with 50.00.
     private static func onboarded(probe: (@Sendable () async -> Void)? = nil) async throws -> AppStore {

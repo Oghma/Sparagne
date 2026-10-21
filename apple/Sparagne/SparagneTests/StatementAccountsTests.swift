@@ -208,8 +208,6 @@ struct StatementAccountsTests {
         #expect(StatementFixture.balance(store, cash) == 0)
     }
 
-    // MARK: - Words
-
     @Test("The new skipped codes have words of their own")
     func words() {
         let codes = ["skipped_account", "internal_transfer", "transfer_pair", "needs_wallet", "skipped_by_you"]

@@ -113,10 +113,6 @@ struct CountTextTests {
 struct ScheduleFormattingTests {
     private static let english = Locale(identifier: "en_US")
 
-    private static func schedule(_ frequency: Frequency, every interval: UInt32) -> Schedule {
-        Schedule(frequency: frequency, interval: interval, startDate: "2026-01-01", endDate: nil)
-    }
-
     @Test("The interval stepper names its unit, singular at one")
     func intervalWithItsUnit() throws {
         let catalog = try TestCatalog.english()
@@ -138,22 +134,22 @@ struct ScheduleFormattingTests {
         func describe(_ schedule: Schedule) -> String {
             ScheduleFormatting.describe(schedule, bundle: catalog, locale: Self.english)
         }
-        #expect(describe(Self.schedule(.daily, every: 1)) == "Every day")
-        #expect(describe(Self.schedule(.daily, every: 3)) == "Every 3 days")
-        #expect(describe(Self.schedule(.weekly(weekday: 1), every: 1)) == "Every Monday")
-        #expect(describe(Self.schedule(.weekly(weekday: 1), every: 3)) == "Every 3 weeks on Monday")
-        #expect(describe(Self.schedule(.monthly(day: 15), every: 1)) == "Every month on day 15")
-        #expect(describe(Self.schedule(.monthly(day: 15), every: 3)) == "Every 3 months on day 15")
-        #expect(describe(Self.schedule(.yearly(month: 9, day: 5), every: 1)) == "Every year on September 5")
+        #expect(describe(RecurringFixture.schedule(.daily, every: 1)) == "Every day")
+        #expect(describe(RecurringFixture.schedule(.daily, every: 3)) == "Every 3 days")
+        #expect(describe(RecurringFixture.schedule(.weekly(weekday: 1), every: 1)) == "Every Monday")
+        #expect(describe(RecurringFixture.schedule(.weekly(weekday: 1), every: 3)) == "Every 3 weeks on Monday")
+        #expect(describe(RecurringFixture.schedule(.monthly(day: 15), every: 1)) == "Every month on day 15")
+        #expect(describe(RecurringFixture.schedule(.monthly(day: 15), every: 3)) == "Every 3 months on day 15")
+        #expect(describe(RecurringFixture.schedule(.yearly(month: 9, day: 5), every: 1)) == "Every year on September 5")
         // The yearly interval used to be dropped from the description.
-        #expect(describe(Self.schedule(.yearly(month: 9, day: 5), every: 3)) == "Every 3 years on September 5")
+        #expect(describe(RecurringFixture.schedule(.yearly(month: 9, day: 5), every: 3)) == "Every 3 years on September 5")
     }
 
     @Test("A translation can put the day before the month")
     func italianOrder() throws {
         let catalog = try TestCatalog.italian()
         let text = ScheduleFormatting.describe(
-            Self.schedule(.yearly(month: 9, day: 5), every: 1),
+            RecurringFixture.schedule(.yearly(month: 9, day: 5), every: 1),
             bundle: catalog,
             locale: Locale(identifier: "it_IT")
         )

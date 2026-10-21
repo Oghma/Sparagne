@@ -17,6 +17,20 @@ struct AppStoreTests {
         try #require(store.rows.first { $0.note == "pizza" })
     }
 
+    /// A rent of 500,00 on the 1st of every month, started a month ago, so a period is due.
+    private static func rentSinceAMonthAgo(_ store: AppStore) async throws {
+        let monthAgo = try #require(Calendar.current.date(byAdding: .month, value: -1, to: Date()))
+        await store.createRecurring(
+            kind: .expense,
+            amount: 50_000,
+            walletId: nil,
+            flowId: nil,
+            category: "Casa",
+            note: "affitto",
+            schedule: RecurringFixture.schedule(.monthly(day: 1), from: CoreDate.day(monthAgo))
+        )
+    }
+
     @Test("An empty database asks for onboarding, which creates the vault and its wallet")
     func onboarding() async throws {
         let store = try TestStore.fresh(author: "tester", undoWindow: .seconds(60))
@@ -375,7 +389,7 @@ struct AppStoreTests {
         store.presentedError = nil
 
         // A fresh, unrelated target has no conflicts and the merge repoints
-        // the existing transaction (checked via `listTransactions`).
+        // the existing transaction.
         await store.createCategory(name: "Groceries")
         await store.loadCategoryManagement()
         let groceries = try #require(store.windowCategories.first { $0.name == "Groceries" })
@@ -478,16 +492,7 @@ struct AppStoreTests {
     @Test("A recurring expense shows in the summary's fixed costs and its due periods on the strip")
     func summaryFixedCostsAndStrip() async throws {
         let store = try await Self.onboarded()
-        let monthAgo = try #require(Calendar.current.date(byAdding: .month, value: -1, to: Date()))
-        await store.createRecurring(
-            kind: .expense,
-            amount: 50_000,
-            walletId: nil,
-            flowId: nil,
-            category: "Casa",
-            note: "affitto",
-            schedule: Schedule(frequency: .monthly(day: 1), interval: 1, startDate: CoreDate.day(monthAgo), endDate: nil)
-        )
+        try await Self.rentSinceAMonthAgo(store)
         #expect(store.presentedError == nil)
         #expect(store.fixedCosts?.monthly == 50_000)
         #expect(!store.duePeriods.isEmpty)
@@ -722,16 +727,7 @@ struct AppStoreTests {
     @Test("On a vault only read the strip offers no period to decide, and still counts the rows without a category")
     func stripOnAReadOnlyVault() async throws {
         let store = try await Self.onboarded()
-        let monthAgo = try #require(Calendar.current.date(byAdding: .month, value: -1, to: Date()))
-        await store.createRecurring(
-            kind: .expense,
-            amount: 50_000,
-            walletId: nil,
-            flowId: nil,
-            category: "Casa",
-            note: "affitto",
-            schedule: Schedule(frequency: .monthly(day: 1), interval: 1, startDate: CoreDate.day(monthAgo), endDate: nil)
-        )
+        try await Self.rentSinceAMonthAgo(store)
         await store.createEnvelope(name: "Affitto", mode: .unlimited, allowNegative: false, openingAllocation: 0)
         let affitto = try #require(store.flows.first { $0.name == "Affitto" })
         let saved = await store.saveAllocationLines(

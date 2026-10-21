@@ -8,14 +8,13 @@ import Testing
 /// person filters, the aggregates behind the summary panel, and the writes the
 /// grid makes.
 struct LedgerStoreTests {
-    /// A vault with one wallet, one envelope beside Unallocated, and rows in
-    /// the current month written by two people.
+    /// Vault `Casa` with wallet `Conto` and envelope `Cash` beside
+    /// Unallocated, and matteo's salary, `mutuo` and `coop` of today on Cash.
     private static func household() async throws -> (store: AppStore, envelope: FlowView) {
         let store = try await TestStore.make()
         await store.createEnvelope(name: "Cash", mode: .unlimited, allowNegative: true, openingAllocation: 0)
         let envelope = try #require(store.flows.first { $0.name == "Cash" })
 
-        // matteo earns and spends, elisa only spends.
         store.direction = .income
         await store.settle()
         await store.addRow(day: Date(), flowId: envelope.id, category: "Stipendio", note: "stipendio", amount: 300_000)

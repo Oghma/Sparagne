@@ -446,10 +446,9 @@ struct StatementMatchTests {
 
     /// Vault `Main` with `Revolut`, empty, and `ING` holding 1000.00;
     /// Revolut's export imported first, with no rule, so the 200.00 from ING
-    /// is an income there. Then ING's, previewed, whose rule knows the money
-    /// went to Revolut.
-    /// `rules` default to the one knowing the money went to Revolut;
-    /// `before` runs once Revolut's file is in, before ING's is read.
+    /// is an income there. Then ING's, previewed with `rules`, by default the
+    /// one knowing the money went to Revolut; `before` runs once Revolut's
+    /// file is in, before ING's is read.
     private static func revolutThenIng(
         rules: [StatementDescriptionRule]? = nil,
         ingRow: String = "01/10/2026;-200,00;BONIFICO A REVOLUT",

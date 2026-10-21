@@ -68,8 +68,6 @@ struct LedgerCSVTests {
         #expect(LedgerCSV.fileName(vault: "Casa Nostra", month: month, direction: .income) == "casa-nostra-2026-08-income.csv")
     }
 
-    // MARK: - The optional WALLET column
-
     @Test("The export carries the wallet column only while the grid is showing it")
     func walletColumnFollowsTheGrid() {
         #expect(LedgerCSV.render([]) == LedgerCSV.header + "\r\n")
