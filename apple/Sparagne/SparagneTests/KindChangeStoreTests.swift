@@ -377,4 +377,107 @@ struct KindChangeStoreTests {
         #expect(try Self.row("multa", in: store).kind == .expense)
         #expect(try Self.row("multa", in: store).absoluteAmount == 4_000)
     }
+
+    @Test("Cells saved just before a sign in IMPORTO, still on their way, go into the new row though another month is on screen by its turn")
+    func cellsSavedBeforeTheSign() async throws {
+        let (store, _) = try await Self.household()
+        let editor = store.ledgerEditor
+        let coop = try Self.row("coop", in: store)
+        editor.select(Self.cell(coop.id, .note))
+        editor.type("conad")
+        editor.move(.tab)
+        editor.select(Self.cell(coop.id, .category))
+        editor.type("Altro")
+        editor.select(Self.cell(coop.id, .amount))
+        editor.type("+60")
+        // Nothing has landed yet: the note's reload brings the other month.
+        store.month = store.month.adding(months: -1)
+        await store.settle()
+        #expect(store.presentedError == nil)
+
+        store.month = store.month.adding(months: 1)
+        store.direction = .income
+        await store.settle()
+        let income = try #require(store.rows.first { $0.absoluteAmount == 6_000 })
+        #expect(income.note == "conad")
+        #expect(income.category == "Altro")
+        store.direction = .expenses
+        await store.settle()
+        #expect(!store.rows.contains { $0.note == "coop" || $0.note == "conad" })
+    }
+
+    @Test("A cell's patch folded into the stored row reads as the core will store it: blank for Uncategorized and for the recorder")
+    func viewApplyingAPatch() {
+        let view = TransactionView(
+            id: "row", kind: .expense, occurredAt: "2026-10-12T12:00:00+05:30", amount: 1_250,
+            categoryId: "spesa", category: "Spesa", categoryIsSystem: false, note: "coop",
+            person: "elisa", createdBy: "matteo", voided: false,
+            walletId: "conto", flowId: "cash", fromId: nil, toId: nil, legs: []
+        )
+        let blank = AppStore.view(view, applying: TransactionPatch(category: "", note: "", person: ""))
+        #expect(AppStore.storedCategory(blank) == "")
+        #expect(blank.note == nil)
+        #expect(blank.person == "matteo")
+        let moved = AppStore.view(
+            view,
+            applying: TransactionPatch(amount: 6_000, occurredAt: "2026-10-13T12:00:00+05:30", category: "Altro", walletId: "carta", flowId: "fondo", person: "luca")
+        )
+        #expect(moved.amount == 6_000)
+        #expect(moved.occurredAt == "2026-10-13T12:00:00+05:30")
+        #expect(AppStore.storedCategory(moved) == "Altro")
+        #expect(moved.walletId == "carta" && moved.flowId == "fondo")
+        #expect(moved.person == "luca")
+        #expect(moved.note == "coop")
+    }
+
+    @Test("A new line signed for the other list puts up the toast that shows where it went; one registered on its way out of its own list does not")
+    func signedNewLineToast() async throws {
+        let (store, manager) = try await Self.household()
+        let editor = store.ledgerEditor
+        editor.select(Self.cell(nil, .note))
+        editor.type("stipendio")
+        editor.select(Self.cell(nil, .amount))
+        editor.type("+300")
+        editor.confirm()
+        await store.settle()
+        let notice = try #require(store.kindMoveNotice)
+        #expect(notice.direction == .income)
+        #expect(notice.count == 1)
+        #expect(!store.rows.contains { $0.id == notice.transactionId })
+
+        // ⌘Z deletes the row, and the toast that would show it.
+        manager.undo()
+        await store.settle()
+        #expect(store.kindMoveNotice == nil)
+        manager.redo()
+        await store.settle()
+
+        editor.select(Self.cell(nil, .note))
+        editor.type("premio")
+        editor.select(Self.cell(nil, .amount))
+        editor.type("+50")
+        editor.confirm()
+        await store.settle()
+        let shown = try #require(store.kindMoveNotice)
+        store.showMovedRow(shown)
+        await store.settle()
+        #expect(store.direction == .income)
+        #expect(store.selection.ids == [shown.transactionId])
+        #expect(store.rows.first { $0.id == shown.transactionId }?.note == "premio")
+
+        // Typed in USCITE and registered as ENTRATE comes on: where it was typed.
+        store.direction = .expenses
+        await store.settle()
+        editor.select(Self.cell(nil, .note))
+        editor.type("pane")
+        editor.select(Self.cell(nil, .amount))
+        editor.type("2")
+        store.direction = .income
+        await store.settle()
+        #expect(store.presentedError == nil)
+        #expect(store.kindMoveNotice == nil)
+        store.direction = .expenses
+        await store.settle()
+        #expect(try Self.row("pane", in: store).kind == .expense)
+    }
 }

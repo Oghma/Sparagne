@@ -29,14 +29,16 @@ extension AppStore {
     /// Records a row just added. Undo voids it at once, not through the toast:
     /// taking back what was just typed is the whole point, there is nothing to
     /// confirm. Redo adds it again as a new row, under a new id, since a voided
-    /// row cannot come back; the step follows it there.
+    /// row cannot come back; the step follows it there. The toast that shows
+    /// where a signed row went goes with the row.
     func recordAddedRow(_ command: Command, id: Uuid, vaultId: Uuid) {
         history.record(rows: [id]) { target in
             LedgerStep(
                 name: String(localized: "Add Row"),
                 undo: { [weak self] in
-                    guard let id = target.rows.first else { return }
-                    _ = await self?.apply([.voidTransaction(transactionId: id)], in: vaultId)
+                    guard let self, let id = target.rows.first else { return }
+                    guard await apply([.voidTransaction(transactionId: id)], in: vaultId) else { return }
+                    if kindMoveNotice?.transactionId == id { kindMoveNotice = nil }
                 },
                 redo: { [weak self] in
                     guard let created = await self?.applyMinted(command, in: vaultId) else { return }
@@ -66,6 +68,28 @@ extension AppStore {
         if patch.toId != nil { inverse.toId = view.toId }
         if patch.person != nil { inverse.person = storedPerson(view) }
         return inverse
+    }
+
+    /// `view` as the core will store it once `patch` lands: the mirror of
+    /// `inverse(of:from:)`, blank as the patch's word for Uncategorized and
+    /// for whoever recorded the row. What a kind change reads a row through
+    /// when cells saved into it are still on their way (`LedgerEditor`). The
+    /// category id stays the old one: a name is the core's to resolve.
+    nonisolated static func view(_ view: TransactionView, applying patch: TransactionPatch) -> TransactionView {
+        var view = view
+        if let amount = patch.amount { view.amount = amount }
+        if let occurredAt = patch.occurredAt { view.occurredAt = occurredAt }
+        if let category = patch.category {
+            view.category = category.isEmpty ? "Uncategorized" : category
+            view.categoryIsSystem = category.isEmpty
+        }
+        if let note = patch.note { view.note = note.isEmpty ? nil : note }
+        if let walletId = patch.walletId { view.walletId = walletId }
+        if let flowId = patch.flowId { view.flowId = flowId }
+        if let fromId = patch.fromId { view.fromId = fromId }
+        if let toId = patch.toId { view.toId = toId }
+        if let person = patch.person { view.person = person.isEmpty ? view.createdBy : person }
+        return view
     }
 
     /// What `UpdateTransaction` needs to give a row back to whoever it was

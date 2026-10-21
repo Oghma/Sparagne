@@ -378,8 +378,13 @@ final class LedgerEditor {
             return false
         }
         let id = row.id
-        // Read now: by the write's turn the list on screen may be another.
-        let loaded = store.transactions.first { $0.id == id }
+        // Read now, through the cells saved into the row and not given back
+        // yet: by the write's turn the list on screen may be another, and the
+        // row is then known only from here.
+        let pending = saved[id].map { Array($0.values) } ?? []
+        let loaded = store.transactions.first { $0.id == id }.map { view in
+            pending.reduce(view) { AppStore.view($0, applying: $1.patch) }
+        }
         stopEditing()
         write { [weak self] store in
             let at = self?.cursor
@@ -424,9 +429,10 @@ final class LedgerEditor {
     }
 
     /// Sends the new line as a row, if it has an amount, and blanks it.
-    /// Everything the row is made of is read now, its kind included: a
-    /// change of list registers the line on its way out, and by the time the
-    /// write runs the list on screen is the other one.
+    /// Everything the row is made of is read now, its kind and the list it
+    /// was typed in included: a change of list registers the line on its
+    /// way out, and by the time the write runs the list on screen is the
+    /// other one.
     private func register() -> Registration {
         guard let store else { return .nothing }
         let parsed: Result<RowEntry?, Error> = Result { try newLine.entry(store: store) }
@@ -434,6 +440,7 @@ final class LedgerEditor {
         case .success(let entry):
             guard let entry, entry.amount > 0 else { return .nothing }
             let kind = entry.kind ?? store.direction.newRowKind
+            let list = store.direction
             write { store in
                 await store.addRow(
                     day: entry.day,
@@ -443,7 +450,8 @@ final class LedgerEditor {
                     amount: entry.amount,
                     walletId: entry.walletId,
                     kind: kind,
-                    person: entry.person
+                    person: entry.person,
+                    typedIn: list
                 )
             }
             newLine = Self.next(after: entry, in: store)

@@ -1374,6 +1374,12 @@ final class AppStore {
     /// The author is sent as no person at all: the core reads that as the
     /// author, and the command reads exactly as one from before rows could
     /// be for someone else.
+    ///
+    /// A row of a kind the list it was typed in (`typedIn`, the one on
+    /// screen when `nil`) does not hold, an income signed `+` in USCITE,
+    /// puts up the toast that says where it went, as a kind change does: the
+    /// line blanks, and without it the row would seem lost. A line
+    /// registered on its way out of its own list went where it was typed.
     func addRow(
         day: Date,
         flowId: Uuid?,
@@ -1382,9 +1388,12 @@ final class AppStore {
         amount: Int64,
         walletId: Uuid? = nil,
         kind: TransactionKind? = nil,
-        person: String? = nil
+        person: String? = nil,
+        typedIn list: LedgerDirection? = nil
     ) async {
         guard let vault = currentVault, amount > 0, !refusedAsReadOnly() else { return }
+        let rowKind = kind ?? direction.newRowKind
+        let typedIn = list ?? direction
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         let envelope = flowId ?? defaultFlowId
         let entry = Entry(
@@ -1397,7 +1406,7 @@ final class AppStore {
             person: explicitPerson(person)
         )
         let command: Command
-        switch kind ?? direction.newRowKind {
+        switch rowKind {
         case .expense: command = .expense(entry)
         case .income: command = .income(entry)
         case .refund: command = .refund(entry)
@@ -1408,11 +1417,15 @@ final class AppStore {
             // Minted first, so undo knows which row to void.
             let minted = await core.envelope(vaultId: vault.id, command)
             let receipt = try await core.execute(envelope: minted)
-            recordAddedRow(command, id: receipt.resultId ?? minted.id, vaultId: vault.id)
+            let created = receipt.resultId ?? minted.id
+            recordAddedRow(command, id: created, vaultId: vault.id)
             lastWalletId = entry.walletId ?? lastWalletId
             lastFlowId = envelope ?? lastFlowId
             savedAt = Date()
             await reload()
+            if !typedIn.kinds.contains(rowKind) {
+                noticeMove(to: rowKind, first: created, occurredAt: entry.occurredAt, count: 1, in: vault.id)
+            }
         }
     }
 

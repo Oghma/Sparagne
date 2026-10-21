@@ -39,8 +39,8 @@ extension AppStore {
 
     /// `changeKind(of:to:amount:)`, with `loaded` standing in for the row
     /// when the list on screen no longer holds it by the time the write
-    /// runs: the ledger reads the row as its IMPORTO cell is left, which may
-    /// be on the way to another month.
+    /// runs: the ledger reads the row as its IMPORTO cell is left, with the
+    /// cells saved into it before, which may be on the way to another month.
     @discardableResult
     func changeKind(of rowId: Uuid, to kind: TransactionKind, amount: Int64?, loaded: TransactionView?) async -> Uuid? {
         guard let vault = currentVault, !refusedAsReadOnly() else { return nil }
@@ -148,20 +148,29 @@ extension AppStore {
         for new in selected.compactMap({ created[$0] }) where rows.contains(where: { $0.id == new }) {
             if !selection.contains(new) { selection.toggle(new) }
         }
-        // Expense and refund share USCITE: only a move to or from income
-        // takes the rows off the list on screen.
-        if !direction.kinds.contains(kind), let first = changes.first, let moved = created[first.view.id] {
-            kindMoveNotice = KindMoveNotice(
-                vaultId: vaultId,
-                transactionId: moved,
-                occurredAt: first.view.occurredAt,
-                direction: kind == .income ? .income : .expenses,
-                count: created.count,
-                startedAt: Date(),
-                duration: Self.kindMoveNoticeDuration
-            )
+        if let first = changes.first, let moved = created[first.view.id] {
+            noticeMove(to: kind, first: moved, occurredAt: first.view.occurredAt, count: created.count, in: vaultId)
         }
         return created
+    }
+
+    /// Puts up the toast for `count` rows of `kind` just written to
+    /// `vaultId`, when the list on screen does not hold them; `first` and
+    /// `occurredAt` are the row Mostra shows. A kind change and a new line
+    /// signed for the other list both end up here.
+    func noticeMove(to kind: TransactionKind, first: Uuid, occurredAt: OffsetDateTime, count: Int, in vaultId: Uuid) {
+        // Expense and refund share USCITE: only a move to or from income
+        // takes rows off the list on screen.
+        guard !direction.kinds.contains(kind) else { return }
+        kindMoveNotice = KindMoveNotice(
+            vaultId: vaultId,
+            transactionId: first,
+            occurredAt: occurredAt,
+            direction: kind == .income ? .income : .expenses,
+            count: count,
+            startedAt: Date(),
+            duration: Self.kindMoveNoticeDuration
+        )
     }
 
     /// One step for the whole change. Undo turns the new rows back into
