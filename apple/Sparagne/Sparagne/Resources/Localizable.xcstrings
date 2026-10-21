@@ -8633,6 +8633,22 @@
         }
       }
     },
+    "Resume it, then record or skip its pending periods": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume it, then record or skip its pending periods"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riattiva il modello, poi registra o salta i periodi in attesa"
+          }
+        }
+      }
+    },
     "Review": {
       "localizations": {
         "en": {
