@@ -2,18 +2,16 @@ import AppKit
 import SwiftUI
 import Testing
 
-/// A SwiftUI view in a window of its own, and the keys and clicks a person
-/// would give it: what the grid's tests drive it with, since a view's key
-/// handlers and the mouse monitor it installs can only be reached through
-/// events.
+/// A SwiftUI view in a window of its own, driven with the keys and clicks a
+/// person would give it: a view's key handlers and the mouse monitor it
+/// installs can only be reached through events.
 ///
-/// The events are posted to the app's queue, as the window server's are, and
-/// dispatched by the app's own run loop while the test waits: so they reach
-/// `NSApp.sendEvent`, and through it the local monitors, the field editor
-/// and SwiftUI's `onKeyPress`, exactly as typed ones do. Two events posted
-/// back to back are dispatched back to back, before SwiftUI has redrawn in
-/// between, which is how a fast typist's keys arrive. The window works
-/// without being the key window, so the tests do not need the app in front.
+/// The events are posted to the app's queue and dispatched by its run loop
+/// while the test waits, so they reach `NSApp.sendEvent`, the local
+/// monitors, the field editor and `onKeyPress` exactly as typed ones do. Two
+/// events posted back to back are dispatched before SwiftUI redraws, as a
+/// fast typist's keys arrive. The window works without being the key window,
+/// so the tests do not need the app in front.
 @MainActor
 final class HostedWindow {
     let window: NSWindow
@@ -49,7 +47,7 @@ final class HostedWindow {
     // MARK: - Keys
 
     enum Key {
-        case tab, backTab, up, down, left, right, enter, escape, delete, deleteForward, f2
+        case tab, backTab, up, down, left, right, enter, escape, delete, f2
         /// A printable character, as a layout without dead keys sends it.
         case character(Character)
 
@@ -64,7 +62,6 @@ final class HostedWindow {
             case .enter: ("\r", 36, [])
             case .escape: ("\u{1B}", 53, [])
             case .delete: ("\u{7F}", 51, [])
-            case .deleteForward: ("\u{F728}", 117, .function)
             case .f2: ("\u{F705}", 120, .function)
             case .character(let character): (String(character), Self.code(for: character), [])
             }
@@ -86,11 +83,10 @@ final class HostedWindow {
     /// Posts `key`, with `modifiers` on top of what the key itself carries.
     func post(_ key: Key, modifiers: NSEvent.ModifierFlags = []) {
         let (characters, code, own) = key.event
-        let flags = own.union(modifiers)
         let event = NSEvent.keyEvent(
             with: .keyDown,
             location: .zero,
-            modifierFlags: flags,
+            modifierFlags: own.union(modifiers),
             timestamp: ProcessInfo.processInfo.systemUptime,
             windowNumber: window.windowNumber,
             context: nil,
@@ -107,7 +103,7 @@ final class HostedWindow {
         for character in text { post(.character(character)) }
     }
 
-    // MARK: - Clicks
+    // MARK: - The pointer
 
     /// A click at `point`, measured from the top left of the window's
     /// content, as SwiftUI measures. `count` 2 is the second click of a
@@ -134,10 +130,44 @@ final class HostedWindow {
         }
     }
 
-    /// A double click: two clicks, the second counted as such.
     func postDoubleClick(at point: CGPoint) {
         postClick(at: point, count: 1)
         postClick(at: point, count: 2)
+    }
+
+    /// The pointer over `point`, as the tracking area of the hosting view
+    /// hears it: a posted mouse-moved event never reaches it.
+    func hover(at point: CGPoint) {
+        guard let content = window.contentView else { return }
+        let location = content.convert(point, to: nil)
+        // Not a tooltip's (`.help`): the one that follows the pointer.
+        let area = content.trackingAreas.first { $0.owner === content && $0.options.contains(.mouseMoved) }
+        let enter = NSEvent.enterExitEvent(
+            with: .mouseEntered,
+            location: location,
+            modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            // What `NSEvent.trackingArea` reads back: the hosting view
+            // takes only the events of its own area.
+            trackingNumber: area.map { Int(bitPattern: Unmanaged.passUnretained($0).toOpaque()) } ?? 0,
+            userData: nil
+        )
+        if let enter { content.mouseEntered(with: enter) }
+        let move = NSEvent.mouseEvent(
+            with: .mouseMoved,
+            location: location,
+            modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 0,
+            pressure: 0
+        )
+        if let move { content.mouseMoved(with: move) }
     }
 
     // MARK: - Waiting

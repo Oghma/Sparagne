@@ -215,7 +215,7 @@ private final class TableUnderTest {
 
     /// Waits for what the table sent to the core.
     func settle(until condition: () -> Bool = { false }) async {
-        await host.settle(timeout: .seconds(2), until: condition)
+        await host.settle(until: condition)
         await store.settle()
         await host.settle()
     }
@@ -236,44 +236,5 @@ private struct PlanHost: View {
         ) { lines in
             Task { await store.saveAllocationLines(lines, schedule: ScheduleDraft(today: CoreDate.day(Date())).schedule) }
         }
-    }
-}
-
-extension HostedWindow {
-
-
-    /// The pointer over `point`, as the tracking area of the hosting view
-    /// hears it: a posted mouse-moved event never reaches it.
-    func hover(at point: CGPoint) {
-        guard let content = window.contentView else { return }
-        let location = content.convert(point, to: nil)
-        // Not a tooltip's (`.help`): the one that follows the pointer.
-        let area = content.trackingAreas.first { $0.owner === content && $0.options.contains(.mouseMoved) }
-        let enter = NSEvent.enterExitEvent(
-            with: .mouseEntered,
-            location: location,
-            modifierFlags: [],
-            timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: window.windowNumber,
-            context: nil,
-            eventNumber: 0,
-            // What `NSEvent.trackingArea` reads back: the hosting view
-            // takes only the events of its own area.
-            trackingNumber: area.map { Int(bitPattern: Unmanaged.passUnretained($0).toOpaque()) } ?? 0,
-            userData: nil
-        )
-        if let enter { content.mouseEntered(with: enter) }
-        let move = NSEvent.mouseEvent(
-            with: .mouseMoved,
-            location: location,
-            modifierFlags: [],
-            timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: window.windowNumber,
-            context: nil,
-            eventNumber: 0,
-            clickCount: 0,
-            pressure: 0
-        )
-        if let move { content.mouseMoved(with: move) }
     }
 }
