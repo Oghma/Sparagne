@@ -43,15 +43,9 @@ struct FixedCostsTests {
         #expect(costs.monthly == 100_000)
         // A weekly expense is spread over the average month, as the
         // Ricorrenze status line counts it.
-        let weekly = try #require(
-            FixedCosts.build(
-                templates: [RecurringFixture.template(amount: 1_000, schedule: RecurringFixture.schedule(.weekly(weekday: 1)))],
-                year: Self.year(today: Self.april)
-            )
-        )
-        #expect(weekly.monthly == RecurringMonthly.totals([
-            RecurringFixture.template(amount: 1_000, schedule: RecurringFixture.schedule(.weekly(weekday: 1))),
-        ]).expenses)
+        let gym = [RecurringFixture.template(amount: 1_000, schedule: RecurringFixture.schedule(.weekly(weekday: 1)))]
+        let weekly = try #require(FixedCosts.build(templates: gym, year: Self.year(today: Self.april)))
+        #expect(weekly.monthly == RecurringMonthly.totals(gym).expenses)
         #expect(weekly.monthly == 4_348)
     }
 

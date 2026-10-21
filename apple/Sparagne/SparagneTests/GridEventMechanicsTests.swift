@@ -32,10 +32,7 @@ struct GridEventMechanicsTests {
 
     @Test("⇥ and ⇧⇥ pass through the CATEGORY and ENVELOPE cells to the grid while their lists are closed")
     func tabsThroughTheCells() async throws {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.mechanics.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
+        let store = try await TestStore.make(opening: 0)
         let probe = TabProbe()
         let host = HostedWindow(TabProbeView(store: store, probe: probe))
         defer { host.close() }

@@ -512,8 +512,8 @@ struct LedgerGridKeyTests {
 
     @Test("A cell just left says what it was saved as while the write is still on its way, and after it lands")
     func savedCellShownAtOnce() async throws {
-        let gate = CoreGate()
-        let grid = try await GridUnderTest(coreProbe: { await gate.pass() })
+        let gate = TestGate()
+        let grid = try await GridUnderTest(coreProbe: gate.probe)
         defer { grid.close() }
         let pane = try #require(grid.store.rows.first)
 
@@ -600,39 +600,6 @@ struct LedgerGridKeyTests {
 
 // MARK: - The grid in a window
 
-/// Holds the next call to reach the core until it is released, so a test can
-/// keep one of the editor's writes on its way while it looks at the sheet.
-private actor CoreGate {
-    private var armed = false
-    private var held: CheckedContinuation<Void, Never>?
-    private var watchers: [CheckedContinuation<Void, Never>] = []
-
-    func arm() { armed = true }
-
-    /// The core's probe: every call goes through, but the first one after
-    /// `arm` waits here.
-    func pass() async {
-        guard armed else { return }
-        armed = false
-        await withCheckedContinuation { continuation in
-            held = continuation
-            for watcher in watchers { watcher.resume() }
-            watchers = []
-        }
-    }
-
-    /// Returns once a call is being held.
-    func holding() async {
-        guard held == nil else { return }
-        await withCheckedContinuation { watchers.append($0) }
-    }
-
-    func release() {
-        held?.resume()
-        held = nil
-    }
-}
-
 /// What the window holds besides the grid: a search field over it, which
 /// the tests click on or give the keyboard to.
 @Observable
@@ -677,16 +644,9 @@ private final class GridUnderTest {
 
     var editor: LedgerEditor { store.ledgerEditor }
 
-    /// `coreProbe` hears every call that reaches the core (`CoreGate`).
+    /// `coreProbe` hears every call that reaches the core (`TestGate`).
     init(coreProbe: (@Sendable () async -> Void)? = nil) async throws {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.grid.\(UUID().uuidString)"))
-        store = AppStore(
-            core: try CoreActor.inMemory(author: "matteo", probe: coreProbe),
-            defaults: defaults,
-            undoWindow: .seconds(60)
-        )
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        store = try await TestStore.make(undoWindow: .seconds(60), probe: coreProbe)
         await store.createEnvelope(name: "Spesa", mode: .unlimited, allowNegative: true, openingAllocation: 0)
         await store.createEnvelope(name: "Vacanze", mode: .unlimited, allowNegative: true, openingAllocation: 0)
         let calendar = Calendar.current
@@ -787,8 +747,6 @@ private final class GridUnderTest {
     }
 
     var scrollOffset: CGFloat { scrollView?.contentView.bounds.origin.y ?? 0 }
-
-    // MARK: The lists
 
     /// The middle of the first entry of the CATEGORY list hung under the
     /// cell of `line`: the list starts three points into the cell and a

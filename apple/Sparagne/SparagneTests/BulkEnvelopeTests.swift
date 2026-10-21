@@ -10,10 +10,7 @@ struct BulkEnvelopeTests {
     /// Vault `Casa` with envelopes Spesa (may go negative) and Risparmi (may
     /// not, empty), and three expenses on Spesa.
     private static func ledger() async throws -> (store: AppStore, manager: UndoManager, spesa: Uuid, risparmi: Uuid) {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.bulk-envelope.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        let store = try await TestStore.make()
         await store.createEnvelope(name: "Spesa", mode: .unlimited, allowNegative: true, openingAllocation: 0)
         await store.createEnvelope(name: "Risparmi", mode: .unlimited, allowNegative: false, openingAllocation: 0)
         let spesa = try #require(store.flows.first { $0.name == "Spesa" }).id
