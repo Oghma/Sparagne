@@ -365,6 +365,7 @@ final class LedgerEditor {
     /// it is still on the row and the row is still on screen; a row gone to
     /// the other direction leaves the toast that shows it instead.
     private func saveKindChange(of row: TransactionRow, to kind: TransactionKind, number: String, store: AppStore) -> Bool {
+        guard !store.refusesKindChange(of: row.id, to: kind) else { return false }
         let amount: Int64
         do {
             amount = try parseMoney(text: number, currency: store.currency)
@@ -376,7 +377,6 @@ final class LedgerEditor {
             store.report(DomainError.InvalidAmount(message: String(localized: "Type an amount above zero, such as 250 or 1.000,50.")))
             return false
         }
-        guard !store.refusesKindChange(of: row.id, to: kind) else { return false }
         let id = row.id
         // Read now: by the write's turn the list on screen may be another.
         let loaded = store.transactions.first { $0.id == id }

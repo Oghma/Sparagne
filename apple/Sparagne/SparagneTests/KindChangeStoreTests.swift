@@ -306,14 +306,17 @@ struct KindChangeStoreTests {
         let editor = store.ledgerEditor
         let coop = try Self.row("coop", in: store)
 
-        editor.select(Self.cell(coop.id, .amount))
-        editor.type("r")
-        editor.confirm()
-        #expect(store.presentedError?.code == "invalid_amount")
-        #expect(editor.isEditing)
-        #expect(editor.text == "r")
-        editor.cancel()
-        store.presentedError = nil
+        for text in ["r", "+0"] {
+            editor.select(Self.cell(coop.id, .amount))
+            editor.type(text)
+            editor.confirm()
+            #expect(store.presentedError?.code == "invalid_amount")
+            #expect(editor.isEditing)
+            #expect(editor.text == text)
+            editor.cancel()
+            store.presentedError = nil
+        }
+        #expect(try Self.row("coop", in: store).id == coop.id)
 
         // The wallet's opening balance, on ENTRATE.
         store.direction = .income

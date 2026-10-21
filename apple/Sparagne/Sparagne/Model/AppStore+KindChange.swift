@@ -66,10 +66,10 @@ extension AppStore {
         return await changeKinds(views.map { ($0, nil) }, to: kind, in: vault.id)
     }
 
-    /// Whether the row with `rowId` can not become `kind`, with the reason
-    /// on the alert: what the ledger's IMPORTO cell asks before it lets go
-    /// of a sign, so the cell stays open on a refusal. The row already of
-    /// that kind is no refusal, only nothing to do.
+    /// Whether the row with `rowId` is refused `kind`, the reason then on
+    /// the alert: what the ledger's IMPORTO cell asks before it lets go of a
+    /// sign, so the cell stays open on a refusal. A row already of that kind
+    /// is no refusal, only nothing to do.
     func refusesKindChange(of rowId: Uuid, to kind: TransactionKind) -> Bool {
         guard let view = loadedView(rowId), let refusal = KindChange.refusal(of: view, to: kind),
               let error = Self.kindChangeError(refusal)
