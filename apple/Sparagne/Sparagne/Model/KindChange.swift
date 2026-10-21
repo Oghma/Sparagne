@@ -28,9 +28,11 @@ nonisolated enum KindChange {
     /// (expense) or `r` (refund) names, `nil` without one, and the number
     /// after it, trimmed.
     ///
-    /// The typographic minus is how the ledger shows a refund, so an amount
-    /// copied off the grid reads as it was shown. A sign alone leaves the
-    /// number empty, which the cell refuses as it refuses any missing amount.
+    /// The typographic minus `−` is taken as a minus, an expense as `-` is.
+    /// The ledger shows a refund with it, so a minus typed on a refund turns
+    /// it into an expense, which the row then shows and ⌘Z takes back. A
+    /// sign alone leaves the number empty, which the cell refuses as it
+    /// refuses any missing amount.
     static func sign(of text: String) -> (kind: TransactionKind?, number: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let kind: TransactionKind? = switch trimmed.first {
