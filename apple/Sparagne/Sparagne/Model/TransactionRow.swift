@@ -92,28 +92,34 @@ nonisolated struct TransactionRow: Identifiable, Hashable, Sendable {
         recordedBy = view.createdBy
         voided = view.voided
 
+        // The core already sorted the legs out by kind (`core/src/query.rs`):
+        // an entry's wallet and envelope, or a transfer's two ends.
+        walletId = view.walletId
+        flowId = view.flowId
         fromId = view.fromId
         toId = view.toId
-        // The core already sorted the legs out by kind (`core/src/query.rs`).
-        switch view.kind {
+        walletDisplay = names.wallet(view.walletId) ?? Self.placeholder
+        envelopeDisplay = names.flow(view.flowId) ?? Self.placeholder
+        envelopeColumn = envelopeDisplay
+        if isTransfer { route(from: view.fromId, to: view.toId, names: names) }
+    }
+
+    /// A transfer between `from` and `to`: the source stands in for the
+    /// wallet or the envelope its kind moves, and the column of that kind
+    /// shows the whole route.
+    private mutating func route(from: Uuid?, to: Uuid?, names: NameBook) {
+        fromId = from
+        toId = to
+        switch kind {
         case .transferWallet:
-            walletId = view.fromId
-            flowId = nil
-            walletDisplay = Self.arrow(names.wallet(view.fromId), names.wallet(view.toId))
-            envelopeDisplay = Self.placeholder
-            envelopeColumn = Self.placeholder
+            walletId = from
+            walletDisplay = Self.arrow(names.wallet(from), names.wallet(to))
         case .transferFlow:
-            flowId = view.fromId
-            walletId = nil
-            walletDisplay = Self.placeholder
-            envelopeDisplay = Self.arrow(names.flow(view.fromId), names.flow(view.toId))
-            envelopeColumn = names.flow(view.fromId) ?? Self.placeholder
+            flowId = from
+            envelopeDisplay = Self.arrow(names.flow(from), names.flow(to))
+            envelopeColumn = names.flow(from) ?? Self.placeholder
         case .income, .expense, .refund:
-            walletId = view.walletId
-            flowId = view.flowId
-            walletDisplay = names.wallet(view.walletId) ?? Self.placeholder
-            envelopeDisplay = names.flow(view.flowId) ?? Self.placeholder
-            envelopeColumn = envelopeDisplay
+            break
         }
     }
 
@@ -124,8 +130,9 @@ nonisolated struct TransactionRow: Identifiable, Hashable, Sendable {
     ///
     /// The category is the name as typed, Uncategorized for a blank one, and
     /// its id the old one until then: the name may be a new category, or an
-    /// alias the core files under another. A transfer's two ends are not
-    /// patched here, as the grid never patches them.
+    /// alias the core files under another. A transfer's ends move as its
+    /// "Da → A" popover picked them, an entry's wallet and envelope as their
+    /// cells did.
     func applying(_ patch: TransactionPatch, names: NameBook) -> TransactionRow {
         var row = self
         if let amount = patch.amount { row.absoluteAmount = amount }
@@ -145,6 +152,9 @@ nonisolated struct TransactionRow: Identifiable, Hashable, Sendable {
             row.envelopeDisplay = names.flow(flowId) ?? Self.placeholder
             row.envelopeColumn = row.envelopeDisplay
         }
+        if isTransfer, patch.fromId != nil || patch.toId != nil {
+            row.route(from: patch.fromId ?? fromId, to: patch.toId ?? toId, names: names)
+        }
         return row
     }
 
@@ -163,6 +173,12 @@ nonisolated struct TransactionRow: Identifiable, Hashable, Sendable {
     /// the core keeps it in English whatever the window's language.
     static func isUncategorized(_ name: String, isSystem: Bool) -> Bool {
         isSystem && name.lowercased() == "uncategorized"
+    }
+
+    /// Whether a category is the system Opening, which files the balance a
+    /// wallet or an envelope started from.
+    static func isOpening(_ name: String, isSystem: Bool) -> Bool {
+        isSystem && name.lowercased() == "opening"
     }
 
     private static func arrow(_ from: String?, _ to: String?) -> String {

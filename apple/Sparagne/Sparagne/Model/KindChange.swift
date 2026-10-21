@@ -27,14 +27,36 @@ nonisolated enum KindChange {
     /// (`core/src/quick_add.rs`): the kind a leading `+` (income), `-` or `−`
     /// (expense) or `r` (refund) names, `nil` without one, and the number
     /// after it, trimmed.
+    ///
+    /// The typographic minus is how the ledger shows a refund, so an amount
+    /// copied off the grid reads as it was shown. A sign alone leaves the
+    /// number empty, which the cell refuses as it refuses any missing amount.
     static func sign(of text: String) -> (kind: TransactionKind?, number: String) {
-        (nil, text)
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let kind: TransactionKind? = switch trimmed.first {
+        case "+": .income
+        case "-", "\u{2212}": .expense
+        case "r", "R": .refund
+        default: nil
+        }
+        guard kind != nil else { return (nil, trimmed) }
+        return (kind, String(trimmed.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     /// The kinds `view` may become, in `entryKinds` order; none for a
     /// transfer, a voided or an opening row.
     static func targets(of view: TransactionView) -> [TransactionKind] {
-        []
+        entryKinds.filter { refusal(of: view, to: $0) == nil }
+    }
+
+    /// Why `view` cannot become `kind`, `nil` when it can. A transfer is
+    /// never a target either: an entry has no second end to give it.
+    static func refusal(of view: TransactionView, to kind: TransactionKind) -> Refusal? {
+        if isTransfer(view.kind) || isTransfer(kind) { return .transfer }
+        if view.voided { return .voided }
+        if TransactionRow.isOpening(view.category, isSystem: view.categoryIsSystem) { return .opening }
+        if view.kind == kind { return .sameKind }
+        return nil
     }
 
     /// The batch that turns `view` into `kind`: its void, then the same entry
@@ -47,7 +69,31 @@ nonisolated enum KindChange {
         amount: Int64? = nil,
         author: String
     ) -> Result<[Command], Refusal> {
-        .failure(.sameKind)
+        if let refusal = refusal(of: view, to: kind) { return .failure(refusal) }
+        // The author compared as `AppStore.explicitPerson` compares it: the
+        // local name and the synced username of one person differ in case.
+        let person = view.person.lowercased() == author.lowercased() ? nil : view.person
+        let entry = Entry(
+            amount: amount ?? view.amount,
+            walletId: view.walletId,
+            flowId: view.flowId,
+            category: AppStore.storedCategory(view),
+            note: view.note.flatMap { $0.isEmpty ? nil : $0 },
+            occurredAt: view.occurredAt,
+            person: person
+        )
+        let create: Command
+        switch kind {
+        case .expense: create = .expense(entry)
+        case .income: create = .income(entry)
+        case .refund: create = .refund(entry)
+        case .transferWallet, .transferFlow: return .failure(.transfer)
+        }
+        return .success([.voidTransaction(transactionId: view.id), create])
+    }
+
+    private static func isTransfer(_ kind: TransactionKind) -> Bool {
+        kind == .transferWallet || kind == .transferFlow
     }
 }
 

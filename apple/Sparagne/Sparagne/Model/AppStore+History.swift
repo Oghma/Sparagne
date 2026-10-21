@@ -76,8 +76,9 @@ extension AppStore {
     }
 
     /// What `UpdateTransaction` needs to file a row back where it was: the
-    /// stored name, or blank for Uncategorized.
-    static func storedCategory(_ view: TransactionView) -> String {
+    /// stored name, or blank for Uncategorized. Also what a kind change files
+    /// the new row under (`KindChange`).
+    nonisolated static func storedCategory(_ view: TransactionView) -> String {
         TransactionRow.isUncategorized(view.category, isSystem: view.categoryIsSystem) ? "" : view.category
     }
 
