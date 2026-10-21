@@ -7,8 +7,9 @@ struct RecurringInspector: View {
     /// `nil` = a new template.
     let template: RecurringView?
     let today: NaiveDate
-    /// A new template was created and should be selected, or the user gave
-    /// up on one (`nil`).
+    /// A template was created and should be selected, a new one or the copy
+    /// a kind change left in the place of the open one, or the user gave up
+    /// on a new one (`nil`).
     let finishedCreating: (Uuid?) -> Void
     /// "Duplicate": the tab opens create mode with the draft this inspector
     /// made from the template.
@@ -26,6 +27,15 @@ struct RecurringInspector: View {
     /// of the due periods of a schedule being edited. Empty for a new
     /// template.
     @State private var handled: Set<NaiveDate> = []
+    /// The periods an archived template missed, which Ripristina would put
+    /// back to confirm, over a copy that may have taken them already.
+    @State private var missed = 0
+    /// Where the copy of the other kind would start, or why the template
+    /// cannot change kind now; `nil` until the core answers, and the item
+    /// stays off meanwhile.
+    @State private var kindChange: Result<NaiveDate, RecurringKindChange.Refusal>?
+    /// The day "Change to…" asks about, while its alert is up.
+    @State private var confirmingKind: NaiveDate?
     /// The list under the CATEGORY field (`CategoryFormField`).
     @State private var completion = CategoryCompletionModel()
 
@@ -45,7 +55,7 @@ struct RecurringInspector: View {
         _draft = State(
             initialValue: template.map(RecurringDraft.init(template:))
                 ?? seed
-                ?? RecurringDraft(today: today, owner: store.currentAuthor)
+                ?? RecurringDraft(today: today, owner: store.currentAuthor, walletId: store.defaultWalletId)
         )
     }
 
@@ -67,10 +77,26 @@ struct RecurringInspector: View {
             whereGroup
             ScheduleEditor(draft: $draft.when)
             nextDates
+            if let template, template.archived, missed > 0, store.canWrite {
+                Text(String(localized: "Restoring it puts \(missed) missed periods back to confirm"))
+                    .font(Face.footnote)
+                    .foregroundStyle(Ink.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         } footer: {
             footer
         }
         .hangingCategoryList(completion)
+        .alert(
+            template.map { Self.kindQuestion(RecurringKindChange.otherKind(of: $0.kind)) } ?? "",
+            isPresented: Binding(get: { confirmingKind != nil }, set: { if !$0 { confirmingKind = nil } }),
+            presenting: confirmingKind
+        ) { _ in
+            Button(String(localized: "Change Kind")) { changeKind() }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: { start in
+            Text(String(localized: "The template is archived and a new one starts on \(RecurringDayText.short(start, today: today)). This cannot be undone."))
+        }
         // The saved template moved under the open draft (a save, the table's
         // switch, a sync): an untouched draft follows it, an edited one keeps
         // the user's edits and takes the switch only.
@@ -87,24 +113,44 @@ struct RecurringInspector: View {
             preview = RecurringPreview.of(inputs, occurrences: CoreSchedule.occurrences)
         }
         // A period recorded or skipped from the due sheet changes the saved
-        // template's due list, and with it what has been handled.
-        .task(id: HandledKey(templateId: template?.id, due: template.map { store.dueDates(of: $0.id) } ?? [])) {
+        // template's due list, and with it what has been handled; archiving
+        // it and the day turning change what Ripristina would bring back.
+        .task(id: HandledKey(
+            templateId: template?.id,
+            archived: template?.archived ?? false,
+            due: template.map { store.dueDates(of: $0.id) } ?? [],
+            today: today
+        )) {
             handled = if let template { await store.handledPeriods(of: template.id) } else { [] }
+            missed = template.map { Self.missedPeriods($0, handled: handled, today: today) } ?? 0
+        }
+        // "Change to…" asks the core again whenever its answer may move: the
+        // template itself (archived, paused, edited), its due list, who is a
+        // member, whether the vault may be written, the day.
+        .task(id: KindChangeKey(
+            template: template,
+            due: template.map { store.dueDates(of: $0.id) } ?? [],
+            members: store.currentMembers,
+            canWrite: store.canWrite,
+            today: today
+        )) {
+            kindChange = if let template { await store.recurringKindStart(template.id) } else { nil }
         }
     }
 
     // MARK: - Heading
 
-    /// The "…" beside the title: duplicating, and the footer's archive or
-    /// restore. Not for a vault that is only read, and not in create mode,
-    /// where there is nothing to copy yet. Inside the fields' `.disabled`, as
-    /// the heading has always been: an archived template is restored from
-    /// the footer.
+    /// The "…" beside the title: duplicating, changing the kind, and the
+    /// footer's archive or restore. Not for a vault that is only read, and
+    /// not in create mode, where there is nothing to copy yet. Inside the
+    /// fields' `.disabled`, as the heading has always been: an archived
+    /// template is restored from the footer.
     private func moreMenu(_ template: RecurringView) -> some View {
         Menu {
             Button(String(localized: "Duplicate")) {
-                duplicate(RecurringDraft(duplicating: template, today: today))
+                duplicate(RecurringDraft(duplicating: template, today: today, defaultWalletId: store.defaultWalletId))
             }
+            kindItem(template)
             if template.archived {
                 Button(String(localized: "Restore")) {
                     $working.run { await store.restoreRecurring(template.id) }
@@ -126,6 +172,39 @@ struct RecurringInspector: View {
         .fixedSize()
         .disabled(working)
         .accessibilityLabel(String(localized: "More actions"))
+    }
+
+    /// "Change to Income…" or "Change to Expense…", off with the reason
+    /// under it while the template cannot change kind, or has edits not
+    /// saved, which the copy, made from the saved template, would drop.
+    private func kindItem(_ template: RecurringView) -> some View {
+        let reason: String? = if isDirty {
+            String(localized: "Save or cancel the changes first")
+        } else if case .failure(let refusal) = kindChange {
+            refusal.reason
+        } else {
+            nil
+        }
+        return Button {
+            if case .success(let start) = kindChange { confirmingKind = start }
+        } label: {
+            Text(Self.kindItemTitle(RecurringKindChange.otherKind(of: template.kind)))
+            if let reason { Text(reason) }
+        }
+        .disabled(reason != nil || kindChange == nil)
+    }
+
+    private static func kindItemTitle(_ kind: TransactionKind) -> String {
+        kind == .income
+            ? String(localized: "Change to Income\u{2026}")
+            : String(localized: "Change to Expense\u{2026}")
+    }
+
+    /// The alert's question before the change, which no undo takes back.
+    private static func kindQuestion(_ kind: TransactionKind) -> String {
+        kind == .income
+            ? String(localized: "Change to an income?")
+            : String(localized: "Change to an expense?")
     }
 
     // MARK: - Amount and kind
@@ -157,7 +236,8 @@ struct RecurringInspector: View {
                 label: Self.kindLabel,
                 name: String(localized: "Kind")
             )
-            // A patch has no kind: once the template exists, it is what it is.
+            // A patch has no kind: once the template exists, the "…" menu
+            // changes it, into a copy.
             .disabled(!isNew)
         }
     }
@@ -174,6 +254,7 @@ struct RecurringInspector: View {
 
     private var whereGroup: some View {
         let names = NameBook(snapshot: store.snapshot)
+        let wallets = store.wallets.count
         return FormGroup(String(localized: "Where")) {
             FormRow(String(localized: "Wallet")) {
                 FormMenu(
@@ -181,13 +262,23 @@ struct RecurringInspector: View {
                     value: draft.walletId.map { names.wallet($0) ?? TransactionRow.placeholder }
                         ?? String(localized: "Any wallet")
                 ) {
-                    Button(String(localized: "Any wallet")) { draft.setWallet(nil, template: template) }
-                        .disabled(!RecurringDraft.mayClearWallet(template))
-                    Divider()
+                    if RecurringDraft.offersAnyWallet(wallets: wallets) {
+                        Button(String(localized: "Any wallet")) { draft.setWallet(nil, template: template, wallets: wallets) }
+                            .disabled(!RecurringDraft.mayClearWallet(template, wallets: wallets))
+                        Divider()
+                    }
                     ForEach(store.wallets, id: \.id) { wallet in
-                        Button(wallet.name) { draft.setWallet(wallet.id, template: template) }
+                        Button(wallet.name) { draft.setWallet(wallet.id, template: template, wallets: wallets) }
                     }
                 }
+            }
+            // Saved without a wallet in a vault of several: why recording a
+            // period fails, until a wallet is picked and saved.
+            if let template, store.lacksWallet(template), draft.walletId == nil {
+                Text(AppStore.walletNeededExplanation)
+                    .font(Face.footnote)
+                    .foregroundStyle(Ink.negative)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             FormRow(String(localized: "Envelope")) {
                 FormMenu(
@@ -399,11 +490,48 @@ struct RecurringInspector: View {
             if let created { finishedCreating(created) }
         }
     }
+
+    /// The template archived and its copy of the other kind written, then
+    /// the copy selected in its place. A refusal (a wallet archived since)
+    /// keeps this one open, with the alert up.
+    private func changeKind() {
+        guard let template else { return }
+        $working.run {
+            if let copy = await store.changeRecurringKind(template.id) { finishedCreating(copy) }
+        }
+    }
+
+    /// The periods of an archived template that Ripristina would put back to
+    /// confirm: those up to today it never decided. None for a paused one,
+    /// which comes back paused.
+    private static func missedPeriods(_ template: RecurringView, handled: Set<NaiveDate>, today: NaiveDate) -> Int {
+        guard template.archived, template.enabled else { return 0 }
+        let missed = try? RecurringNext.due(
+            schedule: template.schedule,
+            today: today,
+            handled: handled,
+            occurrences: CoreSchedule.occurrences
+        )
+        return missed?.count ?? 0
+    }
 }
 
 /// When the inspector asks the core again for the periods already handled:
-/// another template, or a change to its due list.
+/// another template, a change to its due list, the template archived, or
+/// another day.
 private struct HandledKey: Equatable {
     let templateId: Uuid?
+    let archived: Bool
     let due: [NaiveDate]
+    let today: NaiveDate
+}
+
+/// When "Change to…" asks the core again whether the template may change
+/// kind, and from which day.
+private struct KindChangeKey: Equatable {
+    let template: RecurringView?
+    let due: [NaiveDate]
+    let members: [String]?
+    let canWrite: Bool
+    let today: NaiveDate
 }

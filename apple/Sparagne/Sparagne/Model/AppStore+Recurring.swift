@@ -76,4 +76,18 @@ extension AppStore {
     func setRecurringEnabled(_ templateId: Uuid, _ enabled: Bool) async {
         await updateRecurring(templateId, patch: RecurringPatch(enabled: enabled))
     }
+
+    /// Whether `template` cannot record a period for want of a wallet: it
+    /// has none, which the core reads as the only active wallet, and the
+    /// vault has more than one (`RecurringDraft.offersAnyWallet`). The
+    /// inspector and the table say so until one is picked. Not for an
+    /// archived template, which records nothing anyway.
+    func lacksWallet(_ template: RecurringView) -> Bool {
+        !template.archived && template.walletId == nil && !RecurringDraft.offersAnyWallet(wallets: wallets.count)
+    }
+
+    /// What `lacksWallet` says in the inspector and on the table's wallet.
+    static var walletNeededExplanation: String {
+        String(localized: "With more than one wallet, recording it needs a wallet")
+    }
 }

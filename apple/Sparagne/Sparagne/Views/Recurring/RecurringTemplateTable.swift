@@ -105,6 +105,7 @@ struct RecurringTemplateTable: View {
         let ink = template.archived ? Ink.text3 : template.enabled ? Ink.text : Ink.text2
         let side = template.archived ? Ink.text3 : Ink.text2
         let ownerLeft = store.ownerHasLeft(template)
+        let lacksWallet = store.lacksWallet(template)
         return HStack(spacing: 0) {
             FormSwitch(
                 label: String(localized: "Enabled \(RecurringTitle.of(template))"),
@@ -137,7 +138,15 @@ struct RecurringTemplateTable: View {
             Text(ScheduleFormatting.describe(template.schedule)).foregroundStyle(side)
                 .tableCell(minWidth: TemplateColumn.cadenceMinimum)
             nextCell(template, ink: ink).tableCell(width: TemplateColumn.next)
-            Text(DueRecurringText.wallet(template, names: names)).foregroundStyle(side)
+            // No wallet in a vault of several: its periods cannot be recorded.
+            Text(DueRecurringText.wallet(template, names: names))
+                .foregroundStyle(lacksWallet ? Ink.negative : side)
+                .help(ifAny: lacksWallet ? AppStore.walletNeededExplanation : nil)
+                .accessibilityLabel(
+                    ([String(localized: "Wallet"), DueRecurringText.wallet(template, names: names)]
+                        + (lacksWallet ? [AppStore.walletNeededExplanation] : []))
+                        .joined(separator: ", ")
+                )
                 .tableCell(width: TemplateColumn.wallet)
             Text(DueRecurringText.envelope(template, names: names)).foregroundStyle(side)
                 .tableCell(width: TemplateColumn.envelope)
