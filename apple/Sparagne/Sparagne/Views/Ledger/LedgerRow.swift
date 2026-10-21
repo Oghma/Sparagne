@@ -535,13 +535,7 @@ struct LedgerRowView: View {
     /// and WALLET between wallets: ↩ or a double click on it opens the
     /// "Da → A" popover rather than a field (`LedgerEditor.edit`). `nil` for
     /// an entry.
-    private var routeField: RowField? {
-        switch row.kind {
-        case .transferFlow: .flow
-        case .transferWallet: .wallet
-        case .income, .expense, .refund: nil
-        }
-    }
+    private var routeField: RowField? { LedgerCursor.routeField(of: row.kind) }
 
     /// Where the popover hangs: from the route's cell, or while WALLET is
     /// hidden from DESCRIZIONE, whose tag writes the route too.
