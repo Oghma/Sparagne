@@ -1,11 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// The usage column of the SETUP categories: how many
-/// rows each category has had in the last 12 months, so an unused one is easy
-/// to spot before archiving it. A year, not the completion list's 90 days: a
-/// category that comes up once a year (a tax, an insurance, the holidays) is
-/// alive, and a quarter would show it as dead for most of the year.
+/// The SETUP categories' usage: rows over 12 months, so a yearly one (a tax) does not look dead.
 enum CategoryUsage {
     static let months = 12
 

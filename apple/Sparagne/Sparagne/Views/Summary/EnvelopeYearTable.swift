@@ -12,8 +12,10 @@ struct EnvelopeYearTable: View {
     /// One column per person of `envelopes.people`.
     let showsPeople: Bool
 
-    /// A name and a fund's tag, `tetto sulle entrate` the longest of them.
-    private static let nameWidth: CGFloat = 168
+    /// A name and a fund's tag, `tetto sulle entrate` the longest of them,
+    /// and the cell's padding. Scrolling, the column keeps it, so every
+    /// row's figures start at the same place whatever its name.
+    private static let nameWidth: CGFloat = 168 + 2 * Metrics.cellPad
     private static let figureWidth: CGFloat = 84
 
     private var people: [String] { showsPeople ? envelopes.people : [] }
@@ -22,9 +24,7 @@ struct EnvelopeYearTable: View {
         Panel {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(String(localized: "Envelopes"))
-                        .font(Face.label)
-                        .foregroundStyle(Ink.text2)
+                    SectionLabel(text: String(localized: "Envelopes"), tint: Ink.text2)
                         .accessibilityAddTraits(.isHeader)
                     Spacer(minLength: 8)
                     Text(String(localized: "balance at month end \u{00B7} income and expenses of the year"))
@@ -32,13 +32,7 @@ struct EnvelopeYearTable: View {
                         .foregroundStyle(Ink.text3)
                         .lineLimit(1)
                 }
-                // Wide enough, the columns share the card; too narrow, the
-                // table keeps its widths and scrolls, as the month table does.
-                ViewThatFits(in: .horizontal) {
-                    table(flexible: true)
-                    ScrollView(.horizontal) { table(flexible: false) }
-                        .scrollBounceBehavior(.basedOnSize)
-                }
+                FittedTable { table(flexible: $0) }
             }
             // As tall as the person card beside it, so the two cards end on
             // the same line.
@@ -53,7 +47,7 @@ struct EnvelopeYearTable: View {
                 line(row, flexible: flexible)
             }
         }
-        .frame(minWidth: Self.nameWidth + 2 * Metrics.cellPad + CGFloat(3 + people.count) * Self.figureWidth)
+        .frame(minWidth: Self.nameWidth + CGFloat(3 + people.count) * Self.figureWidth)
     }
 
     // MARK: - Header
@@ -65,21 +59,14 @@ struct EnvelopeYearTable: View {
             String(localized: "Expenses"),
         ]
         titles.append(contentsOf: people)
-        return HStack(spacing: 0) {
+        return SetupHeaderRow {
             Text(String(localized: "Envelope"))
-                .padding(.horizontal, Metrics.cellPad)
-                .modifier(NameColumn(flexible: flexible))
+                .fittedCell(Self.nameWidth, flexible: flexible)
             ForEach(Array(titles.enumerated()), id: \.offset) { _, title in
                 Text(title)
-                    .lineLimit(1)
-                    .padding(.horizontal, Metrics.cellPad)
-                    .frame(width: Self.figureWidth, alignment: .trailing)
+                    .tableCell(width: Self.figureWidth, alignment: .trailing)
             }
         }
-        .font(Face.ui(11, .medium))
-        .foregroundStyle(Ink.text3)
-        .frame(height: Metrics.headerHeight)
-        .overlay(alignment: .bottom) { Rectangle().fill(Ink.line2).frame(height: 1) }
     }
 
     // MARK: - Rows
@@ -96,8 +83,7 @@ struct EnvelopeYearTable: View {
                     CapTag(kind: kind).fixedSize()
                 }
             }
-            .padding(.horizontal, Metrics.cellPad)
-            .modifier(NameColumn(flexible: flexible))
+            .fittedCell(Self.nameWidth, flexible: flexible)
             figure(row.balance, tint: row.balance < 0 ? Ink.negative : Ink.text)
             figure(row.income, tint: Ink.text)
             figure(row.expense, tint: Ink.text)
@@ -108,7 +94,7 @@ struct EnvelopeYearTable: View {
                 )
             }
         }
-        .font(Face.ui(12))
+        .font(Face.row)
         .frame(height: Metrics.rowHeight)
         .overlay(alignment: .bottom) {
             if row.id != envelopes.rows.last?.id {
@@ -126,9 +112,7 @@ struct EnvelopeYearTable: View {
     private func figure(_ value: Int64, tint: Color) -> some View {
         Text(LedgerMoney.bare(value))
             .foregroundStyle(value == 0 ? Ink.text3 : tint)
-            .lineLimit(1)
-            .padding(.horizontal, Metrics.cellPad)
-            .frame(width: Self.figureWidth, alignment: .trailing)
+            .tableCell(width: Self.figureWidth, alignment: .trailing)
     }
 
     /// Unallocated is named in the user's language, as everywhere else
@@ -149,17 +133,5 @@ struct EnvelopeYearTable: View {
             figures.append((person, LedgerMoney.amount(row.expenseByPerson[index])))
         }
         return AccessibilityText.monthRow(month: title, figures: figures)
-    }
-
-    /// The name column takes what the figures leave when the table fits the
-    /// card; scrolling, it keeps its width, so every row's figures start at
-    /// the same place whatever the length of its name.
-    private struct NameColumn: ViewModifier {
-        let flexible: Bool
-
-        func body(content: Content) -> some View {
-            let width = EnvelopeYearTable.nameWidth + 2 * Metrics.cellPad
-            return content.frame(minWidth: width, maxWidth: flexible ? .infinity : width, alignment: .leading)
-        }
     }
 }

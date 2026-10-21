@@ -1,15 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The Ricorrenze tab. On the left, what is waiting
-/// for a decision ("Da confermare"), what is coming ("Prossimi 30 giorni")
-/// and every template ("Modelli"); on the right, the inspector of the
-/// template picked in the table, or of a new one.
-///
-/// It replaces the old modal sheets: the due periods are recorded from the
-/// first card, and the templates are created and edited in the inspector.
-/// Nuova ricorrenza… in the Vault menu, the palette and the top bar opens it
-/// in create mode (`AppStore.requestNewRecurring`).
+/// The Ricorrenze tab: what is due, what is coming and the templates, beside the picked one's inspector.
 struct RecurringTab: View {
     let store: AppStore
 
@@ -51,7 +43,6 @@ struct RecurringTab: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task(id: store.currentVault?.id) {
             refreshToday()
-            await store.loadRecurringTemplates()
         }
         // The agenda and the table's next dates are worked out again
         // whenever the templates, the due list or the day change: a save, a
@@ -126,7 +117,7 @@ struct RecurringTab: View {
             .id(RecurringSelection.new)
         case nil:
             Text(String(localized: "No recurring templates"))
-                .font(Face.ui(12))
+                .font(Face.row)
                 .foregroundStyle(Ink.text3)
                 .padding(16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

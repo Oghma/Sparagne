@@ -1,8 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// One change to the ledger that Edit ▸ Undo can take back: what undoing it
-/// writes and what redoing it writes.
+/// One ledger change Edit ▸ Undo can take back: what undoing and redoing it write.
 struct LedgerStep: Sendable {
     /// What the Edit menu puts after "Undo" and "Redo", localized.
     let name: String
@@ -19,27 +18,14 @@ struct RowPatch: Equatable, Sendable {
     let patch: TransactionPatch
 }
 
-/// Undo and redo for the ledger, kept on the window's `UndoManager` so the
-/// standard Edit ▸ Undo ⌘Z and Redo ⇧⌘Z reach rows as well as text.
-///
-/// The manager is the window's, the same one the text fields' editors type
-/// into, so the two histories interleave in the order things happened: ⌘Z in a
-/// cell being typed into takes back the typing first. A step is recorded only
-/// after its write went through, never while a cell is open, so it never lands
-/// between two keystrokes.
-///
-/// The writes are asynchronous and the manager is not: an undo handler must
-/// register its redo before it returns. So the handler registers the reversed
-/// step straight away and queues the write; the queue runs one write at a
-/// time, in the order the user pressed the keys.
-///
-/// Every step has its own target, carrying the rows it touches. A void that
-/// reaches the core cannot be taken back (there is no un-void), and it also
-/// makes every step about its rows impossible, so `forget(rows:)` takes those
-/// off both stacks rather than leave an Undo that can only fail.
+/// Undo and redo for the ledger, on the window's `UndoManager` beside the text fields' own.
 final class LedgerHistory {
-    /// What a step is registered under. The manager does not retain it, so the
-    /// handler does, for as long as the step is on a stack.
+    // A step is recorded after its write went through, never inside typing. The manager is
+    // synchronous and the writes are not: a handler registers the reversed step at once and
+    // queues the write. A void in the core makes every step about its rows impossible, so
+    // `forget(rows:)` drops them.
+
+    /// What a step is registered under; the handler keeps it alive while the step is on a stack.
     final class Target {
         /// Mutable because redoing an added row adds it under a new id.
         var rows: Set<Uuid>
@@ -56,10 +42,8 @@ final class LedgerHistory {
     /// The void waiting on the toast, if it was recorded: ⌘Z cancels it.
     private var pendingVoid: Target?
 
-    /// The queue of undo and redo writes, and a counter that says whether a
-    /// new one was queued while the last was running (`settle`).
-    private var tail: Task<Void, Never>?
-    private var queued = 0
+    /// The undo and redo writes, in the order the keys were pressed.
+    private let writes = SerialQueue()
 
     /// Hands over the window's manager. A different one (another window, or
     /// the first after none) starts from an empty history.
@@ -86,7 +70,7 @@ final class LedgerHistory {
                 // Registered while the manager is undoing, the reversed step
                 // goes on the redo stack; while redoing, back on the undo one.
                 self?.register(step.reversed, on: target)
-                self?.enqueue(step.undo)
+                self?.writes.enqueue(step.undo)
             }
         }
     }
@@ -149,28 +133,10 @@ final class LedgerHistory {
         targets = []
     }
 
-    // MARK: - The queue
-
-    private func enqueue(_ work: @escaping @MainActor @Sendable () async -> Void) {
-        queued += 1
-        let previous = tail
-        tail = Task {
-            await previous?.value
-            await work()
-        }
-    }
-
     /// Waits until every queued undo and redo has been written. The window
     /// never needs this; a test that presses ⌘Z and reads the store does.
     func settle() async {
-        while let tail {
-            let generation = queued
-            await tail.value
-            if generation == queued {
-                self.tail = nil
-                return
-            }
-        }
+        await writes.settle()
     }
 }
 

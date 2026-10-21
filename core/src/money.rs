@@ -1,4 +1,4 @@
-//! Money parsing and formatting (integer minor units).
+//! Money parsing (integer minor units).
 
 use crate::{Currency, DomainError};
 
@@ -9,32 +9,8 @@ pub struct Money(i64);
 
 impl Money {
     #[must_use]
-    pub const fn new(minor: i64) -> Self {
-        Self(minor)
-    }
-
-    #[must_use]
     pub const fn minor(self) -> i64 {
         self.0
-    }
-
-    /// `<sign><major>.<minor> <CODE>`, e.g. `-12.34 EUR`. No grouping, no
-    /// locale: clients format for display with the system formatter.
-    #[must_use]
-    pub fn format(self, currency: Currency) -> String {
-        let sign = if self.0 < 0 { "-" } else { "" };
-        let abs = self.0.unsigned_abs();
-        let scale = 10u64.pow(u32::from(currency.minor_units()));
-        if scale == 1 {
-            return format!("{sign}{abs} {}", currency.code());
-        }
-        let major = abs / scale;
-        let minor = abs % scale;
-        format!(
-            "{sign}{major}.{minor:0width$} {}",
-            currency.code(),
-            width = usize::from(currency.minor_units())
-        )
     }
 
     /// Parses `[+|-] digits [ (.|,) up to minor_units digits ]`.
@@ -106,14 +82,6 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
-
-    #[test]
-    fn format_uses_currency_minor_units() {
-        assert_eq!(Money::new(0).format(Currency::Eur), "0.00 EUR");
-        assert_eq!(Money::new(1).format(Currency::Eur), "0.01 EUR");
-        assert_eq!(Money::new(1050).format(Currency::Eur), "10.50 EUR");
-        assert_eq!(Money::new(-1050).format(Currency::Eur), "-10.50 EUR");
-    }
 
     #[test]
     fn parse_accepts_dot_or_comma_and_sign() {

@@ -11,12 +11,7 @@ import Testing
 struct RecurringDueTests {
     /// Vault `Main`, wallet `Cash` holding 100.00.
     private static func onboarded() async throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.recurring.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "tester"), defaults: defaults)
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10_000)
-        #expect(store.presentedError == nil)
-        return store
+        try await TestStore.make(vault: "Main", wallet: "Cash", opening: 10_000, author: "tester")
     }
 
     /// A daily expense that started two days ago: three periods due, the day

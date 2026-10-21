@@ -47,7 +47,7 @@ struct LaunchOptionsTests {
 struct LoggedOutAuthorTests {
     @Test("The name chosen in Settings, else the macOS account, whatever the account")
     func author() throws {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.launch.\(UUID().uuidString)"))
+        let defaults = try TestStore.defaults()
         #expect(AccountStore.loggedOutAuthor(defaults: defaults) == NSUserName())
         defaults.set("  ", forKey: AccountStore.localAuthorKey)
         #expect(AccountStore.loggedOutAuthor(defaults: defaults) == NSUserName())

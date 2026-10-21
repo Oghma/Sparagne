@@ -8,13 +8,7 @@ private enum WalletColumn {
     static let balance: CGFloat = 140
 }
 
-/// The wallets of the vault as an editable table. The
-/// wallets say where the money is and the envelopes below say what it is for.
-/// NOME edits in place (`RenameWallet`). SALDO comes from the transactions, so
-/// it is only typed on the empty line, where it is the opening balance.
-///
-/// Editing works as in `EnvelopeTable`: clicking a row opens it, ↩ commits,
-/// esc throws the draft away and leaving the row saves it.
+/// The vault's wallets as a table edited by rows (`editsRows`); SALDO is typed only as an opening balance.
 struct WalletTable: View {
     @Bindable var store: AppStore
 
@@ -40,16 +34,9 @@ struct WalletTable: View {
             }
             if store.canWrite { footnote }
         }
-        // A different vault means different wallets: whatever was half typed
-        // belongs to the vault that is gone.
-        .onChange(of: store.currentVault?.id) { _, _ in
-            editing = nil
-            focus = nil
+        .editsRows(editing: $editing, focus: $focus, hovered: hovered, store: store) {
             newLine = WalletDraft()
-        }
-        .onChange(of: focus) { old, new in focusMoved(from: old, to: new) }
-        // Turned read-only under an open row: it could not be saved.
-        .onChange(of: store.isReadOnly) { _, _ in cancel() }
+        } commit: { commit($0) }
     }
 
     /// The top bar's search; the empty line and the total stay.
@@ -89,8 +76,9 @@ struct WalletTable: View {
             }
             .frame(minWidth: WalletColumn.nameMinimum)
             SetupCell(width: WalletColumn.balance, alignment: .trailing) {
-                let total = store.wallets.reduce(0) { $0 + $1.balance }
-                Text(LedgerMoney.amount(total)).font(Face.row.weight(.semibold)).foregroundStyle(Ink.text)
+                Text(LedgerMoney.amount(SetupFigures.total(of: store.wallets)))
+                    .font(Face.row.weight(.semibold))
+                    .foregroundStyle(Ink.text)
             }
             SetupCell(width: SetupColumn.action) { EmptyView() }
         }
@@ -104,7 +92,10 @@ struct WalletTable: View {
         SetupRow(highlighted: isEditing || hovered == wallet.id, editing: isEditing) {
             if isEditing {
                 SetupCell {
-                    textField($draft.name, key: WalletCell(row: wallet.id, field: .name), placeholder: "")
+                    SetupTextField(
+                        placeholder: "", text: $draft.name,
+                        focus: $focus, key: WalletCell(row: wallet.id, field: .name), submit: commitFocusedLine
+                    )
                 }
                 .frame(minWidth: WalletColumn.nameMinimum)
                 balanceCell(wallet)
@@ -115,35 +106,18 @@ struct WalletTable: View {
                     .onTapGesture { open(wallet) }
                 balanceCell(wallet)
                     .onTapGesture { open(wallet) }
-                actionCell(wallet)
-            }
-        }
-        .onHover { inside in hover(wallet.id, inside) }
-        .onKeyPress(.escape) {
-            guard isEditing else { return .ignored }
-            cancel()
-            return .handled
-        }
-        .contextMenu {
-            if store.canWrite {
-                Button(String(localized: "Archive"), role: .destructive) {
+                // The core refuses a wallet that still holds money, and the
+                // refusal comes through the store's alert.
+                SetupArchiveCell(name: wallet.name, shown: hovered == wallet.id && store.canWrite) {
                     Task { await store.archiveWallet(wallet.id) }
                 }
             }
         }
-    }
-
-    /// The archive icon, only for the row under the pointer: the same
-    /// `ArchiveWallet` the context menu sends. The core refuses a wallet that
-    /// still holds money, and the refusal comes through the store's alert.
-    private func actionCell(_ wallet: WalletView) -> some View {
-        SetupCell(width: SetupColumn.action) {
-            if hovered == wallet.id, store.canWrite {
-                SetupIconButton(
-                    symbol: "archivebox",
-                    help: String(localized: "Archive"),
-                    label: String(localized: "Archive \(wallet.name)")
-                ) {
+        .hoverId($hovered, wallet.id)
+        .onEscape(when: isEditing, perform: cancel)
+        .contextMenu {
+            if store.canWrite {
+                Button(String(localized: "Archive"), role: .destructive) {
                     Task { await store.archiveWallet(wallet.id) }
                 }
             }
@@ -160,37 +134,17 @@ struct WalletTable: View {
         }
     }
 
-    // MARK: - The archived wallets
-
-    @ViewBuilder
     private var archived: some View {
         ForEach(store.archivedWallets.filter { matchesFilter($0.name) }, id: \.id) { wallet in
-            SetupRow(highlighted: hovered == wallet.id) {
+            SetupArchivedRow(name: wallet.name, id: wallet.id, hovered: $hovered, canWrite: store.canWrite) {
+                Task { await store.restoreWallet(wallet.id) }
+            } cells: {
                 SetupCell {
                     Text(wallet.name).font(Face.row).foregroundStyle(Ink.text3).strikethrough()
                 }
                 .frame(minWidth: WalletColumn.nameMinimum)
                 SetupCell(width: WalletColumn.balance, alignment: .trailing) {
                     Text(LedgerMoney.amount(wallet.balance)).font(Face.row).foregroundStyle(Ink.text3)
-                }
-                SetupCell(width: SetupColumn.action) {
-                    if hovered == wallet.id, store.canWrite {
-                        SetupIconButton(
-                            symbol: "tray.and.arrow.up",
-                            help: String(localized: "Restore"),
-                            label: String(localized: "Restore \(wallet.name)")
-                        ) {
-                            Task { await store.restoreWallet(wallet.id) }
-                        }
-                    }
-                }
-            }
-            .onHover { inside in hover(wallet.id, inside) }
-            .contextMenu {
-                if store.canWrite {
-                    Button(String(localized: "Restore")) {
-                        Task { await store.restoreWallet(wallet.id) }
-                    }
                 }
             }
         }
@@ -203,54 +157,27 @@ struct WalletTable: View {
     private var newLineRow: some View {
         SetupRow(highlighted: focus?.row == nil && focus != nil, editing: focus?.row == nil && focus != nil) {
             SetupCell {
-                textField(
-                    $newLine.name,
-                    key: WalletCell(row: nil, field: .name),
-                    placeholder: String(localized: "New wallet…")
+                SetupTextField(
+                    placeholder: String(localized: "New wallet…"), text: $newLine.name,
+                    focus: $focus, key: WalletCell(row: nil, field: .name), submit: commitFocusedLine
                 )
             }
             .frame(minWidth: WalletColumn.nameMinimum)
             SetupCell(width: WalletColumn.balance, alignment: .trailing) {
-                textField(
-                    $newLine.opening,
-                    key: WalletCell(row: nil, field: .opening),
-                    placeholder: String(localized: "opening balance"),
-                    alignment: .trailing
+                SetupTextField(
+                    placeholder: String(localized: "opening balance"), text: $newLine.opening, alignment: .trailing,
+                    focus: $focus, key: WalletCell(row: nil, field: .opening), submit: commitFocusedLine
                 )
             }
             SetupCell(width: SetupColumn.action) { EmptyView() }
         }
-        .onKeyPress(.escape) {
+        .onEscape {
             newLine = WalletDraft()
             focus = nil
-            return .handled
         }
-    }
-
-    private func textField(
-        _ text: Binding<String>,
-        key: WalletCell,
-        placeholder: String,
-        alignment: TextAlignment = .leading
-    ) -> some View {
-        TextField(placeholder, text: text)
-            .textFieldStyle(.plain)
-            .font(Face.row)
-            .multilineTextAlignment(alignment)
-            .foregroundStyle(Ink.text)
-            .focused($focus, equals: key)
-            .onSubmit { commitFocusedLine() }
     }
 
     // MARK: - Actions
-
-    private func hover(_ id: Uuid, _ inside: Bool) {
-        if inside {
-            hovered = id
-        } else if hovered == id {
-            hovered = nil
-        }
-    }
 
     /// Opens `wallet` with the caret on NOME, saving whatever row was open.
     private func open(_ wallet: WalletView) {
@@ -263,8 +190,6 @@ struct WalletTable: View {
         focus = WalletCell(row: wallet.id, field: .name)
     }
 
-    /// esc: throw the draft away. `editing` is cleared before the focus, so
-    /// the focus change that follows is not read as "left the row".
     private func cancel() {
         editing = nil
         focus = nil
@@ -276,23 +201,6 @@ struct WalletTable: View {
             focus = nil
         } else {
             Task { await commitNewLine() }
-        }
-    }
-
-    /// Leaving the open row saves it, as in `EnvelopeTable.focusMoved`: ⇥ off
-    /// NOME, a click on another row or on another table all write the name.
-    ///
-    /// The exception is the row's own context menu, which is attached while
-    /// the row is open too: it resigns the text field without giving the
-    /// focus to anything, and that would close the row under the pointer.
-    /// The pointer tells the two apart, so a blur while hovering the open
-    /// row is not a departure.
-    private func focusMoved(from old: WalletCell?, to new: WalletCell?) {
-        guard let editing else { return }
-        if let new {
-            if new.row != editing { commit(editing) }
-        } else if old?.row == editing, hovered != editing {
-            commit(editing)
         }
     }
 
@@ -326,16 +234,10 @@ struct WalletTable: View {
     }
 }
 
-// MARK: - Focus
+/// A text cell of the wallet table. `opening` is the empty line's SALDO and
+/// exists nowhere else.
+typealias WalletCell = SetupFocus<WalletField>
 
-/// A text cell of the wallet table: which row (nil = the empty line) and which
-/// field.
-struct WalletCell: Hashable {
-    let row: Uuid?
-    let field: WalletField
-}
-
-/// `opening` is the empty line's SALDO and exists nowhere else.
 enum WalletField: Hashable {
     case name
     case opening
@@ -343,8 +245,7 @@ enum WalletField: Hashable {
 
 // MARK: - The draft behind an edited line
 
-/// The text in the cells of the line being edited. A plain struct with no view
-/// in it, so the diff and the parsing are testable on their own.
+/// The text in the cells of the wallet line being edited.
 struct WalletDraft: Equatable {
     var name = ""
     /// Only the empty line has one: the opening balance.

@@ -1,9 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// One line of the RIEPILOGO's "categories of the year": a category's net
-/// expense and its share of what the categories spent between them, or the
-/// line that folds every category past the heaviest few.
+/// One line of the year's categories: a category's net expense and share, or the folded rest.
 struct CategoryShare: Identifiable, Hashable, Sendable {
     /// The category, `nil` on the "other" line.
     let categoryId: Uuid?
@@ -23,8 +21,7 @@ struct CategoryShare: Identifiable, Hashable, Sendable {
     var id: String { categoryId ?? "other" }
 }
 
-/// The year's expenses by category, from the core's `category_totals` over
-/// January up to the month on screen.
+/// The year's expenses by category, January to the month on screen.
 enum SummaryCategories {
     /// How many categories get a line of their own before "other".
     static let limit = 8

@@ -1,7 +1,5 @@
-//! Sparagne v2 sync server.
-//!
-//! Accounts, vault memberships and the per-vault command log, applied with
-//! the same `sparagne_core` the app uses.
+//! Sparagne v2 sync server: accounts, vault memberships and the per-vault
+//! command log, applied with the same `sparagne_core` the app uses.
 
 pub mod admin;
 pub mod auth;
@@ -28,7 +26,6 @@ pub use state::AppState;
 
 use crate::extract::Json;
 
-/// The HTTP application.
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -36,7 +33,6 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/login", post(auth::login))
         .route("/auth/logout", post(auth::logout))
         .route("/auth/password", post(auth::change_password))
-        .route("/me", get(auth::me))
         .route("/vaults", get(vaults::list))
         .route("/vaults/{vault_id}/push", post(vaults::push))
         .route("/vaults/{vault_id}/pull", get(vaults::pull))

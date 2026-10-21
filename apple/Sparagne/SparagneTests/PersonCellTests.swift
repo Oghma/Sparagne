@@ -11,10 +11,7 @@ struct PersonCellTests {
     /// Vault `Casa` with wallet `Conto`, written by matteo, whose members are
     /// matteo, elisa and bob; an undo manager attached once it is set up.
     private static func ledger() async throws -> (store: AppStore, manager: UndoManager) {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.person.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults, undoWindow: .seconds(60))
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        let store = try await TestStore.make(undoWindow: .seconds(60))
         let vault = try #require(store.currentVault)
         store.setVaultMembers([vault.id: ["matteo", "elisa", "bob"]])
         return (store, try LedgerHistoryTests.attachManager(to: store))

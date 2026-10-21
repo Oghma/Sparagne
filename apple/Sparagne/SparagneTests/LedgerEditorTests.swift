@@ -1,45 +1,8 @@
-import AppKit
 import Foundation
 import SparagneCore
 import Testing
 
 @testable import Sparagne
-
-/// Holds the next call to reach the core until it is released, so a test can
-/// keep one of the editor's writes on its way while the window moves on, and
-/// counts every call that reaches it.
-private actor CoreGate {
-    private(set) var calls = 0
-    private var armed = false
-    private var held: CheckedContinuation<Void, Never>?
-    private var watchers: [CheckedContinuation<Void, Never>] = []
-
-    func arm() { armed = true }
-
-    /// The core's probe: every call goes through, but the first one after
-    /// `arm` waits here.
-    func pass() async {
-        calls += 1
-        guard armed else { return }
-        armed = false
-        await withCheckedContinuation { continuation in
-            held = continuation
-            for watcher in watchers { watcher.resume() }
-            watchers = []
-        }
-    }
-
-    /// Returns once a call is being held.
-    func holding() async {
-        guard held == nil else { return }
-        await withCheckedContinuation { watchers.append($0) }
-    }
-
-    func release() {
-        held?.resume()
-        held = nil
-    }
-}
 
 /// The Mastro edited cell by cell (`LedgerEditor`), driven the way the grid
 /// drives it, a key or a click at a time, over a real in-memory core: a cell
@@ -52,10 +15,7 @@ struct LedgerEditorTests {
     private static func household(
         probe: (@Sendable () async -> Void)? = nil
     ) async throws -> (store: AppStore, editor: LedgerEditor) {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.editor.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "matteo", probe: probe), defaults: defaults)
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        let store = try await TestStore.make(probe: probe)
         await store.createEnvelope(name: "Cash", mode: .unlimited, allowNegative: true, openingAllocation: 0)
         let envelope = try #require(store.flows.first { $0.name == "Cash" })
         await store.addRow(day: Date(), flowId: envelope.id, category: "Casa", note: "mutuo", amount: 95_000)
@@ -809,18 +769,12 @@ struct LedgerEditorTests {
         let coop = try Self.row("coop", in: store)
         editor.select(Self.cell(coop, .amount))
         editor.type("90")
-        let delegate = AppDelegate()
-        delegate.store = store
+        let quit = QuitHarness(store: store)
 
-        let replied = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-            delegate.replyToTermination = { continuation.resume(returning: $0) }
-            #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
-        }
-
-        #expect(replied)
+        #expect(await quit.deferredReply())
         #expect(store.presentedError == nil)
         #expect(store.rows.first { $0.id == coop.id }?.absoluteAmount == 9_000)
-        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateNow)
+        #expect(quit.answer() == .terminateNow)
     }
 
     @Test("Quitting with a cell that refuses to be saved stays, the cell on screen being edited; after esc it quits")
@@ -831,11 +785,9 @@ struct LedgerEditorTests {
         editor.type("abc")
         store.tab = .summary
         store.presentedError = nil
-        let delegate = AppDelegate()
-        delegate.store = store
-        delegate.replyToTermination = { _ in Issue.record("no deferred reply was asked for") }
+        let quit = QuitHarness(store: store)
 
-        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateCancel)
+        #expect(quit.answer() == .terminateCancel)
         #expect(store.presentedError != nil)
         #expect(store.tab == .ledger)
         #expect(editor.cursor == Self.cell(coop, .amount))
@@ -843,7 +795,7 @@ struct LedgerEditorTests {
         #expect(editor.text == "abc")
 
         editor.cancel()
-        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateNow)
+        #expect(quit.answer() == .terminateNow)
         #expect(store.rows.first { $0.id == coop.id }?.absoluteAmount == 5_000)
     }
 
@@ -893,8 +845,8 @@ struct LedgerEditorTests {
         .timeLimit(.minutes(1))
     )
     func writeForADeletedVaultIsDropped() async throws {
-        let gate = CoreGate()
-        let (store, editor) = try await Self.household(probe: { await gate.pass() })
+        let gate = TestGate()
+        let (store, editor) = try await Self.household(probe: gate.probe)
         let casa = try #require(store.currentVault)
         let coop = try Self.row("coop", in: store)
         await store.createVault(name: "Ufficio", walletName: "Cassa", openingBalance: 0)

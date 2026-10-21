@@ -2,46 +2,18 @@ import Foundation
 import Observation
 import SparagneCore
 
-/// Runs the client half of the sync protocol.
-///
-/// A round first asks the server which vaults the account has and with what
-/// role, then for every local vault pushes what the outbox holds, a batch per
-/// request, and pulls until the core says the server has nothing more; then
-/// it joins whatever vault the server lists and the database does not have
-/// yet. The core does all the reasoning — the engine only moves opaque JSON
-/// between `CoreActor` and `ServerAPI` and keeps the status the window shows.
-/// It shares that one actor with `AppStore`, so the core is never touched
-/// from two isolation domains at once.
-///
-/// Nothing here throws out of the UI: a failure becomes `status`. The account
-/// actions the sheets run (leaving a vault, changing the password) throw, so
-/// the sheet can show why.
+/// The client half of the sync protocol: roles, push and pull per vault, then joins.
 @Observable
 final class SyncEngine {
-    /// Where the last round stands; the top bar's pill words it
-    /// (`SyncPillState`).
+    // The core does the reasoning; the engine moves its JSON over the shared `CoreActor`.
+    // A failure becomes `status`; only the account actions the sheets run throw.
+
+    /// Where the last round stands, as the top bar's pill words it (`SyncPillState`).
     enum Status: Equatable, Sendable {
         case idle
         case syncing
         case offline
         case error(String)
-    }
-
-    /// One rejected command with the vault it belongs to, so the sheet can
-    /// dismiss it.
-    struct RejectedChange: Identifiable, Equatable, Sendable {
-        let entry: RejectedEntry
-
-        var vaultId: Uuid { entry.vaultId }
-        var vaultName: String { entry.vaultName }
-        var command: RejectedCommand { entry.command }
-
-        var id: Uuid { command.commandId }
-        /// The localized headline for the server's code, naming the person
-        /// when the row was put on someone outside the vault.
-        var summary: String { ErrorMessages.summary(for: command.code, detail: command.detail) }
-        /// What the refused command did, in words (`CommandKindNames`).
-        var kindName: String { CommandKindNames.name(for: command.kind) }
     }
 
     static let pullLimit = 500
@@ -66,8 +38,6 @@ final class SyncEngine {
         String(localized: "This vault is no longer shared with you.")
     }
 
-    // MARK: Dependencies
-
     @ObservationIgnored private let core: CoreActor
     /// Not private: the permission checks read the local vaults' owners.
     @ObservationIgnored let store: AppStore
@@ -85,7 +55,7 @@ final class SyncEngine {
     /// Commands applied locally and not yet confirmed, over every vault.
     private(set) var pendingCount = 0
     /// Everything the core is still holding as rejected, newest sync first.
-    private(set) var rejected: [RejectedChange] = []
+    private(set) var rejected: [RejectedEntry] = []
     /// The vault list from the last `GET /vaults` of this session. The roles
     /// in it outlive the session in `AccountStore.vaultRoles`.
     private(set) var serverVaults: [VaultSummary] = []
@@ -206,7 +176,7 @@ final class SyncEngine {
             session = try authorized()
         } catch {
             var round = Round()
-            round.note(asServerError(error))
+            round.note(Self.asServerError(error))
             await settle(round)
             return
         }
@@ -229,11 +199,7 @@ final class SyncEngine {
         // Without a listing the remembered roles stand in, and nothing is
         // concluded from a vault missing from it.
         var listing: [VaultSummary]?
-        do {
-            listing = try await adoptListing(session)
-        } catch {
-            guard absorb(error, into: &round) else { return round }
-        }
+        guard await round.step({ listing = try await adoptListing(session); return Outcome() }) else { return round }
         await publishAccess()
         let listed = listing.map { Set($0.map(\.id)) }
 
@@ -243,15 +209,13 @@ final class SyncEngine {
             live = try await core.vaults().map(\.id)
             known = Set(live + (try await core.deletedVaults()))
         } catch {
-            _ = absorb(error, into: &round)
+            round.note(Self.asServerError(error))
             return round
         }
 
         for vaultId in live {
-            do {
-                round.outcome.merge(try await syncVault(vaultId, session: session, listed: listed))
-            } catch {
-                guard absorb(error, into: &round) else { return round }
+            guard await round.step({ try await syncVault(vaultId, session: session, listed: listed) }) else {
+                return round
             }
         }
 
@@ -259,39 +223,26 @@ final class SyncEngine {
         // `DeleteVault` among them. Until they are confirmed it syncs like a
         // live one (so a deletion the server already holds, from another
         // device, is folded in as well); afterwards its log goes too.
-        // Read again: a pull above may have just
-        // deleted one.
-        do {
-            for vaultId in try await core.deletedVaults() {
-                do {
-                    round.outcome.merge(try await settleDeleted(vaultId, session: session, listed: listed))
-                } catch {
-                    guard absorb(error, into: &round) else { return round }
-                }
+        // Read again: a pull above may have just deleted one.
+        var deleted: [Uuid] = []
+        guard await round.step({ deleted = try await core.deletedVaults(); return Outcome() }) else { return round }
+        for vaultId in deleted {
+            guard await round.step({ try await settleDeleted(vaultId, session: session, listed: listed) }) else {
+                return round
             }
-        } catch {
-            guard absorb(error, into: &round) else { return round }
         }
 
         // Joins: listed by the server, unknown here. A vault this round
         // deleted or forgot was known at its start, so it is not joined
         // again from a listing taken before the deletion went up.
         for summary in listing ?? [] where !known.contains(summary.id) {
-            do {
-                round.outcome.merge(try await pullLoop(summary.id, session: session))
-            } catch {
-                guard absorb(error, into: &round) else { return round }
-            }
+            guard await round.step({ try await pullLoop(summary.id, session: session) }) else { return round }
         }
 
         // The first push of a vault created here made it a server vault:
         // list again, so its role is known now rather than a round later.
         if round.outcome.claimed {
-            do {
-                _ = try await adoptListing(session)
-            } catch {
-                _ = absorb(error, into: &round)
-            }
+            await round.step { _ = try await adoptListing(session); return Outcome() }
         }
         await publishAccess()
         // Who may be named on a row changes with the sharing, which only the
@@ -431,13 +382,6 @@ final class SyncEngine {
         return outcome
     }
 
-    /// Records a failure of the round; `false` when it ends the round.
-    private func absorb(_ error: some Error, into round: inout Round) -> Bool {
-        let failure = asServerError(error)
-        round.note(failure)
-        return !failure.endsRound
-    }
-
     /// Writes the result of a sync round into the observable state.
     private func settle(_ round: Round) async {
         await refreshLocalState()
@@ -468,7 +412,7 @@ final class SyncEngine {
     func refreshLocalState() async {
         let state = await core.localState()
         pendingCount = state.pending
-        rejected = state.rejected.map(RejectedChange.init(entry:))
+        rejected = state.rejected
     }
 
     /// Hands the read-only vaults to the store, which hides what would
@@ -517,15 +461,13 @@ final class SyncEngine {
         publishMembers()
     }
 
-    // MARK: - Rejections
-
-    func dismiss(_ change: RejectedChange) async {
-        await core.dismissAllRejected([change.entry])
+    func dismiss(_ change: RejectedEntry) async {
+        await core.dismissAllRejected([change])
         await refreshLocalState()
     }
 
     func dismissAllRejected() async {
-        await core.dismissAllRejected(rejected.map(\.entry))
+        await core.dismissAllRejected(rejected)
         await refreshLocalState()
     }
 
@@ -553,10 +495,7 @@ final class SyncEngine {
         }
         let api = ServerAPI(transport: makeTransport(url))
         do {
-            let response =
-                registering
-                ? try await api.register(username: username, password: password)
-                : try await api.login(username: username, password: password)
+            let response = try await api.authenticate(username: username, password: password, registering: registering)
             account.signIn(
                 username: response.username,
                 token: response.token,
@@ -569,7 +508,7 @@ final class SyncEngine {
             await syncNow()
             start()
         } catch {
-            let failure = asServerError(error)
+            let failure = Self.asServerError(error)
             // On the login route a 401 is the credentials, not a session.
             authMessage = failure.isUnauthorized ? ErrorMessages.wrongCredentials : failure.summary
             authDetail = failure.isUnauthorized ? nil : failure.detail
@@ -579,6 +518,8 @@ final class SyncEngine {
     func logOut() async {
         authMessage = nil
         authDetail = nil
+        // Signed out here whatever the server says: a token it failed to
+        // revoke expires on its own.
         if let session = try? authorized() {
             _ = try? await session.api.logout(token: session.token)
         }
@@ -698,7 +639,7 @@ final class SyncEngine {
 
     /// Anything that is not already a `ServerError` (a `DomainError` from the
     /// core, say) still has to reach the status line.
-    private func asServerError(_ error: some Error) -> ServerError {
+    private static func asServerError(_ error: some Error) -> ServerError {
         switch error {
         case let error as ServerError: error
         case let error as DomainError: ServerError(status: 0, code: error.code, message: error.message)
@@ -714,20 +655,17 @@ final class SyncEngine {
     /// What one round of push or pull did to a vault.
     private struct Outcome {
         var changed = false
-        var received = false
         var rejected = false
         /// A first push minted the vault on the server.
         var claimed = false
 
         mutating func absorb(_ report: SyncReport) {
             changed = changed || report.confirmed > 0 || report.received > 0 || report.rebased
-            received = received || report.received > 0
             rejected = rejected || !report.rejected.isEmpty
         }
 
         mutating func merge(_ other: Outcome) {
             changed = changed || other.changed
-            received = received || other.received
             rejected = rejected || other.rejected
             claimed = claimed || other.claimed
         }
@@ -742,6 +680,20 @@ final class SyncEngine {
         /// otherwise the first one.
         mutating func note(_ failure: ServerError) {
             if failure.endsRound || self.failure == nil { self.failure = failure }
+        }
+
+        /// One step of the round, what it did kept and a failure noted:
+        /// `false` when the failure ends the round.
+        @discardableResult
+        mutating func step(_ work: () async throws -> Outcome) async -> Bool {
+            do {
+                outcome.merge(try await work())
+                return true
+            } catch {
+                let failure = SyncEngine.asServerError(error)
+                note(failure)
+                return !failure.endsRound
+            }
         }
     }
 }

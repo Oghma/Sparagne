@@ -1,9 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// Conversions between `Date` and the string scalars the core expects
-/// (`core/src/ffi.rs`): `OffsetDateTime` is RFC 3339 with the system offset,
-/// `UtcDateTime` is RFC 3339 in UTC, `NaiveDate` is a local `yyyy-MM-dd`.
+/// `Date` to and from the core's `OffsetDateTime` (system offset), `UtcDateTime` and `NaiveDate` (`yyyy-MM-dd`).
 nonisolated enum CoreDate {
     private static func style(_ timeZone: TimeZone) -> Date.ISO8601FormatStyle {
         Date.ISO8601FormatStyle(
@@ -16,7 +14,9 @@ nonisolated enum CoreDate {
         )
     }
 
-    private static let utc = TimeZone(identifier: "UTC") ?? .gmt
+    /// A `NaiveDate` has no zone: read and written in UTC, where a
+    /// daylight-saving change never moves midnight onto the day before.
+    static let utc = TimeZone(identifier: "UTC") ?? .gmt
 
     /// `2026-03-01T12:00:00+01:00` in the system time zone.
     static func offset(_ date: Date, timeZone: TimeZone = .current) -> OffsetDateTime {

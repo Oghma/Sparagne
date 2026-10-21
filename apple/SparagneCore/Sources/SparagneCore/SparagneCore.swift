@@ -647,11 +647,6 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func categoryTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime, person: String?) throws  -> [CategoryTotals]
     
     /**
-     * Log entries of a vault with `seq > since_seq`, in order.
-     */
-    func commandsSince(vaultId: Uuid, sinceSeq: Int64) throws  -> [CommandRecord]
-    
-    /**
      * Vaults a `DeleteVault` removed whose log is still here: their outbox
      * has to be pushed like any other, the deletion first of all.
      */
@@ -732,12 +727,6 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func people(vaultId: Uuid) throws  -> [String]
     
     /**
-     * Sums by kind over `[from, to)`. Either bound may be `nil`; both `nil`
-     * is all time.
-     */
-    func periodTotals(vaultId: Uuid, from: UtcDateTime?, to: UtcDateTime?) throws  -> PeriodTotals
-    
-    /**
      * `lines` worked out on `total` against the vault's envelopes as they
      * are now; the lines may be an unsaved draft.
      */
@@ -749,9 +738,10 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func previewMerge(vaultId: Uuid, sourceId: Uuid, targetId: Uuid) throws  -> MergePreview
     
     /**
-     * What importing a statement would do, row by row. Writes nothing.
+     * What importing a statement would do, row by row, with the user's
+     * overrides. Writes nothing.
      */
-    func previewStatement(vaultId: Uuid, text: String, mapping: StatementMapping, options: StatementOptions) throws  -> StatementPreview
+    func previewStatement(vaultId: Uuid, text: String, mapping: StatementMapping, options: StatementOptions, overrides: [StatementRowOverride]) throws  -> StatementPreview
     
     /**
      * JSON body for `POST /vaults/{id}/push`: at most `limit` commands of
@@ -829,11 +819,6 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
      * The heaviest expenses of `[from, to)`, largest first.
      */
     func topExpenses(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime, person: String?, limit: UInt32) throws  -> [TopExpense]
-    
-    /**
-     * One transaction with its legs, voided included.
-     */
-    func transaction(vaultId: Uuid, transactionId: Uuid) throws  -> TransactionView
     
     /**
      * One vault by id, `nil` when the database does not hold it.
@@ -1089,20 +1074,6 @@ open func categoryTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime, pers
 }
     
     /**
-     * Log entries of a vault with `seq > since_seq`, in order.
-     */
-open func commandsSince(vaultId: Uuid, sinceSeq: Int64)throws  -> [CommandRecord]  {
-    return try  FfiConverterSequenceTypeCommandRecord.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
-        uniffiCallStatus in
-    uniffi_sparagne_core_fn_method_corehandle_commands_since(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(vaultId),
-        FfiConverterInt64.lower(sinceSeq),uniffiCallStatus
-    )
-})
-}
-    
-    /**
      * Vaults a `DeleteVault` removed whose log is still here: their outbox
      * has to be pushed like any other, the deletion first of all.
      */
@@ -1317,22 +1288,6 @@ open func people(vaultId: Uuid)throws  -> [String]  {
 }
     
     /**
-     * Sums by kind over `[from, to)`. Either bound may be `nil`; both `nil`
-     * is all time.
-     */
-open func periodTotals(vaultId: Uuid, from: UtcDateTime? = nil, to: UtcDateTime? = nil)throws  -> PeriodTotals  {
-    return try  FfiConverterTypePeriodTotals_lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
-        uniffiCallStatus in
-    uniffi_sparagne_core_fn_method_corehandle_period_totals(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(vaultId),
-        FfiConverterOptionTypeUtcDateTime.lower(from),
-        FfiConverterOptionTypeUtcDateTime.lower(to),uniffiCallStatus
-    )
-})
-}
-    
-    /**
      * `lines` worked out on `total` against the vault's envelopes as they
      * are now; the lines may be an unsaved draft.
      */
@@ -1364,9 +1319,10 @@ open func previewMerge(vaultId: Uuid, sourceId: Uuid, targetId: Uuid)throws  -> 
 }
     
     /**
-     * What importing a statement would do, row by row. Writes nothing.
+     * What importing a statement would do, row by row, with the user's
+     * overrides. Writes nothing.
      */
-open func previewStatement(vaultId: Uuid, text: String, mapping: StatementMapping, options: StatementOptions)throws  -> StatementPreview  {
+open func previewStatement(vaultId: Uuid, text: String, mapping: StatementMapping, options: StatementOptions, overrides: [StatementRowOverride] = [])throws  -> StatementPreview  {
     return try  FfiConverterTypeStatementPreview_lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
         uniffiCallStatus in
     uniffi_sparagne_core_fn_method_corehandle_preview_statement(
@@ -1374,7 +1330,8 @@ open func previewStatement(vaultId: Uuid, text: String, mapping: StatementMappin
         FfiConverterTypeUuid_lower(vaultId),
         FfiConverterString.lower(text),
         FfiConverterTypeStatementMapping_lower(mapping),
-        FfiConverterTypeStatementOptions_lower(options),uniffiCallStatus
+        FfiConverterTypeStatementOptions_lower(options),
+        FfiConverterSequenceTypeStatementRowOverride.lower(overrides),uniffiCallStatus
     )
 })
 }
@@ -1584,20 +1541,6 @@ open func topExpenses(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime, person:
         FfiConverterTypeUtcDateTime_lower(to),
         FfiConverterOptionString.lower(person),
         FfiConverterUInt32.lower(limit),uniffiCallStatus
-    )
-})
-}
-    
-    /**
-     * One transaction with its legs, voided included.
-     */
-open func transaction(vaultId: Uuid, transactionId: Uuid)throws  -> TransactionView  {
-    return try  FfiConverterTypeTransactionView_lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
-        uniffiCallStatus in
-    uniffi_sparagne_core_fn_method_corehandle_transaction(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(vaultId),
-        FfiConverterTypeUuid_lower(transactionId),uniffiCallStatus
     )
 })
 }
@@ -2868,87 +2811,6 @@ public func FfiConverterTypeCommandEnvelope_lower(_ value: CommandEnvelope) -> R
 
 
 /**
- * A command as stored in the log.
- */
-public struct CommandRecord: Equatable, Hashable, Codable {
-    public var envelope: CommandEnvelope
-    /**
-     * Position in the local log.
-     */
-    public var seq: Int64
-    public var createdAt: Int64
-    public var resultId: Uuid?
-    /**
-     * Position the server gave it; `None` while the command is in the outbox.
-     */
-    public var serverSeq: Int64?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(envelope: CommandEnvelope, 
-        /**
-         * Position in the local log.
-         */seq: Int64, createdAt: Int64, resultId: Uuid?, 
-        /**
-         * Position the server gave it; `None` while the command is in the outbox.
-         */serverSeq: Int64?) {
-        self.envelope = envelope
-        self.seq = seq
-        self.createdAt = createdAt
-        self.resultId = resultId
-        self.serverSeq = serverSeq
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension CommandRecord: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCommandRecord: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommandRecord {
-        return
-            try CommandRecord(
-                envelope: FfiConverterTypeCommandEnvelope.read(from: &buf), 
-                seq: FfiConverterInt64.read(from: &buf), 
-                createdAt: FfiConverterInt64.read(from: &buf), 
-                resultId: FfiConverterOptionTypeUuid.read(from: &buf), 
-                serverSeq: FfiConverterOptionInt64.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: CommandRecord, into buf: inout [UInt8]) {
-        FfiConverterTypeCommandEnvelope.write(value.envelope, into: &buf)
-        FfiConverterInt64.write(value.seq, into: &buf)
-        FfiConverterInt64.write(value.createdAt, into: &buf)
-        FfiConverterOptionTypeUuid.write(value.resultId, into: &buf)
-        FfiConverterOptionInt64.write(value.serverSeq, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCommandRecord_lift(_ buf: RustBuffer) throws -> CommandRecord {
-    return try FfiConverterTypeCommandRecord.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCommandRecord_lower(_ value: CommandRecord) -> RustBuffer {
-    return FfiConverterTypeCommandRecord.lower(value)
-}
-
-
-/**
  * Payload shared by income, expense and refund.
  */
 public struct Entry: Equatable, Hashable, Codable {
@@ -4021,15 +3883,11 @@ public func FfiConverterTypeReceipt_lower(_ value: Receipt) -> RustBuffer {
  */
 public struct RecentUsage: Equatable, Hashable, Codable {
     public var categories: [Uuid]
-    public var wallets: [Uuid]
-    public var flows: [Uuid]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(categories: [Uuid], wallets: [Uuid], flows: [Uuid]) {
+    public init(categories: [Uuid]) {
         self.categories = categories
-        self.wallets = wallets
-        self.flows = flows
     }
 
     
@@ -4048,16 +3906,12 @@ public struct FfiConverterTypeRecentUsage: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RecentUsage {
         return
             try RecentUsage(
-                categories: FfiConverterSequenceTypeUuid.read(from: &buf), 
-                wallets: FfiConverterSequenceTypeUuid.read(from: &buf), 
-                flows: FfiConverterSequenceTypeUuid.read(from: &buf)
+                categories: FfiConverterSequenceTypeUuid.read(from: &buf)
         )
     }
 
     public static func write(_ value: RecentUsage, into buf: inout [UInt8]) {
         FfiConverterSequenceTypeUuid.write(value.categories, into: &buf)
-        FfiConverterSequenceTypeUuid.write(value.wallets, into: &buf)
-        FfiConverterSequenceTypeUuid.write(value.flows, into: &buf)
     }
 }
 
@@ -4688,6 +4542,228 @@ public func FfiConverterTypeSchedule_lower(_ value: Schedule) -> RustBuffer {
 
 
 /**
+ * Where the rows of one account of the file go.
+ */
+public struct StatementAccountWallet: Equatable, Hashable, Codable {
+    /**
+     * As the account column writes it; compared trimmed, whatever the case.
+     */
+    public var account: String
+    /**
+     * `None` leaves the account's rows out (`skipped_account`).
+     */
+    public var walletId: Uuid?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * As the account column writes it; compared trimmed, whatever the case.
+         */account: String, 
+        /**
+         * `None` leaves the account's rows out (`skipped_account`).
+         */walletId: Uuid?) {
+        self.account = account
+        self.walletId = walletId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StatementAccountWallet: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStatementAccountWallet: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatementAccountWallet {
+        return
+            try StatementAccountWallet(
+                account: FfiConverterString.read(from: &buf), 
+                walletId: FfiConverterOptionTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StatementAccountWallet, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.account, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.walletId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementAccountWallet_lift(_ buf: RustBuffer) throws -> StatementAccountWallet {
+    return try FfiConverterTypeStatementAccountWallet.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementAccountWallet_lower(_ value: StatementAccountWallet) -> RustBuffer {
+    return FfiConverterTypeStatementAccountWallet.lower(value)
+}
+
+
+/**
+ * One value of a statement's column, and how many rows hold it
+ * ([`column_values`]).
+ */
+public struct StatementColumnValue: Equatable, Hashable, Codable {
+    /**
+     * As the first row holding it writes it, trimmed.
+     */
+    public var value: String
+    public var rows: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * As the first row holding it writes it, trimmed.
+         */value: String, rows: UInt32) {
+        self.value = value
+        self.rows = rows
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StatementColumnValue: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStatementColumnValue: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatementColumnValue {
+        return
+            try StatementColumnValue(
+                value: FfiConverterString.read(from: &buf), 
+                rows: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StatementColumnValue, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.value, into: &buf)
+        FfiConverterUInt32.write(value.rows, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementColumnValue_lift(_ buf: RustBuffer) throws -> StatementColumnValue {
+    return try FfiConverterTypeStatementColumnValue.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementColumnValue_lower(_ value: StatementColumnValue) -> RustBuffer {
+    return FfiConverterTypeStatementColumnValue.lower(value)
+}
+
+
+/**
+ * One entry of [`StatementMapping::description_rules`]: what a row whose
+ * description holds `contains` is. Matched case-insensitively against the
+ * joined description columns, inner runs of spaces collapsed on both sides;
+ * the first rule that matches decides on its own, and a blank `contains`
+ * matches nothing.
+ */
+public struct StatementDescriptionRule: Equatable, Hashable, Codable {
+    public var contains: String
+    /**
+     * `None` keeps what the type rules or the default action say, so a rule
+     * may only clean the note or pick the category.
+     */
+    public var action: StatementAction?
+    /**
+     * Typed by the user, so it may create a category.
+     */
+    public var category: String?
+    /**
+     * Replaces the payee as the note; an original amount is still appended.
+     */
+    public var note: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(contains: String, 
+        /**
+         * `None` keeps what the type rules or the default action say, so a rule
+         * may only clean the note or pick the category.
+         */action: StatementAction? = nil, 
+        /**
+         * Typed by the user, so it may create a category.
+         */category: String? = nil, 
+        /**
+         * Replaces the payee as the note; an original amount is still appended.
+         */note: String? = nil) {
+        self.contains = contains
+        self.action = action
+        self.category = category
+        self.note = note
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StatementDescriptionRule: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStatementDescriptionRule: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatementDescriptionRule {
+        return
+            try StatementDescriptionRule(
+                contains: FfiConverterString.read(from: &buf), 
+                action: FfiConverterOptionTypeStatementAction.read(from: &buf), 
+                category: FfiConverterOptionString.read(from: &buf), 
+                note: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StatementDescriptionRule, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.contains, into: &buf)
+        FfiConverterOptionTypeStatementAction.write(value.action, into: &buf)
+        FfiConverterOptionString.write(value.category, into: &buf)
+        FfiConverterOptionString.write(value.note, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementDescriptionRule_lift(_ buf: RustBuffer) throws -> StatementDescriptionRule {
+    return try FfiConverterTypeStatementDescriptionRule.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementDescriptionRule_lower(_ value: StatementDescriptionRule) -> RustBuffer {
+    return FfiConverterTypeStatementDescriptionRule.lower(value)
+}
+
+
+/**
  * What [`detect`] learned about a file before any mapping.
  */
 public struct StatementDetection: Equatable, Hashable, Codable {
@@ -4775,6 +4851,144 @@ public func FfiConverterTypeStatementDetection_lower(_ value: StatementDetection
 
 
 /**
+ * How a statement's date and amount columns are written, as far as their
+ * values tell ([`guess_formats`]).
+ */
+public struct StatementFormatGuess: Equatable, Hashable, Codable {
+    /**
+     * The first of UTC (only when every value says so), ISO date-time, ISO
+     * date, day-first and month-first that reads every value.
+     */
+    public var dateFormat: StatementDateFormat?
+    /**
+     * `true` when only a decimal comma reads every amount, `false` when
+     * only a decimal point does.
+     */
+    public var decimalComma: Bool?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The first of UTC (only when every value says so), ISO date-time, ISO
+         * date, day-first and month-first that reads every value.
+         */dateFormat: StatementDateFormat?, 
+        /**
+         * `true` when only a decimal comma reads every amount, `false` when
+         * only a decimal point does.
+         */decimalComma: Bool?) {
+        self.dateFormat = dateFormat
+        self.decimalComma = decimalComma
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StatementFormatGuess: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStatementFormatGuess: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatementFormatGuess {
+        return
+            try StatementFormatGuess(
+                dateFormat: FfiConverterOptionTypeStatementDateFormat.read(from: &buf), 
+                decimalComma: FfiConverterOptionBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StatementFormatGuess, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeStatementDateFormat.write(value.dateFormat, into: &buf)
+        FfiConverterOptionBool.write(value.decimalComma, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementFormatGuess_lift(_ buf: RustBuffer) throws -> StatementFormatGuess {
+    return try FfiConverterTypeStatementFormatGuess.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementFormatGuess_lower(_ value: StatementFormatGuess) -> RustBuffer {
+    return FfiConverterTypeStatementFormatGuess.lower(value)
+}
+
+
+/**
+ * A wallet the statement does not check for rows typed by hand where some
+ * of its new rows look like entries already there: advice to check it.
+ */
+public struct StatementLookalike: Equatable, Hashable, Codable {
+    public var walletId: Uuid
+    /**
+     * New rows that matched nothing and would match an entry there.
+     */
+    public var rows: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(walletId: Uuid, 
+        /**
+         * New rows that matched nothing and would match an entry there.
+         */rows: UInt32) {
+        self.walletId = walletId
+        self.rows = rows
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StatementLookalike: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStatementLookalike: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatementLookalike {
+        return
+            try StatementLookalike(
+                walletId: FfiConverterTypeUuid.read(from: &buf), 
+                rows: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StatementLookalike, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.walletId, into: &buf)
+        FfiConverterUInt32.write(value.rows, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementLookalike_lift(_ buf: RustBuffer) throws -> StatementLookalike {
+    return try FfiConverterTypeStatementLookalike.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementLookalike_lower(_ value: StatementLookalike) -> RustBuffer {
+    return FfiConverterTypeStatementLookalike.lower(value)
+}
+
+
+/**
  * How the columns of a statement map to a transaction.
  */
 public struct StatementMapping: Equatable, Hashable, Codable {
@@ -4815,6 +5029,25 @@ public struct StatementMapping: Equatable, Hashable, Codable {
     public var categoryColumn: String?
     public var originalAmountColumn: String?
     public var originalCurrencyColumn: String?
+    /**
+     * Tried in order before the type rules. Left out of the JSON when empty,
+     * so a mapping saved before rules existed reads back, and one without
+     * rules is written as it always was.
+     */
+    public var descriptionRules: [StatementDescriptionRule]
+    /**
+     * The column naming the account a row belongs to, in an export holding
+     * several (the BudgetBakers Wallet app's): each account goes to the
+     * wallet [`StatementOptions::account_wallets`] gives it. Left out of the
+     * JSON when `None`, like the next one.
+     */
+    public var accountColumn: String?
+    /**
+     * The column saying a row is one half of a move between two of the
+     * user's accounts (`true`, `1`, `yes`, `y`, `si`, `sì` or `x`, whatever
+     * the case).
+     */
+    public var transferColumn: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -4839,7 +5072,23 @@ public struct StatementMapping: Equatable, Hashable, Codable {
          */skipStatuses: [String], currencyColumn: String?, 
         /**
          * The bank's own category; only ever matched against existing ones.
-         */categoryColumn: String?, originalAmountColumn: String?, originalCurrencyColumn: String?) {
+         */categoryColumn: String?, originalAmountColumn: String?, originalCurrencyColumn: String?, 
+        /**
+         * Tried in order before the type rules. Left out of the JSON when empty,
+         * so a mapping saved before rules existed reads back, and one without
+         * rules is written as it always was.
+         */descriptionRules: [StatementDescriptionRule] = [], 
+        /**
+         * The column naming the account a row belongs to, in an export holding
+         * several (the BudgetBakers Wallet app's): each account goes to the
+         * wallet [`StatementOptions::account_wallets`] gives it. Left out of the
+         * JSON when `None`, like the next one.
+         */accountColumn: String? = nil, 
+        /**
+         * The column saying a row is one half of a move between two of the
+         * user's accounts (`true`, `1`, `yes`, `y`, `si`, `sì` or `x`, whatever
+         * the case).
+         */transferColumn: String? = nil) {
         self.delimiter = delimiter
         self.dateColumn = dateColumn
         self.dateFormat = dateFormat
@@ -4856,6 +5105,9 @@ public struct StatementMapping: Equatable, Hashable, Codable {
         self.categoryColumn = categoryColumn
         self.originalAmountColumn = originalAmountColumn
         self.originalCurrencyColumn = originalCurrencyColumn
+        self.descriptionRules = descriptionRules
+        self.accountColumn = accountColumn
+        self.transferColumn = transferColumn
     }
 
     
@@ -4889,7 +5141,10 @@ public struct FfiConverterTypeStatementMapping: FfiConverterRustBuffer {
                 currencyColumn: FfiConverterOptionString.read(from: &buf), 
                 categoryColumn: FfiConverterOptionString.read(from: &buf), 
                 originalAmountColumn: FfiConverterOptionString.read(from: &buf), 
-                originalCurrencyColumn: FfiConverterOptionString.read(from: &buf)
+                originalCurrencyColumn: FfiConverterOptionString.read(from: &buf), 
+                descriptionRules: FfiConverterSequenceTypeStatementDescriptionRule.read(from: &buf), 
+                accountColumn: FfiConverterOptionString.read(from: &buf), 
+                transferColumn: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -4910,6 +5165,9 @@ public struct FfiConverterTypeStatementMapping: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.categoryColumn, into: &buf)
         FfiConverterOptionString.write(value.originalAmountColumn, into: &buf)
         FfiConverterOptionString.write(value.originalCurrencyColumn, into: &buf)
+        FfiConverterSequenceTypeStatementDescriptionRule.write(value.descriptionRules, into: &buf)
+        FfiConverterOptionString.write(value.accountColumn, into: &buf)
+        FfiConverterOptionString.write(value.transferColumn, into: &buf)
     }
 }
 
@@ -4942,6 +5200,36 @@ public struct StatementOptions: Equatable, Hashable, Codable {
      * IANA name used for rows without an offset, e.g. `Europe/Rome`.
      */
     public var timezone: String
+    /**
+     * Wallets other than `wallet_id` where a hand-entered row may be the
+     * duplicate of a statement row: a duplicate found there is moved into
+     * `wallet_id` by default ([`StatementMatchChoice::MoveExisting`]), and an
+     * entry there standing for a transfer row may be replaced by it
+     * ([`StatementMatchChoice::ReplaceExisting`]). Never a wallet that is
+     * itself a statement's.
+     */
+    public var alsoCheckWallets: [Uuid]
+    /**
+     * Rows dated before this day (in their own offset) are skipped with
+     * `before_start`; transfers with the wallets also checked dated before
+     * it, and entries of those wallets dated more than 3 days before it,
+     * match no row.
+     */
+    public var since: NaiveDate?
+    /**
+     * The other wallets the app knows receive bank statements (from the
+     * imports it remembers). With the wallets a claim or a move names, they
+     * are the statements' wallets: never advised as
+     * [`StatementPreview::lookalikes`], and their imported rows standing for
+     * a transfer row's other side are replaced by default up to 4 days
+     * away. A wallet not in the vault is no statement's.
+     */
+    public var statementWallets: [Uuid]
+    /**
+     * Where each account of [`StatementMapping::account_column`] goes; an
+     * account not listed goes to `wallet_id`.
+     */
+    public var accountWallets: [StatementAccountWallet]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -4951,10 +5239,40 @@ public struct StatementOptions: Equatable, Hashable, Codable {
          */flowId: Uuid?, 
         /**
          * IANA name used for rows without an offset, e.g. `Europe/Rome`.
-         */timezone: String) {
+         */timezone: String, 
+        /**
+         * Wallets other than `wallet_id` where a hand-entered row may be the
+         * duplicate of a statement row: a duplicate found there is moved into
+         * `wallet_id` by default ([`StatementMatchChoice::MoveExisting`]), and an
+         * entry there standing for a transfer row may be replaced by it
+         * ([`StatementMatchChoice::ReplaceExisting`]). Never a wallet that is
+         * itself a statement's.
+         */alsoCheckWallets: [Uuid] = [], 
+        /**
+         * Rows dated before this day (in their own offset) are skipped with
+         * `before_start`; transfers with the wallets also checked dated before
+         * it, and entries of those wallets dated more than 3 days before it,
+         * match no row.
+         */since: NaiveDate? = nil, 
+        /**
+         * The other wallets the app knows receive bank statements (from the
+         * imports it remembers). With the wallets a claim or a move names, they
+         * are the statements' wallets: never advised as
+         * [`StatementPreview::lookalikes`], and their imported rows standing for
+         * a transfer row's other side are replaced by default up to 4 days
+         * away. A wallet not in the vault is no statement's.
+         */statementWallets: [Uuid] = [], 
+        /**
+         * Where each account of [`StatementMapping::account_column`] goes; an
+         * account not listed goes to `wallet_id`.
+         */accountWallets: [StatementAccountWallet] = []) {
         self.walletId = walletId
         self.flowId = flowId
         self.timezone = timezone
+        self.alsoCheckWallets = alsoCheckWallets
+        self.since = since
+        self.statementWallets = statementWallets
+        self.accountWallets = accountWallets
     }
 
     
@@ -4975,7 +5293,11 @@ public struct FfiConverterTypeStatementOptions: FfiConverterRustBuffer {
             try StatementOptions(
                 walletId: FfiConverterTypeUuid.read(from: &buf), 
                 flowId: FfiConverterOptionTypeUuid.read(from: &buf), 
-                timezone: FfiConverterString.read(from: &buf)
+                timezone: FfiConverterString.read(from: &buf), 
+                alsoCheckWallets: FfiConverterSequenceTypeUuid.read(from: &buf), 
+                since: FfiConverterOptionTypeNaiveDate.read(from: &buf), 
+                statementWallets: FfiConverterSequenceTypeUuid.read(from: &buf), 
+                accountWallets: FfiConverterSequenceTypeStatementAccountWallet.read(from: &buf)
         )
     }
 
@@ -4983,6 +5305,10 @@ public struct FfiConverterTypeStatementOptions: FfiConverterRustBuffer {
         FfiConverterTypeUuid.write(value.walletId, into: &buf)
         FfiConverterOptionTypeUuid.write(value.flowId, into: &buf)
         FfiConverterString.write(value.timezone, into: &buf)
+        FfiConverterSequenceTypeUuid.write(value.alsoCheckWallets, into: &buf)
+        FfiConverterOptionTypeNaiveDate.write(value.since, into: &buf)
+        FfiConverterSequenceTypeUuid.write(value.statementWallets, into: &buf)
+        FfiConverterSequenceTypeStatementAccountWallet.write(value.accountWallets, into: &buf)
     }
 }
 
@@ -5072,17 +5398,65 @@ public struct StatementPreview: Equatable, Hashable, Codable {
     public var alreadyImported: UInt32
     public var skipped: UInt32
     public var invalid: UInt32
+    /**
+     * New rows rounded, and rows replacing their match rounded.
+     */
     public var rounded: UInt32
+    /**
+     * Rows flagged [`StatementRowStatus::PossibleDuplicate`], those
+     * replacing their match included.
+     */
+    public var possibleDuplicates: UInt32
+    /**
+     * Rows flagged [`StatementRowStatus::MatchedTransfer`].
+     */
+    public var matchedTransfers: UInt32
+    /**
+     * Possible duplicates whose match the import would move.
+     */
+    public var moves: UInt32
+    /**
+     * Wallets not checked for rows typed by hand, nor any statement's (a
+     * claim or a move names it, or [`StatementOptions::statement_wallets`]
+     * holds it), where new rows that matched nothing look like entries
+     * already there, the most such rows first. Advice only: matching does
+     * not use them.
+     */
+    public var lookalikes: [StatementLookalike]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(rows: [StatementRow], newRows: UInt32, alreadyImported: UInt32, skipped: UInt32, invalid: UInt32, rounded: UInt32) {
+    public init(rows: [StatementRow], newRows: UInt32, alreadyImported: UInt32, skipped: UInt32, invalid: UInt32, 
+        /**
+         * New rows rounded, and rows replacing their match rounded.
+         */rounded: UInt32, 
+        /**
+         * Rows flagged [`StatementRowStatus::PossibleDuplicate`], those
+         * replacing their match included.
+         */possibleDuplicates: UInt32, 
+        /**
+         * Rows flagged [`StatementRowStatus::MatchedTransfer`].
+         */matchedTransfers: UInt32, 
+        /**
+         * Possible duplicates whose match the import would move.
+         */moves: UInt32, 
+        /**
+         * Wallets not checked for rows typed by hand, nor any statement's (a
+         * claim or a move names it, or [`StatementOptions::statement_wallets`]
+         * holds it), where new rows that matched nothing look like entries
+         * already there, the most such rows first. Advice only: matching does
+         * not use them.
+         */lookalikes: [StatementLookalike] = []) {
         self.rows = rows
         self.newRows = newRows
         self.alreadyImported = alreadyImported
         self.skipped = skipped
         self.invalid = invalid
         self.rounded = rounded
+        self.possibleDuplicates = possibleDuplicates
+        self.matchedTransfers = matchedTransfers
+        self.moves = moves
+        self.lookalikes = lookalikes
     }
 
     
@@ -5106,7 +5480,11 @@ public struct FfiConverterTypeStatementPreview: FfiConverterRustBuffer {
                 alreadyImported: FfiConverterUInt32.read(from: &buf), 
                 skipped: FfiConverterUInt32.read(from: &buf), 
                 invalid: FfiConverterUInt32.read(from: &buf), 
-                rounded: FfiConverterUInt32.read(from: &buf)
+                rounded: FfiConverterUInt32.read(from: &buf), 
+                possibleDuplicates: FfiConverterUInt32.read(from: &buf), 
+                matchedTransfers: FfiConverterUInt32.read(from: &buf), 
+                moves: FfiConverterUInt32.read(from: &buf), 
+                lookalikes: FfiConverterSequenceTypeStatementLookalike.read(from: &buf)
         )
     }
 
@@ -5117,6 +5495,10 @@ public struct FfiConverterTypeStatementPreview: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.skipped, into: &buf)
         FfiConverterUInt32.write(value.invalid, into: &buf)
         FfiConverterUInt32.write(value.rounded, into: &buf)
+        FfiConverterUInt32.write(value.possibleDuplicates, into: &buf)
+        FfiConverterUInt32.write(value.matchedTransfers, into: &buf)
+        FfiConverterUInt32.write(value.moves, into: &buf)
+        FfiConverterSequenceTypeStatementLookalike.write(value.lookalikes, into: &buf)
     }
 }
 
@@ -5201,20 +5583,52 @@ public func FfiConverterTypeStatementRejection_lower(_ value: StatementRejection
  * Outcome of [`Core::import_statement`].
  */
 public struct StatementReport: Equatable, Hashable, Codable {
+    /**
+     * Rows written, the transfer of a row replacing its match included.
+     */
     public var executed: UInt32
     public var deduplicated: UInt32
     public var skipped: UInt32
     public var rounded: UInt32
     public var rejected: [StatementRejection]
+    /**
+     * Possible duplicates: left out (moved ones included), or replacing
+     * their match.
+     */
+    public var possibleDuplicates: UInt32
+    /**
+     * Matched transfers left out.
+     */
+    public var matchedTransfers: UInt32
+    /**
+     * Transactions moved into the statement's wallet.
+     */
+    public var moved: UInt32
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(executed: UInt32, deduplicated: UInt32, skipped: UInt32, rounded: UInt32, rejected: [StatementRejection]) {
+    public init(
+        /**
+         * Rows written, the transfer of a row replacing its match included.
+         */executed: UInt32, deduplicated: UInt32, skipped: UInt32, rounded: UInt32, rejected: [StatementRejection], 
+        /**
+         * Possible duplicates: left out (moved ones included), or replacing
+         * their match.
+         */possibleDuplicates: UInt32, 
+        /**
+         * Matched transfers left out.
+         */matchedTransfers: UInt32, 
+        /**
+         * Transactions moved into the statement's wallet.
+         */moved: UInt32) {
         self.executed = executed
         self.deduplicated = deduplicated
         self.skipped = skipped
         self.rounded = rounded
         self.rejected = rejected
+        self.possibleDuplicates = possibleDuplicates
+        self.matchedTransfers = matchedTransfers
+        self.moved = moved
     }
 
     
@@ -5237,7 +5651,10 @@ public struct FfiConverterTypeStatementReport: FfiConverterRustBuffer {
                 deduplicated: FfiConverterUInt32.read(from: &buf), 
                 skipped: FfiConverterUInt32.read(from: &buf), 
                 rounded: FfiConverterUInt32.read(from: &buf), 
-                rejected: FfiConverterSequenceTypeStatementRejection.read(from: &buf)
+                rejected: FfiConverterSequenceTypeStatementRejection.read(from: &buf), 
+                possibleDuplicates: FfiConverterUInt32.read(from: &buf), 
+                matchedTransfers: FfiConverterUInt32.read(from: &buf), 
+                moved: FfiConverterUInt32.read(from: &buf)
         )
     }
 
@@ -5247,6 +5664,9 @@ public struct FfiConverterTypeStatementReport: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.skipped, into: &buf)
         FfiConverterUInt32.write(value.rounded, into: &buf)
         FfiConverterSequenceTypeStatementRejection.write(value.rejected, into: &buf)
+        FfiConverterUInt32.write(value.possibleDuplicates, into: &buf)
+        FfiConverterUInt32.write(value.matchedTransfers, into: &buf)
+        FfiConverterUInt32.write(value.moved, into: &buf)
     }
 }
 
@@ -5306,6 +5726,72 @@ public struct StatementRow: Equatable, Hashable, Codable {
      * `12.34 USD` when the row carries an original amount and currency.
      */
     public var original: String?
+    /**
+     * What the row is taken for: the user's action, else the description
+     * rule's, else the type rule's, else the default action.
+     */
+    public var action: StatementAction
+    /**
+     * The money goes out, as the file signs it; `false` when the amount is
+     * unreadable.
+     */
+    public var outflow: Bool
+    /**
+     * The note before the user's own: the description rule's, else the
+     * payee. The original amount is appended to it on import.
+     */
+    public var note: String
+    /**
+     * The category before the user's own: the description rule's, else
+     * [`Self::matched_category`].
+     */
+    public var category: String?
+    /**
+     * Index in [`StatementMapping::description_rules`] of the rule that
+     * matched the row.
+     */
+    public var descriptionRule: UInt32?
+    /**
+     * The transaction a flagged row matched. It stays when the user imports
+     * the row anyway, so the review can still show it.
+     */
+    public var existing: TransactionView?
+    /**
+     * What becomes of a row that matched: the user's choice, else the
+     * default. `None` when nothing matched.
+     */
+    public var matchChoice: StatementMatchChoice?
+    /**
+     * What [`Self::match_choice`] would be without the user's `on_match`.
+     * `None` when nothing matched.
+     */
+    public var defaultChoice: StatementMatchChoice?
+    /**
+     * What the row is taken for before the user's own action: the
+     * description rule's, else the type rule's, else the default action.
+     * `None` for a row that could not be read as one (`invalid_row`).
+     */
+    public var baseAction: StatementAction?
+    /**
+     * The wallet the row goes to: its account's, else
+     * [`StatementOptions::wallet_id`]. `None` for a row of an account left
+     * out, or one that could not be read as a row (`invalid_row`).
+     */
+    public var walletId: Uuid?
+    /**
+     * The account column's value, trimmed.
+     */
+    public var account: String?
+    /**
+     * The transfer column says the row is one half of a move between two
+     * of the user's accounts. Set on a half with no other side in the file
+     * too, which is then imported as what its type says.
+     */
+    public var transferLeg: Bool
+    /**
+     * The line of the other half the row was paired with in the file.
+     */
+    public var pairedLine: UInt32?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -5333,7 +5819,60 @@ public struct StatementRow: Equatable, Hashable, Codable {
          */counterWalletId: Uuid?, 
         /**
          * `12.34 USD` when the row carries an original amount and currency.
-         */original: String?) {
+         */original: String?, 
+        /**
+         * What the row is taken for: the user's action, else the description
+         * rule's, else the type rule's, else the default action.
+         */action: StatementAction, 
+        /**
+         * The money goes out, as the file signs it; `false` when the amount is
+         * unreadable.
+         */outflow: Bool, 
+        /**
+         * The note before the user's own: the description rule's, else the
+         * payee. The original amount is appended to it on import.
+         */note: String, 
+        /**
+         * The category before the user's own: the description rule's, else
+         * [`Self::matched_category`].
+         */category: String?, 
+        /**
+         * Index in [`StatementMapping::description_rules`] of the rule that
+         * matched the row.
+         */descriptionRule: UInt32?, 
+        /**
+         * The transaction a flagged row matched. It stays when the user imports
+         * the row anyway, so the review can still show it.
+         */existing: TransactionView?, 
+        /**
+         * What becomes of a row that matched: the user's choice, else the
+         * default. `None` when nothing matched.
+         */matchChoice: StatementMatchChoice?, 
+        /**
+         * What [`Self::match_choice`] would be without the user's `on_match`.
+         * `None` when nothing matched.
+         */defaultChoice: StatementMatchChoice? = nil, 
+        /**
+         * What the row is taken for before the user's own action: the
+         * description rule's, else the type rule's, else the default action.
+         * `None` for a row that could not be read as one (`invalid_row`).
+         */baseAction: StatementAction? = nil, 
+        /**
+         * The wallet the row goes to: its account's, else
+         * [`StatementOptions::wallet_id`]. `None` for a row of an account left
+         * out, or one that could not be read as a row (`invalid_row`).
+         */walletId: Uuid? = nil, 
+        /**
+         * The account column's value, trimmed.
+         */account: String? = nil, 
+        /**
+         * The transfer column says the row is one half of a move between two
+         * of the user's accounts. Set on a half with no other side in the file
+         * too, which is then imported as what its type says.
+         */transferLeg: Bool = false, 
+        /**
+         * The line of the other half the row was paired with in the file.
+         */pairedLine: UInt32? = nil) {
         self.line = line
         self.commandId = commandId
         self.status = status
@@ -5346,6 +5885,19 @@ public struct StatementRow: Equatable, Hashable, Codable {
         self.matchedCategory = matchedCategory
         self.counterWalletId = counterWalletId
         self.original = original
+        self.action = action
+        self.outflow = outflow
+        self.note = note
+        self.category = category
+        self.descriptionRule = descriptionRule
+        self.existing = existing
+        self.matchChoice = matchChoice
+        self.defaultChoice = defaultChoice
+        self.baseAction = baseAction
+        self.walletId = walletId
+        self.account = account
+        self.transferLeg = transferLeg
+        self.pairedLine = pairedLine
     }
 
     
@@ -5375,7 +5927,20 @@ public struct FfiConverterTypeStatementRow: FfiConverterRustBuffer {
                 bankCategory: FfiConverterOptionString.read(from: &buf), 
                 matchedCategory: FfiConverterOptionString.read(from: &buf), 
                 counterWalletId: FfiConverterOptionTypeUuid.read(from: &buf), 
-                original: FfiConverterOptionString.read(from: &buf)
+                original: FfiConverterOptionString.read(from: &buf), 
+                action: FfiConverterTypeStatementAction.read(from: &buf), 
+                outflow: FfiConverterBool.read(from: &buf), 
+                note: FfiConverterString.read(from: &buf), 
+                category: FfiConverterOptionString.read(from: &buf), 
+                descriptionRule: FfiConverterOptionUInt32.read(from: &buf), 
+                existing: FfiConverterOptionTypeTransactionView.read(from: &buf), 
+                matchChoice: FfiConverterOptionTypeStatementMatchChoice.read(from: &buf), 
+                defaultChoice: FfiConverterOptionTypeStatementMatchChoice.read(from: &buf), 
+                baseAction: FfiConverterOptionTypeStatementAction.read(from: &buf), 
+                walletId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                account: FfiConverterOptionString.read(from: &buf), 
+                transferLeg: FfiConverterBool.read(from: &buf), 
+                pairedLine: FfiConverterOptionUInt32.read(from: &buf)
         )
     }
 
@@ -5392,6 +5957,19 @@ public struct FfiConverterTypeStatementRow: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.matchedCategory, into: &buf)
         FfiConverterOptionTypeUuid.write(value.counterWalletId, into: &buf)
         FfiConverterOptionString.write(value.original, into: &buf)
+        FfiConverterTypeStatementAction.write(value.action, into: &buf)
+        FfiConverterBool.write(value.outflow, into: &buf)
+        FfiConverterString.write(value.note, into: &buf)
+        FfiConverterOptionString.write(value.category, into: &buf)
+        FfiConverterOptionUInt32.write(value.descriptionRule, into: &buf)
+        FfiConverterOptionTypeTransactionView.write(value.existing, into: &buf)
+        FfiConverterOptionTypeStatementMatchChoice.write(value.matchChoice, into: &buf)
+        FfiConverterOptionTypeStatementMatchChoice.write(value.defaultChoice, into: &buf)
+        FfiConverterOptionTypeStatementAction.write(value.baseAction, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.walletId, into: &buf)
+        FfiConverterOptionString.write(value.account, into: &buf)
+        FfiConverterBool.write(value.transferLeg, into: &buf)
+        FfiConverterOptionUInt32.write(value.pairedLine, into: &buf)
     }
 }
 
@@ -5424,7 +6002,27 @@ public struct StatementRowOverride: Equatable, Hashable, Codable {
      */
     public var category: String?
     public var note: String?
+    /**
+     * Leaves the row out (`skipped_by_you`), matched or not: nothing is
+     * written or claimed for it, so the next import shows it again.
+     */
     public var skip: Bool
+    /**
+     * What the row is, over the description rules, the type rules and the
+     * default action. Never part of the row's id.
+     */
+    public var action: StatementAction?
+    /**
+     * The envelope of an entry, over [`StatementOptions::flow_id`]; the
+     * vault's Unallocated flow id names Unallocated, and an archived or
+     * unknown envelope is ignored.
+     */
+    public var flowId: Uuid?
+    /**
+     * What becomes of a flagged row, over the default
+     * ([`StatementRow::default_choice`]).
+     */
+    public var onMatch: StatementMatchChoice?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -5434,11 +6032,31 @@ public struct StatementRowOverride: Equatable, Hashable, Codable {
          */line: UInt32, 
         /**
          * Typed by the user, so it may create a category.
-         */category: String?, note: String?, skip: Bool) {
+         */category: String?, note: String?, 
+        /**
+         * Leaves the row out (`skipped_by_you`), matched or not: nothing is
+         * written or claimed for it, so the next import shows it again.
+         */skip: Bool, 
+        /**
+         * What the row is, over the description rules, the type rules and the
+         * default action. Never part of the row's id.
+         */action: StatementAction? = nil, 
+        /**
+         * The envelope of an entry, over [`StatementOptions::flow_id`]; the
+         * vault's Unallocated flow id names Unallocated, and an archived or
+         * unknown envelope is ignored.
+         */flowId: Uuid? = nil, 
+        /**
+         * What becomes of a flagged row, over the default
+         * ([`StatementRow::default_choice`]).
+         */onMatch: StatementMatchChoice? = nil) {
         self.line = line
         self.category = category
         self.note = note
         self.skip = skip
+        self.action = action
+        self.flowId = flowId
+        self.onMatch = onMatch
     }
 
     
@@ -5460,7 +6078,10 @@ public struct FfiConverterTypeStatementRowOverride: FfiConverterRustBuffer {
                 line: FfiConverterUInt32.read(from: &buf), 
                 category: FfiConverterOptionString.read(from: &buf), 
                 note: FfiConverterOptionString.read(from: &buf), 
-                skip: FfiConverterBool.read(from: &buf)
+                skip: FfiConverterBool.read(from: &buf), 
+                action: FfiConverterOptionTypeStatementAction.read(from: &buf), 
+                flowId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                onMatch: FfiConverterOptionTypeStatementMatchChoice.read(from: &buf)
         )
     }
 
@@ -5469,6 +6090,9 @@ public struct FfiConverterTypeStatementRowOverride: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.category, into: &buf)
         FfiConverterOptionString.write(value.note, into: &buf)
         FfiConverterBool.write(value.skip, into: &buf)
+        FfiConverterOptionTypeStatementAction.write(value.action, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.flowId, into: &buf)
+        FfiConverterOptionTypeStatementMatchChoice.write(value.onMatch, into: &buf)
     }
 }
 
@@ -5969,6 +6593,9 @@ public func FfiConverterTypeTransactionFilter_lower(_ value: TransactionFilter) 
  * transaction being patched: `wallet_id`, `flow_id`, `category` and `person`
  * belong to entries, `from_id` and `to_id` to transfers, and mixing the two
  * is refused.
+ *
+ * Reserved: under a UUID v5 id, a patch of `wallet_id`, `from_id` or
+ * `to_id` alone is a statement import's claim or move ([`crate::statement`]).
  */
 public struct TransactionPatch: Equatable, Hashable, Codable {
     /**
@@ -8679,6 +9306,117 @@ public func FfiConverterTypeStatementDateFormat_lower(_ value: StatementDateForm
 
 
 /**
+ * What becomes of a row flagged [`StatementRowStatus::PossibleDuplicate`]
+ * or [`StatementRowStatus::MatchedTransfer`].
+ */
+
+public enum StatementMatchChoice: Equatable, Hashable, Codable, CaseIterable {
+    
+    /**
+     * Leave the row out: the transaction already there stands for it, and
+     * the import records it. On a duplicate found in one of
+     * [`StatementOptions::also_check_wallets`] it reads as `MoveExisting`,
+     * on an entry standing for the row's transfer as `ImportAnyway`.
+     */
+    case skip
+    /**
+     * Import the row as if nothing matched it.
+     */
+    case importAnyway
+    /**
+     * Leave the row out and move the transaction it matched into the
+     * statement's wallet (`UpdateTransaction` with its `wallet_id`). Only for
+     * a possible duplicate found in one of
+     * [`StatementOptions::also_check_wallets`]; on an entry standing for the
+     * row's transfer it reads as `ImportAnyway`, anywhere else as `Skip`.
+     */
+    case moveExisting
+    /**
+     * Void the entry the row matched and import the row as the transfer
+     * between wallets it is, all at once: for a transfer row whose other
+     * side is already in the vault as an income, expense or refund (the
+     * other bank's row imported without a rule, or typed by hand). The
+     * default only when the entry very likely is that side: the other
+     * bank's statement row up to 4 days away, or an entry dated the row's
+     * day or a day off in no wallet also checked; never one dated before
+     * the start day. Only for such a match; anywhere else it reads as the
+     * default.
+     */
+    case replaceExisting
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension StatementMatchChoice: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStatementMatchChoice: FfiConverterRustBuffer {
+    typealias SwiftType = StatementMatchChoice
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatementMatchChoice {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .skip
+        
+        case 2: return .importAnyway
+        
+        case 3: return .moveExisting
+        
+        case 4: return .replaceExisting
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: StatementMatchChoice, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .skip:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .importAnyway:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .moveExisting:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .replaceExisting:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementMatchChoice_lift(_ buf: RustBuffer) throws -> StatementMatchChoice {
+    return try FfiConverterTypeStatementMatchChoice.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementMatchChoice_lower(_ value: StatementMatchChoice) -> RustBuffer {
+    return FfiConverterTypeStatementMatchChoice.lower(value)
+}
+
+
+
+/**
  * What would happen to a previewed row.
  */
 
@@ -8687,15 +9425,46 @@ public enum StatementRowStatus: Equatable, Hashable, Codable {
     case new
     case alreadyImported
     /**
+     * An entry already in the vault looks like this row: the money moving
+     * the same way (an expense, or an income or a refund), the same amount,
+     * at most 3 days apart, in the statement's wallet or in one of
+     * [`StatementOptions::also_check_wallets`]; or, for a transfer row, an
+     * entry standing for its transfer, at most 4 days apart (in the wallet
+     * it names, the money moving the other way). It is in
+     * [`StatementRow::existing`], and [`StatementRow::match_choice`] says
+     * what the import does; a row replacing its entry stays flagged and is
+     * written.
+     */
+    case possibleDuplicate
+    /**
+     * The other side of a transfer between wallets already in the vault:
+     * same amount, the right direction, at most 4 days apart. It is in
+     * [`StatementRow::existing`]; the row is left out unless the user
+     * chooses [`StatementMatchChoice::ImportAnyway`].
+     */
+    case matchedTransfer
+    /**
      * Not imported on purpose. `code` is stable and meant for the app to
      * translate; `reason` is the English detail:
      *
-     * - `skipped_by_rule`: a type rule or the default action says `Skip`;
+     * - `skipped_by_rule`: a description rule, a type rule or the default
+     * action says `Skip` (the reason names the rule);
      * - `skipped_status`: the status is in `skip_statuses` (the reason
      * names it);
-     * - `needs_wallet`: a transfer whose other wallet is not chosen yet;
+     * - `needs_wallet`: a transfer whose other wallet is not chosen yet, or
+     * is one the money cannot move to or from: the imported wallet, one
+     * not in the vault, an archived one;
      * - `zero_amount`: the amount is zero;
-     * - `skipped_by_you`: a [`StatementRowOverride`] with `skip`.
+     * - `skipped_by_you`: a [`StatementRowOverride`] with `skip`, or a
+     * `Skip` action of the user's;
+     * - `before_start`: dated before [`StatementOptions::since`];
+     * - `skipped_account`: its account goes to no wallet
+     * ([`StatementAccountWallet::wallet_id`] is `None`);
+     * - `internal_transfer`: one half of a move between two accounts of the
+     * file that go to one wallet, where it moves nothing;
+     * - `transfer_pair`: the money-in half of a move between two accounts
+     * of the file, written as the transfer of the other half
+     * ([`StatementRow::paired_line`]).
      */
     case skipped(code: String, reason: String
     )
@@ -8730,10 +9499,14 @@ public struct FfiConverterTypeStatementRowStatus: FfiConverterRustBuffer {
         
         case 2: return .alreadyImported
         
-        case 3: return .skipped(code: try FfiConverterString.read(from: &buf), reason: try FfiConverterString.read(from: &buf)
+        case 3: return .possibleDuplicate
+        
+        case 4: return .matchedTransfer
+        
+        case 5: return .skipped(code: try FfiConverterString.read(from: &buf), reason: try FfiConverterString.read(from: &buf)
         )
         
-        case 4: return .invalid(code: try FfiConverterString.read(from: &buf), message: try FfiConverterString.read(from: &buf)
+        case 6: return .invalid(code: try FfiConverterString.read(from: &buf), message: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -8752,14 +9525,22 @@ public struct FfiConverterTypeStatementRowStatus: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
         
         
-        case let .skipped(code,reason):
+        case .possibleDuplicate:
             writeInt(&buf, Int32(3))
+        
+        
+        case .matchedTransfer:
+            writeInt(&buf, Int32(4))
+        
+        
+        case let .skipped(code,reason):
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(code, into: &buf)
             FfiConverterString.write(reason, into: &buf)
             
         
         case let .invalid(code,message):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(6))
             FfiConverterString.write(code, into: &buf)
             FfiConverterString.write(message, into: &buf)
             
@@ -8945,6 +9726,30 @@ public func FfiConverterTypeTransactionKind_lower(_ value: TransactionKind) -> R
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionUInt32: FfiConverterRustBuffer {
+    typealias SwiftType = UInt32?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt32.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt32.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionInt64: FfiConverterRustBuffer {
     typealias SwiftType = Int64?
 
@@ -9113,6 +9918,30 @@ fileprivate struct FfiConverterOptionTypeSchedule: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeTransactionView: FfiConverterRustBuffer {
+    typealias SwiftType = TransactionView?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeTransactionView.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeTransactionView.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeVaultView: FfiConverterRustBuffer {
     typealias SwiftType = VaultView?
 
@@ -9177,6 +10006,78 @@ fileprivate struct FfiConverterOptionTypeFlowMode: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeFlowMode.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeStatementAction: FfiConverterRustBuffer {
+    typealias SwiftType = StatementAction?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeStatementAction.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeStatementAction.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeStatementDateFormat: FfiConverterRustBuffer {
+    typealias SwiftType = StatementDateFormat?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeStatementDateFormat.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeStatementDateFormat.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeStatementMatchChoice: FfiConverterRustBuffer {
+    typealias SwiftType = StatementMatchChoice?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeStatementMatchChoice.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeStatementMatchChoice.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -9628,31 +10529,6 @@ fileprivate struct FfiConverterSequenceTypeCommandEnvelope: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeCommandRecord: FfiConverterRustBuffer {
-    typealias SwiftType = [CommandRecord]
-
-    public static func write(_ value: [CommandRecord], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeCommandRecord.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CommandRecord] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [CommandRecord]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeCommandRecord.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterSequenceTypeFlowBalanceRange: FfiConverterRustBuffer {
     typealias SwiftType = [FlowBalanceRange]
 
@@ -9970,6 +10846,106 @@ fileprivate struct FfiConverterSequenceTypeRunMove: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeRunMove.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeStatementAccountWallet: FfiConverterRustBuffer {
+    typealias SwiftType = [StatementAccountWallet]
+
+    public static func write(_ value: [StatementAccountWallet], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeStatementAccountWallet.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [StatementAccountWallet] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [StatementAccountWallet]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeStatementAccountWallet.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeStatementColumnValue: FfiConverterRustBuffer {
+    typealias SwiftType = [StatementColumnValue]
+
+    public static func write(_ value: [StatementColumnValue], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeStatementColumnValue.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [StatementColumnValue] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [StatementColumnValue]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeStatementColumnValue.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeStatementDescriptionRule: FfiConverterRustBuffer {
+    typealias SwiftType = [StatementDescriptionRule]
+
+    public static func write(_ value: [StatementDescriptionRule], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeStatementDescriptionRule.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [StatementDescriptionRule] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [StatementDescriptionRule]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeStatementDescriptionRule.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeStatementLookalike: FfiConverterRustBuffer {
+    typealias SwiftType = [StatementLookalike]
+
+    public static func write(_ value: [StatementLookalike], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeStatementLookalike.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [StatementLookalike] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [StatementLookalike]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeStatementLookalike.read(from: &buf))
         }
         return seq
     }
@@ -10556,15 +11532,17 @@ public func encodeStatementMapping(mapping: StatementMapping) -> String  {
 })
 }
 /**
- * `<sign><major>.<minor> <CODE>`, e.g. `-12.50 EUR`. Debug and test output;
- * the app formats for display with the system formatter.
+ * The date format and decimal mark the values of a statement's date and
+ * amount columns are written in, for a mapping that starts blank.
  */
-public func formatMoney(minor: Int64, currency: Currency) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
+public func guessStatementFormats(text: String, delimiter: String, dateColumn: String?, amountColumn: String?) -> StatementFormatGuess  {
+    return try!  FfiConverterTypeStatementFormatGuess_lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_sparagne_core_fn_func_format_money(
-        FfiConverterInt64.lower(minor),
-        FfiConverterTypeCurrency_lower(currency),uniffiCallStatus
+    uniffi_sparagne_core_fn_func_guess_statement_formats(
+        FfiConverterString.lower(text),
+        FfiConverterString.lower(delimiter),
+        FfiConverterOptionString.lower(dateColumn),
+        FfiConverterOptionString.lower(amountColumn),uniffiCallStatus
     )
 })
 }
@@ -10639,6 +11617,20 @@ public func scheduleOccurrences(schedule: Schedule, from: NaiveDate, limit: UInt
 })
 }
 /**
+ * The distinct values of a statement column with how many rows hold each,
+ * most rows first: the accounts or the types of a file, for the mapping.
+ */
+public func statementColumnValues(text: String, delimiter: String, column: String) -> [StatementColumnValue]  {
+    return try!  FfiConverterSequenceTypeStatementColumnValue.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_func_statement_column_values(
+        FfiConverterString.lower(text),
+        FfiConverterString.lower(delimiter),
+        FfiConverterString.lower(column),uniffiCallStatus
+    )
+})
+}
+/**
  * The built-in statement presets.
  */
 public func statementPresets() -> [StatementPreset]  {
@@ -10676,7 +11668,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_func_encode_statement_mapping() != 8699) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sparagne_core_checksum_func_format_money() != 19538) {
+    if (uniffi_sparagne_core_checksum_func_guess_statement_formats() != 62778) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_func_new_envelope() != 36132) {
@@ -10692,6 +11684,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_func_schedule_occurrences() != 12050) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_func_statement_column_values() != 29973) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_func_statement_presets() != 59997) {
@@ -10728,9 +11723,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_category_totals() != 11373) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_sparagne_core_checksum_method_corehandle_commands_since() != 55432) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_deleted_vaults() != 28486) {
@@ -10778,16 +11770,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_method_corehandle_people() != 47772) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sparagne_core_checksum_method_corehandle_period_totals() != 68) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_sparagne_core_checksum_method_corehandle_preview_allocation() != 37697) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_preview_merge() != 37701) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sparagne_core_checksum_method_corehandle_preview_statement() != 26918) {
+    if (uniffi_sparagne_core_checksum_method_corehandle_preview_statement() != 51231) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_push_request_json() != 10230) {
@@ -10830,9 +11819,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_top_expenses() != 20349) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_sparagne_core_checksum_method_corehandle_transaction() != 29047) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_vault() != 58182) {

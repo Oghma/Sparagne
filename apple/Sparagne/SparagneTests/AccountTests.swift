@@ -27,15 +27,11 @@ private struct CannedTransport: SyncTransport {
 /// The account side of the app: where the session lives, when it ends, and
 /// what the forms check before the server does.
 struct AccountTests {
-    private static func defaults() throws -> UserDefaults {
-        try #require(UserDefaults(suiteName: "sparagne.account.\(UUID().uuidString)"))
-    }
-
     // MARK: - Session
 
     @Test("A session whose token has expired counts as logged out at launch, and keeps the name")
     func expiredAtLaunch() throws {
-        let defaults = try Self.defaults()
+        let defaults = try TestStore.defaults()
         let tokens = MemoryTokenStore()
         let now = Date()
         let first = AccountStore(defaults: defaults, tokens: tokens, now: now)
@@ -58,7 +54,7 @@ struct AccountTests {
 
     @Test("Logging out is not an expiry, and forgets when the token would have ended")
     func logOutIsNotExpiry() throws {
-        let defaults = try Self.defaults()
+        let defaults = try TestStore.defaults()
         let account = AccountStore(defaults: defaults, tokens: MemoryTokenStore())
         account.signIn(username: "alice", token: "t-1", expiresAt: Date().addingTimeInterval(3_600))
         account.signOut()
@@ -71,7 +67,7 @@ struct AccountTests {
 
     @Test("A token the Keychain refuses keeps the session and is reported")
     func keychainRefusal() throws {
-        let account = AccountStore(defaults: try Self.defaults(), tokens: RefusingTokenStore())
+        let account = AccountStore(defaults: try TestStore.defaults(), tokens: RefusingTokenStore())
 
         account.signIn(username: "alice", token: "t-1", expiresAt: nil)
 
@@ -86,7 +82,7 @@ struct AccountTests {
 
     @Test("The token never lands in the preferences")
     func tokenStaysOutOfDefaults() throws {
-        let defaults = try Self.defaults()
+        let defaults = try TestStore.defaults()
         let account = AccountStore(defaults: defaults, tokens: MemoryTokenStore())
         account.signIn(username: "alice", token: "secret-token-value", expiresAt: nil)
 
@@ -97,7 +93,7 @@ struct AccountTests {
 
     @Test("Roles and lost vaults survive a relaunch; another account starts from none")
     func rolesArePersisted() throws {
-        let defaults = try Self.defaults()
+        let defaults = try TestStore.defaults()
         let account = AccountStore(defaults: defaults, tokens: MemoryTokenStore())
         account.signIn(username: "alice", token: "t-1", expiresAt: nil)
         account.adoptRoles(["v1": .viewer, "v2": .owner])
@@ -125,7 +121,7 @@ struct AccountTests {
         )
 
         do {
-            _ = try await api.login(username: "alice", password: "supersecret")
+            _ = try await api.authenticate(username: "alice", password: "supersecret", registering: false)
             Issue.record("the login should have been refused")
         } catch let error as ServerError {
             #expect(error.status == 429)

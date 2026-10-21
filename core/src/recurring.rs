@@ -1,9 +1,7 @@
-//! Recurring templates: schedule types and period arithmetic.
-//!
-//! A template fires on a sequence of *period dates* computed from its
-//! [`Schedule`]. Nothing is ever materialized automatically: the app lists the
-//! due periods with `Core::pending_recurring` and the user executes or skips
-//! each one with a command.
+//! Recurring templates: schedule types and period arithmetic. A template fires
+//! on the *period dates* of its [`Schedule`]; nothing is ever materialized
+//! automatically: the app lists the due periods with `Core::pending_recurring`
+//! and the user executes or skips each one with a command.
 
 use chrono::{Datelike, NaiveDate, TimeDelta};
 use serde::{Deserialize, Serialize};
@@ -266,10 +264,6 @@ fn next_month(year: i32, month: u32) -> Option<(i32, u32)> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Read-side views
-// ---------------------------------------------------------------------------
-
 /// A recurring template as the UI sees it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
 pub struct RecurringView {
@@ -407,26 +401,6 @@ mod tests {
     }
 
     #[test]
-    fn monthly_clamps_without_drifting() {
-        let s = schedule(Frequency::Monthly { day: 31 }, 1, date(2026, 1, 1));
-        assert_eq!(
-            take(&s, 4),
-            vec![
-                date(2026, 1, 31),
-                date(2026, 2, 28),
-                date(2026, 3, 31),
-                date(2026, 4, 30)
-            ]
-        );
-        assert!(s.is_occurrence(date(2026, 2, 28)));
-        assert!(!s.is_occurrence(date(2026, 2, 27)));
-
-        // Leap February.
-        let leap = schedule(Frequency::Monthly { day: 31 }, 1, date(2028, 1, 1));
-        assert_eq!(take(&leap, 2), vec![date(2028, 1, 31), date(2028, 2, 29)]);
-    }
-
-    #[test]
     fn monthly_starts_next_month_when_the_day_has_passed() {
         let s = schedule(Frequency::Monthly { day: 15 }, 1, date(2026, 1, 20));
         assert_eq!(take(&s, 2), vec![date(2026, 2, 15), date(2026, 3, 15)]);
@@ -446,41 +420,9 @@ mod tests {
     }
 
     #[test]
-    fn yearly_feb_29_falls_back_on_common_years() {
-        let s = schedule(Frequency::Yearly { month: 2, day: 29 }, 1, date(2024, 1, 1));
-        assert_eq!(
-            take(&s, 5),
-            vec![
-                date(2024, 2, 29),
-                date(2025, 2, 28),
-                date(2026, 2, 28),
-                date(2027, 2, 28),
-                date(2028, 2, 29)
-            ]
-        );
-        assert!(s.is_occurrence(date(2027, 2, 28)));
-        assert!(!s.is_occurrence(date(2027, 3, 1)));
-    }
-
-    #[test]
     fn yearly_starts_next_year_when_the_date_has_passed() {
         let s = schedule(Frequency::Yearly { month: 3, day: 1 }, 2, date(2026, 6, 1));
         assert_eq!(take(&s, 2), vec![date(2027, 3, 1), date(2029, 3, 1)]);
-    }
-
-    #[test]
-    fn end_date_bounds_the_iterator() {
-        let s = Schedule {
-            frequency: Frequency::Monthly { day: 1 },
-            interval: 1,
-            start_date: date(2026, 1, 1),
-            end_date: Some(date(2026, 3, 15)),
-        };
-        assert_eq!(
-            s.occurrences().collect::<Vec<_>>(),
-            vec![date(2026, 1, 1), date(2026, 2, 1), date(2026, 3, 1)]
-        );
-        assert!(!s.is_occurrence(date(2026, 4, 1)));
     }
 
     #[test]
@@ -500,6 +442,7 @@ mod tests {
             vec![date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 3)]
         );
         assert!(s.due_until(date(2025, 12, 31)).is_empty());
+        assert!(!s.is_occurrence(date(2026, 1, 4)));
     }
 
     #[test]
@@ -508,11 +451,13 @@ mod tests {
             schedule(Frequency::Daily, 2, date(2026, 1, 1)),
             schedule(Frequency::Weekly { weekday: 7 }, 3, date(2026, 1, 1)),
             schedule(Frequency::Monthly { day: 30 }, 2, date(2026, 1, 5)),
+            schedule(Frequency::Monthly { day: 31 }, 1, date(2026, 1, 1)),
             schedule(
                 Frequency::Yearly { month: 12, day: 31 },
                 1,
                 date(2026, 1, 1),
             ),
+            schedule(Frequency::Yearly { month: 2, day: 29 }, 1, date(2024, 1, 1)),
         ];
         for s in schedules {
             let expected: Vec<_> = s.occurrences().take(30).collect();

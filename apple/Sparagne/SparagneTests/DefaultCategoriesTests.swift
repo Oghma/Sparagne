@@ -8,15 +8,6 @@ import Testing
 /// language gets, that the core takes each list as it is, and that the store
 /// writes it together with the vault.
 struct DefaultCategoriesTests {
-    private static func store(_ categories: [DefaultCategory]) throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.defaults.\(UUID().uuidString)"))
-        return AppStore(
-            core: try CoreActor.inMemory(author: "matteo"),
-            defaults: defaults,
-            defaultCategories: categories
-        )
-    }
-
     @Test("Italian for an Italian window, English for any other language")
     func language() {
         #expect(DefaultCategories.list(for: "it") == DefaultCategories.italian)
@@ -35,9 +26,7 @@ struct DefaultCategoriesTests {
     @Test("A new vault holds every category and alias of the list", arguments: ["it", "en"])
     func createdWithTheVault(language: String) async throws {
         let list = DefaultCategories.list(for: language)
-        let store = try Self.store(list)
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        let store = try await TestStore.make(defaultCategories: list)
         await store.loadCategoryManagement()
 
         #expect(store.presentedError == nil)
@@ -54,9 +43,7 @@ struct DefaultCategoriesTests {
     @Test("The vault, its wallet and every category and alias wait in the outbox, one command each")
     func outbox() async throws {
         let list = DefaultCategories.italian
-        let store = try Self.store(list)
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        let store = try await TestStore.make(defaultCategories: list)
         let vault = try #require(store.currentVault)
 
         let aliases = list.map(\.aliases.count).reduce(0, +)
@@ -65,9 +52,7 @@ struct DefaultCategoriesTests {
 
     @Test("A vault made without a wallet still gets its categories")
     func withoutAWallet() async throws {
-        let store = try Self.store(DefaultCategories.english)
-        await store.bootstrap()
-        await store.createVault(name: "Home", walletName: "  ", openingBalance: 0)
+        let store = try await TestStore.make(vault: "Home", wallet: "  ", opening: 0, defaultCategories: DefaultCategories.english)
         await store.loadCategoryManagement()
 
         #expect(store.presentedError == nil)
@@ -77,9 +62,7 @@ struct DefaultCategoriesTests {
 
     @Test("An alias files a quick-add under its category")
     func aliasInQuickAdd() async throws {
-        let store = try Self.store(DefaultCategories.italian)
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        let store = try await TestStore.make(defaultCategories: DefaultCategories.italian)
 
         await store.submit(quickAdd: "-12.50 margherita #pizza")
 
@@ -89,9 +72,7 @@ struct DefaultCategoriesTests {
 
     @Test("A store given no list makes a vault with the system categories only")
     func noList() async throws {
-        let store = try Self.store([])
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
+        let store = try await TestStore.make(opening: 0)
         await store.loadCategoryManagement()
 
         #expect(store.presentedError == nil)

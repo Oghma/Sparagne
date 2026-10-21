@@ -5,15 +5,12 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::invalid;
 use crate::{
     CategoryView, CommandEnvelope, Core, DomainError, FlowMode, Result,
     category::{normalize_category_display, normalize_category_key, validate_category_name},
     flow::UNALLOCATED_NAME,
 };
-
-// ---------------------------------------------------------------------------
-// Wallets
-// ---------------------------------------------------------------------------
 
 pub(super) fn rename_wallet(
     tx: &Transaction<'_>,
@@ -23,13 +20,7 @@ pub(super) fn rename_wallet(
 ) -> Result<()> {
     load_wallet(tx, env.vault_id, wallet_id)?;
     let name = super::normalize_name(name, "wallet")?;
-    let taken: bool = tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM wallets
-         WHERE vault_id = ?1 AND lower(name) = lower(?2) AND id <> ?3)",
-        params![env.vault_id, name, wallet_id],
-        |r| r.get(0),
-    )?;
-    if taken {
+    if super::name_taken(tx, "wallets", env.vault_id, &name, Some(wallet_id))? {
         return Err(DomainError::AlreadyExists(name));
     }
     tx.execute(
@@ -50,9 +41,7 @@ pub(super) fn set_wallet_archived(
         return Err(already_in_state("wallet", archived));
     }
     if archived && balance != 0 {
-        return Err(DomainError::InvalidCommand(
-            "wallet has a non-zero balance".to_string(),
-        ));
+        return Err(invalid("wallet has a non-zero balance"));
     }
     tx.execute(
         "UPDATE wallets SET archived = ?1 WHERE id = ?2",
@@ -77,10 +66,6 @@ fn already_in_state(what: &str, archived: bool) -> DomainError {
     DomainError::InvalidCommand(format!("{what} is already {state}"))
 }
 
-// ---------------------------------------------------------------------------
-// Flows
-// ---------------------------------------------------------------------------
-
 pub(super) fn update_flow(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
@@ -90,7 +75,7 @@ pub(super) fn update_flow(
     allow_negative: Option<bool>,
 ) -> Result<()> {
     if name.is_none() && mode.is_none() && allow_negative.is_none() {
-        return Err(DomainError::InvalidCommand("nothing to update".to_string()));
+        return Err(invalid("nothing to update"));
     }
     let flow = super::load_flow(tx, env.vault_id, flow_id)?;
     if flow.is_unallocated {
@@ -108,13 +93,7 @@ pub(super) fn update_flow(
                     "flow name is reserved".to_string(),
                 ));
             }
-            let taken: bool = tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM flows
-                 WHERE vault_id = ?1 AND lower(name) = lower(?2) AND id <> ?3)",
-                params![env.vault_id, candidate, flow_id],
-                |r| r.get(0),
-            )?;
-            if taken {
+            if super::name_taken(tx, "flows", env.vault_id, &candidate, Some(flow_id))? {
                 return Err(DomainError::AlreadyExists(candidate));
             }
             candidate
@@ -201,30 +180,15 @@ fn recompute_income_total(tx: &Transaction<'_>, vault_id: Uuid, flow_id: Uuid) -
     )?)
 }
 
-// ---------------------------------------------------------------------------
-// Categories
-// ---------------------------------------------------------------------------
-
 pub(super) fn rename_category(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
     category_id: Uuid,
     name: &str,
 ) -> Result<()> {
-    let category = load_category(tx, env.vault_id, category_id)?;
-    if category.is_system {
-        return Err(DomainError::InvalidName("system category".to_string()));
-    }
+    user_category(tx, env.vault_id, category_id)?;
     let (display, key) = validate_category_name(name)?;
-    let taken: bool = tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM categories
-                       WHERE vault_id = ?1 AND name_norm = ?2 AND id <> ?3)
-             OR EXISTS(SELECT 1 FROM category_aliases
-                       WHERE vault_id = ?1 AND alias_norm = ?2 AND category_id <> ?3)",
-        params![env.vault_id, key, category_id],
-        |r| r.get(0),
-    )?;
-    if taken {
+    if super::category_key_taken(tx, env.vault_id, &key, Some(category_id))? {
         return Err(DomainError::AlreadyExists(display));
     }
     // The new name may be one of this category's own aliases; the alias then
@@ -246,10 +210,7 @@ pub(super) fn set_category_archived(
     category_id: Uuid,
     archived: bool,
 ) -> Result<()> {
-    let category = load_category(tx, env.vault_id, category_id)?;
-    if category.is_system {
-        return Err(DomainError::InvalidName("system category".to_string()));
-    }
+    let category = user_category(tx, env.vault_id, category_id)?;
     if category.archived == archived {
         return Err(already_in_state("category", archived));
     }
@@ -260,23 +221,18 @@ pub(super) fn set_category_archived(
     Ok(())
 }
 
-/// Returns the alias id (derived from the command id).
 pub(super) fn add_alias(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
     category_id: Uuid,
     alias: &str,
 ) -> Result<Uuid> {
-    let category = load_category(tx, env.vault_id, category_id)?;
-    if category.is_system {
-        return Err(DomainError::InvalidName("system category".to_string()));
-    }
-    if category.archived {
+    if user_category(tx, env.vault_id, category_id)?.archived {
         return Err(DomainError::InvalidName("category is archived".to_string()));
     }
     let display = normalize_category_display(alias)?;
     let key = normalize_category_key(&display)?;
-    if super::category_key_taken(tx, env.vault_id, &key)? {
+    if super::category_key_taken(tx, env.vault_id, &key, None)? {
         return Err(DomainError::AlreadyExists(display));
     }
     tx.execute(
@@ -352,7 +308,6 @@ pub(super) fn merge_category(
     Ok(())
 }
 
-/// A category row of the projection.
 struct CategoryRow {
     name: String,
     name_norm: String,
@@ -378,9 +333,13 @@ fn load_category(conn: &Connection, vault_id: Uuid, category_id: Uuid) -> Result
     .ok_or_else(|| DomainError::NotFound("category".to_string()))
 }
 
-// ---------------------------------------------------------------------------
-// Read side
-// ---------------------------------------------------------------------------
+fn user_category(conn: &Connection, vault_id: Uuid, category_id: Uuid) -> Result<CategoryRow> {
+    let category = load_category(conn, vault_id, category_id)?;
+    if category.is_system {
+        return Err(DomainError::InvalidName("system category".to_string()));
+    }
+    Ok(category)
+}
 
 /// Why a merge cannot go through.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]

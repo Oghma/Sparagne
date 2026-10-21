@@ -1,14 +1,11 @@
 import SwiftUI
 import SparagneCore
 
-/// The frame the three SETUP tables share: a card
-/// with a title row, a header, rows of 24 pt with a hairline under each, and
-/// the pieces the rows are made of. Before this each table drew its own
-/// copy of the same stack, and they drifted.
-///
-/// The cell is local rather than the ledger's `GridCell`: this sheet pads
-/// cells by 8 and lets rows highlight with rounded corners, which the
-/// ledger's grid does not.
+// The frame the Setup tables share: a card with a title row, a header, rows
+// of 24 pt with a hairline under each, the pieces the rows are made of and
+// the one rule of editing them. The cell is local rather than the ledger's
+// `GridCell`: this sheet pads cells by 8 and lets rows highlight with rounded
+// corners, which the ledger's grid does not.
 
 /// The width of the trailing column that holds the archive icon.
 enum SetupColumn {
@@ -43,30 +40,10 @@ struct SetupCard<Accessory: View, Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center, spacing: 8) {
-                Text(title)
-                    .font(Face.ui(11.5, .semibold))
-                    .foregroundStyle(Ink.text2)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 8)
-                if let hint {
-                    Text(hint)
-                        .font(Face.ui(11.5, .medium))
-                        .foregroundStyle(Ink.text3)
-                        .multilineTextAlignment(.trailing)
-                        .lineLimit(2)
-                }
-                accessory
-            }
-            .frame(minHeight: 22)
-            .padding(.bottom, 4)
+            CardHeading(title: title, hint: hint, bottomPadding: 4) { accessory }
             content
         }
-        .padding(.horizontal, Metrics.cardPad)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Ink.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
-        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).strokeBorder(Ink.line, lineWidth: 1))
+        .headedCard()
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
     }
@@ -78,34 +55,44 @@ extension SetupCard where Accessory == EmptyView {
     }
 }
 
-/// The rows of a card's table, pulled 8 pt past the card's padding so the
-/// rows' own padding lines their text up with the card's title and a
-/// hovered row's rounded background sits 4 pt from the border.
+/// The rows of a card's table.
 struct SetupTableBody<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
+        // Past the card's padding: the rows' own lines their text up with the
+        // title, and a hovered row's background sits 4 pt from the border.
         VStack(spacing: 0) { content }
             .padding(.horizontal, -Metrics.cellPad)
     }
 }
 
-/// The column headings: 11 pt, medium, `text3`, over a `line2` rule.
+/// The column headings, in `text3` over a `line2` rule.
 struct SetupHeaderRow<Content: View>: View {
+    /// As the table's rows are inset.
+    var horizontalPadding: CGFloat = 0
+    /// One heading for VoiceOver, for a table whose card has none.
+    var accessibilityHeader = false
     @ViewBuilder var content: Content
 
     var body: some View {
-        HStack(spacing: 0) { content }
+        let row = HStack(spacing: 0) { content }
             .font(Face.label)
             .foregroundStyle(Ink.text3)
+            .padding(.horizontal, horizontalPadding)
             .frame(height: Metrics.headerHeight)
             .overlay(alignment: .bottom) { Rectangle().fill(Ink.line2).frame(height: 1) }
+        if accessibilityHeader {
+            row
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isHeader)
+        } else {
+            row
+        }
     }
 }
 
-/// One 24 pt row. `highlighted` (the pointer is over it, or it is open)
-/// paints `raised` with a 4 pt radius and takes the hairline away, as the
-/// canvas does; `editing` adds the amber bar at the left edge.
+/// One 24 pt row: raised and without its hairline when `highlighted`, the amber bar when `editing`.
 struct SetupRow<Content: View>: View {
     var highlighted = false
     var editing = false
@@ -139,18 +126,20 @@ struct SetupRow<Content: View>: View {
     }
 }
 
-/// A small label in a `raised` pill: "system", "archived".
+/// A small label in a `raised` pill, "system" or "archived"; not `fixed`, it shortens with "…".
 struct SetupTag: View {
     let text: String
+    var fixed = true
 
     var body: some View {
         Text(text)
             .font(Face.ui(10, .semibold))
             .foregroundStyle(Ink.text3)
+            .lineLimit(1)
             .padding(.horizontal, 5)
             .frame(height: 16)
             .background(Ink.raised, in: RoundedRectangle(cornerRadius: 4))
-            .fixedSize()
+            .fixedSize(horizontal: fixed, vertical: fixed)
     }
 }
 
@@ -160,7 +149,7 @@ struct AliasChip: View {
 
     var body: some View {
         Text(text)
-            .font(Face.ui(11))
+            .font(Face.footnote)
             .foregroundStyle(Ink.text2)
             .padding(.horizontal, 5)
             .frame(height: 16)
@@ -175,12 +164,16 @@ struct SetupIconButton: View {
     let symbol: String
     let help: String
     let label: String
+    /// Smaller and heavier for a glyph that reads as a mark (`xmark`) rather
+    /// than a picture.
+    var symbolSize: CGFloat = 11
+    var symbolWeight: Font.Weight = .medium
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: symbolSize, weight: symbolWeight))
                 .foregroundStyle(Ink.text3)
                 .frame(width: 20, height: 20)
                 .contentShape(Rectangle())
@@ -191,23 +184,146 @@ struct SetupIconButton: View {
     }
 }
 
-/// How full a capped envelope is, as the 2 pt bar under its balance.
-/// The RIEPILOGO's gauges answer the same question,
-/// so this asks `FundGauge` rather than redoing its arithmetic: the balance
-/// against a net cap, the cumulative income against an income cap.
+/// The last column's archive or restore icon, `shown` on the row under the pointer of a vault that may change.
+struct SetupArchiveCell: View {
+    let name: String
+    var archived = false
+    let shown: Bool
+    let action: () -> Void
+
+    var body: some View {
+        SetupCell(width: SetupColumn.action) {
+            if shown {
+                if archived {
+                    SetupIconButton(
+                        symbol: "tray.and.arrow.up",
+                        help: String(localized: "Restore"),
+                        label: String(localized: "Restore \(name)"),
+                        action: action
+                    )
+                } else {
+                    SetupIconButton(
+                        symbol: "archivebox",
+                        help: String(localized: "Archive"),
+                        label: String(localized: "Archive \(name)"),
+                        action: action
+                    )
+                }
+            }
+        }
+    }
+}
+
+/// An archived row, its cells dimmed by the table: raised under the
+/// pointer, with the restore icon there and Restore in its menu.
+struct SetupArchivedRow<Cells: View>: View {
+    let name: String
+    let id: Uuid
+    @Binding var hovered: Uuid?
+    let canWrite: Bool
+    let restore: () -> Void
+    @ViewBuilder var cells: Cells
+
+    var body: some View {
+        SetupRow(highlighted: hovered == id) {
+            cells
+            SetupArchiveCell(name: name, archived: true, shown: hovered == id && canWrite, action: restore)
+        }
+        .hoverId($hovered, id)
+        .contextMenu {
+            if canWrite { Button(String(localized: "Restore"), action: restore) }
+        }
+    }
+}
+
+// MARK: - Editing by rows
+
+/// A cell that can hold the caret in a table edited by rows: its row, `nil`
+/// for the empty line.
+protocol RowFocus: Hashable {
+    var row: Uuid? { get }
+}
+
+/// A text cell of a Setup table.
+nonisolated struct SetupFocus<Field: Hashable>: RowFocus {
+    let row: Uuid?
+    let field: Field
+}
+
+/// A text cell as the Setup tables type into it: plain, in the row's face,
+/// ↩ for `submit`.
+struct SetupTextField<Focus: Hashable>: View {
+    let placeholder: String
+    @Binding var text: String
+    var alignment: TextAlignment = .leading
+    let focus: FocusState<Focus?>.Binding
+    let key: Focus
+    let submit: () -> Void
+
+    var body: some View {
+        TextField(placeholder, text: $text)
+            .textFieldStyle(.plain)
+            .font(Face.row)
+            .multilineTextAlignment(alignment)
+            .foregroundStyle(Ink.text)
+            .focused(focus, equals: key)
+            .onSubmit(submit)
+    }
+}
+
+extension View {
+    /// The one rule of the tables edited by rows: the open row (`editing`)
+    /// is saved when the focus leaves it, for another cell or for nothing
+    /// with the pointer elsewhere, the way a spreadsheet does. The row's own
+    /// context menu resigns the field without giving the focus to anything,
+    /// with the pointer over the row: that is not leaving it. Another vault
+    /// drops the open row and `reset`s the empty line; a vault turned
+    /// read-only drops the open row, which could not be saved.
+    ///
+    /// Whoever drops the open row clears `editing` before the focus, so the
+    /// blur that follows is not read as leaving it.
+    func editsRows<Focus: RowFocus>(
+        editing: Binding<Uuid?>,
+        focus: FocusState<Focus?>.Binding,
+        hovered: Uuid?,
+        store: AppStore,
+        reset: @escaping () -> Void,
+        commit: @escaping (Uuid) -> Void
+    ) -> some View {
+        onChange(of: store.currentVault?.id) { _, _ in
+            editing.wrappedValue = nil
+            focus.wrappedValue = nil
+            reset()
+        }
+        .onChange(of: focus.wrappedValue) { old, new in
+            guard let open = editing.wrappedValue else { return }
+            if let new {
+                if new.row != open { commit(open) }
+            } else if old?.row == open, hovered != open {
+                commit(open)
+            }
+        }
+        .onChange(of: store.isReadOnly) { _, _ in
+            editing.wrappedValue = nil
+            focus.wrappedValue = nil
+        }
+    }
+
+    /// esc while `active`, and otherwise left to whoever else wants it.
+    func onEscape(when active: Bool = true, perform action: @escaping () -> Void) -> some View {
+        onKeyPress(.escape) {
+            guard active else { return .ignored }
+            action()
+            return .handled
+        }
+    }
+}
+
+/// How full a capped envelope is, asked of `FundGauge` as the summary's gauges are.
 enum EnvelopeCapFill {
     /// 0...1, or `nil` for an envelope with no cap (no bar at all).
     static func fraction(mode: FlowMode, balance: Int64, incomeTotal: Int64?) -> Double? {
-        let gauge: FundGauge
-        switch mode {
-        case .unlimited:
-            return nil
-        case .netCapped(let cap):
-            gauge = FundGauge(id: "", name: "", cap: cap, filled: balance)
-        case .incomeCapped(let cap):
-            gauge = FundGauge(id: "", name: "", cap: cap, filled: incomeTotal ?? balance)
-        }
-        return gauge.fraction
+        FundGauge(id: "", name: "", mode: mode, balance: balance, incomeTotal: incomeTotal)?.fraction
     }
 }
 
@@ -216,12 +332,9 @@ struct CapBar: View {
     let fraction: Double
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            Capsule().fill(Ink.line2)
-            Capsule().fill(Ink.chartIncome).frame(width: 72 * fraction)
-        }
-        .frame(width: 72, height: 2)
-        .accessibilityElement()
-        .accessibilityLabel(String(localized: "\(fraction.formatted(.percent.precision(.fractionLength(0)))) of the cap"))
+        MeterBar(fraction: fraction, tint: Ink.chartIncome, track: Ink.line2, height: 2, rounded: true)
+            .frame(width: 72)
+            .accessibilityElement()
+            .accessibilityLabel(String(localized: "\(fraction.formatted(.percent.precision(.fractionLength(0)))) of the cap"))
     }
 }

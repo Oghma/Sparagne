@@ -1,17 +1,11 @@
 import SwiftUI
 import SparagneCore
 
-/// The Riparto tab's inspector: when the plan shares out (Quando, Inizio),
-/// what its lines ask for ("Il piano in cifre"), what deserves a second look
-/// (Avvisi) and the Attivo switch.
-///
-/// The schedule is a draft owned by the tab, since a new plan is created
-/// with it when its first line is committed; once there is a plan, Salva
-/// sends it and Annulla puts the saved one back, as in the Ricorrenze
-/// inspector. A vault the account only reads shows the fields without
-/// letting them change.
+/// The Riparto tab's inspector: Quando, the plan in figures, Avvisi and the Attivo switch.
 struct AllocationInspector: View {
     let store: AppStore
+    /// The tab's: a new plan is created on it when its first line is
+    /// committed.
     @Binding var draft: AllocationScheduleDraft
     let lines: [AllocationLine]
     let preview: AllocationPreview?
@@ -27,156 +21,35 @@ struct AllocationInspector: View {
     private var plan: AllocationPlanView? { store.allocationPlan }
     private var editable: Bool { store.canWrite && !working }
 
+    /// The heading follows every keystroke of the schedule, saved or not, as
+    /// the Ricorrenze inspector's does.
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    title
-                    whenGroup
-                        .disabled(!editable)
-                    figuresGroup
-                    warningsGroup
+        InspectorShell(
+            title: String(localized: "Allocation plan"),
+            subtitle: String(localized: "\(ScheduleFormatting.describe(draft.schedule)) \u{00B7} from \(RecurringDayText.full(draft.startDate))"),
+            footerDisabled: working
+        ) {
+            ScheduleEditor(draft: $draft, cadences: cadences, showsEnd: false) {
+                FormNote(
+                    String(localized: "The first allocation counts the incomes from the start date; the later ones those that arrived after the last allocation, shared out or skipped."),
+                    indented: false
+                )
+                if !draft.isValid {
+                    FormNote(String(localized: "These settings do not make a schedule"), tone: .negative, indented: false)
                 }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .disabled(!editable)
+            figuresGroup
+            warningsGroup
+        } footer: {
             footer
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Ink.bg)
-    }
-
-    // MARK: - Heading
-
-    /// The schedule as the fields say it, saved or not: the heading follows
-    /// every keystroke, as the Ricorrenze inspector's does.
-    private var title: some View {
-        let schedule = draft.schedule
-        let cadence = ScheduleFormatting.describe(schedule)
-        return VStack(alignment: .leading, spacing: 2) {
-            Text(String(localized: "Allocation plan"))
-                .font(Face.ui(16, .semibold))
-                .foregroundStyle(Ink.text)
-                .accessibilityAddTraits(.isHeader)
-            Text(String(localized: "\(cadence) \u{00B7} from \(RecurringDayText.full(schedule.startDate))"))
-                .font(Face.ui(12))
-                .foregroundStyle(Ink.text2)
-                .lineLimit(2)
-        }
-    }
-
-    // MARK: - Quando
-
-    private var whenGroup: some View {
-        FormGroup(String(localized: "When")) {
-            RecurringSegments(
-                options: cadences,
-                selection: draft.cadence,
-                label: Self.cadenceLabel,
-                select: { draft.cadence = $0 },
-                name: String(localized: "Frequency")
-            )
-            .padding(.bottom, 2)
-            FormRow(String(localized: "Repeat"), alignment: .firstTextBaseline) {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 4) {
-                        every
-                        on
-                    }
-                    VStack(alignment: .leading, spacing: 5) {
-                        every
-                        on
-                    }
-                }
-            }
-            FormRow(String(localized: "Start")) {
-                DayField(label: String(localized: "Start"), day: $draft.startDate)
-            }
-            FormNote(
-                String(localized: "The first allocation counts the incomes from the start date; the later ones those that arrived after the last allocation, shared out or skipped."),
-                indented: false
-            )
-            if !draft.isValid {
-                FormNote(String(localized: "These settings do not make a schedule"), tone: .negative, indented: false)
-            }
         }
     }
 
     /// Settimana / Mese / Anno, as drawn; a daily schedule, which only a
     /// plan made elsewhere can have, keeps its own segment.
-    private var cadences: [RecurringDraft.Cadence] {
+    private var cadences: [ScheduleDraft.Cadence] {
         (draft.cadence == .daily ? [.daily] : []) + [.weekly, .monthly, .yearly]
-    }
-
-    private static func cadenceLabel(_ cadence: RecurringDraft.Cadence) -> String {
-        switch cadence {
-        case .daily: String(localized: "Day")
-        case .weekly: String(localized: "Week")
-        case .monthly: String(localized: "Month")
-        case .yearly: String(localized: "Year")
-        }
-    }
-
-    /// "ogni [1] mese,".
-    private var every: some View {
-        HStack(spacing: 4) {
-            Text(String(localized: "every"))
-            MiniNumberField(label: String(localized: "Interval"), value: $draft.interval)
-            Text(unitWord + (draft.cadence == .daily ? "" : ","))
-        }
-        .font(Face.ui(12))
-        .foregroundStyle(Ink.text)
-        .fixedSize()
-    }
-
-    private var unitWord: String {
-        let one = draft.interval == 1
-        switch draft.cadence {
-        case .daily: return one ? String(localized: "day") : String(localized: "days")
-        case .weekly: return one ? String(localized: "week") : String(localized: "weeks")
-        case .monthly: return one ? String(localized: "month") : String(localized: "months")
-        case .yearly: return one ? String(localized: "year") : String(localized: "years")
-        }
-    }
-
-    /// The day the cadence falls on: a weekday, a day of the month, or a
-    /// day and a month.
-    private var on: some View {
-        HStack(spacing: 4) {
-            switch draft.cadence {
-            case .daily:
-                EmptyView()
-            case .weekly:
-                Text(String(localized: "on"))
-                FormMenu(
-                    label: String(localized: "Weekday"),
-                    value: ScheduleFormatting.weekdayName(UInt8(clamping: draft.weekday))
-                ) {
-                    ForEach(1...7, id: \.self) { day in
-                        Button(ScheduleFormatting.weekdayName(UInt8(day))) { draft.weekday = day }
-                    }
-                }
-                .fixedSize()
-            case .monthly:
-                Text(String(localized: "on day"))
-                MiniNumberField(label: String(localized: "Day of the month"), value: $draft.monthDay)
-            case .yearly:
-                Text(String(localized: "on the"))
-                MiniNumberField(label: String(localized: "Day of the month"), value: $draft.yearDay)
-                FormMenu(
-                    label: String(localized: "Month"),
-                    value: ScheduleFormatting.monthName(UInt8(clamping: draft.yearMonth))
-                ) {
-                    ForEach(1...12, id: \.self) { month in
-                        Button(ScheduleFormatting.monthName(UInt8(month))) { draft.yearMonth = month }
-                    }
-                }
-                .fixedSize()
-            }
-        }
-        .font(Face.ui(12))
-        .foregroundStyle(Ink.text)
-        .fixedSize()
     }
 
     // MARK: - Il piano in cifre
@@ -211,7 +84,7 @@ struct AllocationInspector: View {
             Spacer(minLength: 8)
             Text(value).fontWeight(.semibold).foregroundStyle(Ink.text)
         }
-        .font(Face.ui(12))
+        .font(Face.row)
         .frame(height: 22)
         .overlay(alignment: .bottom) { DashedRule() }
         .accessibilityElement(children: .combine)
@@ -255,59 +128,45 @@ struct AllocationInspector: View {
 
     // MARK: - Footer
 
+    @ViewBuilder
     private var footer: some View {
-        HStack(spacing: 8) {
-            if let plan {
-                if store.canWrite {
-                    FormSwitch(label: Self.enabledLabel, isOn: plan.enabled) { on in
-                        run { await store.setAllocationEnabled(on) }
-                    }
-                    .disabled(working)
-                    // The switch says it already; the word is for the eye.
-                    Text(Self.enabledLabel)
-                        .font(Face.ui(12))
-                        .foregroundStyle(Ink.text2)
-                        .accessibilityHidden(true)
-                } else {
-                    Text(plan.enabled ? Self.enabledLabel : String(localized: "paused"))
-                        .font(Face.ui(12))
-                        .foregroundStyle(Ink.text2)
-                }
-                Spacer(minLength: 8)
-                if store.canWrite, draft.isDirty(against: plan) {
-                    Button(String(localized: "Cancel")) { draft = AllocationScheduleDraft(schedule: plan.schedule) }
-                        .buttonStyle(.chrome(.ghost, small: true))
-                        .keyboardShortcut(shortcuts ? .cancelAction : nil)
-                    if draft.isValid {
-                        Button(String(localized: "Save")) {
-                            let schedule = draft.schedule
-                            run { await store.setAllocationSchedule(schedule) }
-                        }
-                        .buttonStyle(.chrome(.primary, small: true))
-                        .keyboardShortcut(shortcuts ? .defaultAction : nil)
-                    }
-                } else if let hint = footerHint(plan) {
-                    Text(hint)
-                        .font(Face.ui(11.5))
-                        .foregroundStyle(Ink.text3)
-                        .lineLimit(1)
+        if let plan {
+            if store.canWrite {
+                InspectorSwitch(label: Self.enabledLabel, isOn: plan.enabled, disabled: working) { on in
+                    $working.run { await store.setAllocationEnabled(on) }
                 }
             } else {
-                Text(store.canWrite
-                    ? String(localized: "The plan starts with its first line.")
-                    : String(localized: "No allocation plan"))
+                Text(plan.enabled ? Self.enabledLabel : String(localized: "paused"))
+                    .font(Face.row)
+                    .foregroundStyle(Ink.text2)
+            }
+            Spacer(minLength: 8)
+            if store.canWrite, draft.isDirty(against: plan) {
+                Button(String(localized: "Cancel")) { draft = AllocationScheduleDraft(schedule: plan.schedule) }
+                    .buttonStyle(.chrome(.ghost, small: true))
+                    .keyboardShortcut(shortcuts ? .cancelAction : nil)
+                if draft.isValid {
+                    Button(String(localized: "Save")) {
+                        let schedule = draft.schedule
+                        $working.run { await store.setAllocationSchedule(schedule) }
+                    }
+                    .buttonStyle(.chrome(.primary, small: true))
+                    .keyboardShortcut(shortcuts ? .defaultAction : nil)
+                }
+            } else if let hint = footerHint(plan) {
+                Text(hint)
                     .font(Face.ui(11.5))
                     .foregroundStyle(Ink.text3)
-                Spacer(minLength: 0)
+                    .lineLimit(1)
             }
+        } else {
+            Text(store.canWrite
+                ? String(localized: "The plan starts with its first line.")
+                : String(localized: "No allocation plan"))
+                .font(Face.ui(11.5))
+                .foregroundStyle(Ink.text3)
+            Spacer(minLength: 0)
         }
-        .disabled(working)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(minHeight: 44)
-        .overlay(alignment: .top) { Hairline() }
-        .background(Ink.bg)
-        .accessibilityElement(children: .contain)
     }
 
     /// The footer's right side: when the plan shares out, or that it is
@@ -322,13 +181,5 @@ struct AllocationInspector: View {
     /// "Enabled" is "Attiva".
     static var enabledLabel: String {
         String(localized: "allocation.enabled", defaultValue: "Enabled")
-    }
-
-    private func run(_ work: @escaping @MainActor () async -> Void) {
-        working = true
-        Task {
-            await work()
-            working = false
-        }
     }
 }

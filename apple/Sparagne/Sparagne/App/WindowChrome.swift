@@ -1,20 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// The AppKit side of the window's own top bar, for a
-/// window whose scene has `.windowStyle(.hiddenTitleBar)`: it finds the
-/// hosting `NSWindow`, keeps the traffic lights vertically centred in the
-/// bar, and makes the bar's empty areas behave like a title bar (drag,
-/// double-click).
-///
-/// Put it behind the bar, as its background: the bar's empty areas then hit
-/// this view, while the bar's own controls keep their clicks. A label that
-/// should drag too needs `.allowsHitTesting(false)`.
+/// The AppKit side of the window's top bar: the traffic lights centred in it, its empty areas a title bar.
 struct WindowChrome: NSViewRepresentable {
-    /// The bar's height, from the top edge of the window.
-    var barHeight: CGFloat = Metrics.topBar
-    /// From the window's leading edge to the close button.
-    var buttonsLeading: CGFloat = 14
+    // Put behind the bar as its background: the bar's controls keep their clicks, and a
+    // label that should drag needs `.allowsHitTesting(false)`.
+
     /// Called when the window goes in or out of full screen. The traffic
     /// lights are hidden there, so the bar needs no room for them.
     var onFullScreenChange: (Bool) -> Void = { _ in }
@@ -31,16 +22,16 @@ struct WindowChrome: NSViewRepresentable {
     }
 
     private func update(_ view: WindowChromeView) {
-        view.barHeight = barHeight
-        view.buttonsLeading = buttonsLeading
         view.onFullScreenChange = onFullScreenChange
     }
 }
 
 /// See `WindowChrome`.
 final class WindowChromeView: NSView {
-    var barHeight: CGFloat = Metrics.topBar
-    var buttonsLeading: CGFloat = 14
+    /// The bar's height from the top edge of the window, and the close
+    /// button's distance from the leading edge.
+    let barHeight: CGFloat = Metrics.topBar
+    let buttonsLeading: CGFloat = 14
     var onFullScreenChange: (Bool) -> Void = { _ in }
 
     private weak var observedWindow: NSWindow?

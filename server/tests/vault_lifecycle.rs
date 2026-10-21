@@ -1,20 +1,16 @@
-//! Renaming and deleting a vault across members, over the real router
-//! (deleting a vault).
-//!
-//! Both are ordinary commands in the vault's log: the server applies them
-//! with the core, the members receive them with the next pull. The server
-//! keeps the memberships of a deleted vault, so that pull is still allowed.
+//! Renaming and deleting a vault across members, over the real router. Both
+//! are ordinary commands of the vault's log; the server keeps the memberships
+//! of a deleted vault, so its members can still pull the deletion.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod common;
 
 use axum::http::StatusCode;
-use common::{Api, Client, T0, basics, expense_cmd, projection, wallet_cmd};
-use serde_json::json;
+use common::{Api, Client, T0, basics, expense_cmd, projection, rejection, wallet_cmd};
 use sparagne_core::{
     Command, CommandEnvelope, Currency,
-    sync::{MemberEntry, PushOutcome, PushResponse, VaultSummary},
+    sync::{MemberEntry, PushResponse, VaultSummary},
 };
 
 fn rename(name: &str) -> Command {
@@ -26,10 +22,6 @@ fn rename(name: &str) -> Command {
 async fn listed(api: &Api, token: &str) -> Vec<VaultSummary> {
     api.get("/vaults", token).await.json()
 }
-
-// ---------------------------------------------------------------------------
-// Rename
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn a_rename_reaches_the_listing_and_the_members() {
@@ -79,10 +71,6 @@ async fn a_rename_to_a_name_the_owner_already_uses_is_accepted() {
     alice.sync(&api, vault).await;
     assert_eq!(alice.core.vault(vault).unwrap().unwrap().name, "Lavoro");
 }
-
-// ---------------------------------------------------------------------------
-// Names are labels
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn a_renamed_vault_and_a_new_one_with_its_old_name_both_keep_syncing() {
@@ -157,10 +145,6 @@ async fn a_never_pushed_vault_whose_old_name_was_reused_is_claimed() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Delete
-// ---------------------------------------------------------------------------
-
 #[tokio::test]
 async fn the_owner_deletes_the_vault_for_everyone() {
     let api = Api::new();
@@ -205,21 +189,21 @@ async fn the_owner_deletes_the_vault_for_everyone() {
         state.last_server_seq,
         api.state.core().last_seq(vault).unwrap()
     );
+    // The rejection can still be read and dismissed once the vault is gone.
+    let kept = bob.core.rejected_commands(vault).unwrap();
+    assert_eq!(
+        (kept.len(), kept[0].command_id, kept[0].code.as_str()),
+        (1, doomed, "not_found")
+    );
+    bob.core.dismiss_rejected(vault, doomed).unwrap();
+    assert_eq!(bob.core.sync_state(vault).unwrap().rejected, 0);
 
     // Whatever anyone pushes from now on is refused, command by command.
-    let res = api
-        .post(
-            &format!("/vaults/{vault}/push"),
-            &alice.token,
-            json!({ "commands": [CommandEnvelope::new(vault, "alice", wallet_cmd("Late", 0))] }),
-        )
-        .await;
+    let late = CommandEnvelope::new(vault, "alice", wallet_cmd("Late", 0));
+    let res = api.push(&alice.token, vault, vec![late]).await;
     assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
     let response: PushResponse = res.json();
-    assert!(matches!(
-        &response.results[0].outcome,
-        PushOutcome::Rejected { code, .. } if code == "not_found"
-    ));
+    assert_eq!(rejection(&response.results[0]).0, "not_found");
 }
 
 #[tokio::test]
@@ -229,19 +213,11 @@ async fn an_editor_cannot_delete_the_vault() {
 
     // bob's own core would refuse the command, so it is pushed by hand: the
     // server runs the same rule and answers per command, not per request.
-    let res = api
-        .post(
-            &format!("/vaults/{vault}/push"),
-            &bob.token,
-            json!({ "commands": [CommandEnvelope::new(vault, "bob", Command::DeleteVault)] }),
-        )
-        .await;
+    let delete = CommandEnvelope::new(vault, "bob", Command::DeleteVault);
+    let res = api.push(&bob.token, vault, vec![delete]).await;
     assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
     let response: PushResponse = res.json();
-    assert!(matches!(
-        &response.results[0].outcome,
-        PushOutcome::Rejected { code, .. } if code == "forbidden"
-    ));
+    assert_eq!(rejection(&response.results[0]).0, "forbidden");
     assert!(api.state.core().vault(vault).unwrap().is_some());
     assert_eq!(listed(&api, &bob.token).await.len(), 1);
 }
@@ -259,13 +235,7 @@ async fn a_deleted_vaults_id_cannot_be_claimed_but_a_new_vault_may_carry_its_nam
     let mut forged = CommandEnvelope::create_vault("mallory", "Mine", Currency::Eur);
     forged.id = vault;
     forged.vault_id = vault;
-    let res = api
-        .post(
-            &format!("/vaults/{vault}/push"),
-            &mallory.token,
-            json!({ "commands": [forged] }),
-        )
-        .await;
+    let res = api.push(&mallory.token, vault, vec![forged]).await;
     assert_eq!(res.status, StatusCode::NOT_FOUND);
     assert!(listed(&api, &mallory.token).await.is_empty());
     assert_eq!(mallory.core.vaults().unwrap().len(), 0);

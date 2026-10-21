@@ -1,27 +1,12 @@
 import Foundation
 import SparagneCore
 
-/// The app's single point of contact with the Rust core, and the only
-/// isolation domain that ever touches it.
-///
-/// Everything the UI does is either a query on `CoreHandle` or a command
-/// wrapped in an envelope minted by the core. Ids are
-/// never invented in Swift: `newEnvelope` and `createVaultEnvelope` produce
-/// them, and the created entity's id comes back on the `Receipt`.
-///
-/// `CoreHandle`'s calls are synchronous and hold a mutex (`core/src/ffi.rs`),
-/// so a long scan would freeze the window if it ran on the main actor. It runs
-/// here instead: `AppStore` and `SyncEngine` await this actor, which serializes
-/// the two of them onto one executor and leaves the main actor free to draw.
-/// Every value crossing back is `Sendable` — the
-/// generated record and enum types already are.
-///
-/// Two FFI functions deliberately stay off it: `parseQuickAdd` and
-/// `parseMoney`. They are free functions over a short string, with no `Core`,
-/// no mutex and no database behind them, and they run while a cell or the ⌘K
-/// line is being typed — a hop per keystroke would buy nothing and cost the
-/// live preview a frame.
+/// The app's one contact with the Rust core, and the only isolation domain that touches it.
 actor CoreActor {
+    // `CoreHandle`'s calls are synchronous under a mutex (`core/src/ffi.rs`): here, a long
+    // scan never freezes the window. `parseQuickAdd` and `parseMoney` stay off it: no
+    // database behind them, and they run on every keystroke.
+
     private let handle: CoreHandle
 
     /// Author recorded on every command in the log. It follows the account:
@@ -72,7 +57,7 @@ actor CoreActor {
         )
     }
 
-    /// An in-memory database, for tests and previews.
+    /// An in-memory database, for the tests.
     static func inMemory(
         author: String = "test",
         probe: (@Sendable () async -> Void)? = nil
@@ -97,11 +82,8 @@ actor CoreActor {
         return directory.appending(path: name, directoryHint: .notDirectory)
     }
 
-    // MARK: - The funnel
-    //
-    // Every method below reaches the handle through `visit`, so the probe and
-    // the "nothing else touches `handle`" rule both hold in one place.
-
+    /// Every method reaches the handle through here, so the probe and the
+    /// "nothing else touches `handle`" rule hold in one place.
     private func visit<T: Sendable>(_ body: (CoreHandle) throws -> T) async rethrows -> T {
         await probe?()
         return try body(handle)
@@ -250,10 +232,6 @@ actor CoreActor {
         try await visit { try $0.flowBalanceRanges(vaultId: vaultId, from: from) }
     }
 
-    func categories(vaultId: Uuid, includeArchived: Bool = false) async throws -> [CategoryView] {
-        try await visit { try $0.categories(vaultId: vaultId, includeArchived: includeArchived) }
-    }
-
     func aliases(vaultId: Uuid) async throws -> [AliasView] {
         try await visit { try $0.aliases(vaultId: vaultId) }
     }
@@ -286,15 +264,46 @@ actor CoreActor {
         try await visit { try $0.suggestCategories(vaultId: vaultId, notes: notes, since: since) }
     }
 
-    /// What importing a statement would do, row by row. Writes nothing.
+    /// What importing a statement would do, row by row, with the user's
+    /// overrides. Writes nothing.
     func previewStatement(
         vaultId: Uuid,
         text: String,
         mapping: StatementMapping,
-        options: StatementOptions
+        options: StatementOptions,
+        overrides: [StatementRowOverride] = []
     ) async throws -> StatementPreview {
         try await visit {
-            try $0.previewStatement(vaultId: vaultId, text: text, mapping: mapping, options: options)
+            try $0.previewStatement(
+                vaultId: vaultId, text: text, mapping: mapping, options: options, overrides: overrides
+            )
+        }
+    }
+
+    /// The date format and decimal mark a statement's date and amount
+    /// columns are written in, as far as their values tell. A free function
+    /// with no database behind it, run here all the same: it reads up to 50
+    /// rows of the whole text, which the main actor need not wait for.
+    func guessStatementFormats(
+        text: String,
+        delimiter: String,
+        dateColumn: String?,
+        amountColumn: String?
+    ) async -> StatementFormatGuess {
+        await visit { _ in
+            SparagneCore.guessStatementFormats(
+                text: text, delimiter: delimiter, dateColumn: dateColumn, amountColumn: amountColumn
+            )
+        }
+    }
+
+    /// The values a statement's column holds, with how many rows hold each,
+    /// most rows first: the accounts of an export holding several. A free
+    /// function run here, as the format guess is, so a long file is read
+    /// off the main actor.
+    func statementColumnValues(text: String, delimiter: String, column: String) async -> [StatementColumnValue] {
+        await visit { _ in
+            SparagneCore.statementColumnValues(text: text, delimiter: delimiter, column: column)
         }
     }
 
@@ -303,36 +312,9 @@ actor CoreActor {
         try await visit { try $0.previewMerge(vaultId: vaultId, sourceId: sourceId, targetId: targetId) }
     }
 
-    func listRecurring(vaultId: Uuid, includeArchived: Bool) async throws -> [RecurringView] {
-        try await visit { try $0.listRecurring(vaultId: vaultId, includeArchived: includeArchived) }
-    }
-
-    /// Templates with periods still waiting for a decision, as of `today`
-    /// (the app passes "today" in the system timezone).
-    func pendingRecurring(vaultId: Uuid, today: NaiveDate) async throws -> [PendingRecurring] {
-        try await visit { try $0.pendingRecurring(vaultId: vaultId, today: today) }
-    }
-
     /// The periods of one template already recorded or skipped, oldest first.
     func recurringRuns(vaultId: Uuid, recurringId: Uuid) async throws -> [RecurringRunView] {
         try await visit { try $0.recurringRuns(vaultId: vaultId, recurringId: recurringId) }
-    }
-
-    // MARK: - Allocation plan
-    //
-    // The plan, its period due and the base it would share out also come
-    // with every `load`; these are for the screens that need them again.
-
-    func allocationPlan(vaultId: Uuid) async throws -> AllocationPlanView? {
-        try await visit { try $0.allocationPlan(vaultId: vaultId) }
-    }
-
-    func pendingAllocation(vaultId: Uuid, today: NaiveDate) async throws -> PendingAllocation? {
-        try await visit { try $0.pendingAllocation(vaultId: vaultId, today: today) }
-    }
-
-    func allocationBase(vaultId: Uuid) async throws -> AllocationBase {
-        try await visit { try $0.allocationBase(vaultId: vaultId) }
     }
 
     /// `lines` worked out on `total` against the envelopes as they are now;
@@ -353,16 +335,6 @@ actor CoreActor {
         cursor: String?
     ) async throws -> Page {
         try await visit { try $0.listTransactions(vaultId: vaultId, filter: filter, limit: limit, cursor: cursor) }
-    }
-
-    /// `nil` bounds mean "open end": both nil is all time.
-    func totals(vaultId: Uuid, from: UtcDateTime?, to: UtcDateTime?) async throws -> PeriodTotals {
-        try await visit { try $0.periodTotals(vaultId: vaultId, from: from, to: to) }
-    }
-
-    /// The people who appear in the PERSONA column.
-    func people(vaultId: Uuid) async throws -> [String] {
-        try await visit { try $0.people(vaultId: vaultId) }
     }
 
     /// Turns a parsed quick-add line into a command plus the ids its names
@@ -556,14 +528,6 @@ actor CoreActor {
         try await visit { try $0.backupTo(path: path) }
     }
 
-    func rejectedCommands(vaultId: Uuid) async throws -> [RejectedCommand] {
-        try await visit { try $0.rejectedCommands(vaultId: vaultId) }
-    }
-
-    func dismissRejected(vaultId: Uuid, commandId: Uuid) async throws {
-        try await visit { try $0.dismissRejected(vaultId: vaultId, commandId: commandId) }
-    }
-
     /// The outbox count over every vault and everything still held as
     /// rejected: what the top bar's sync pill and the rejections sheet show.
     ///
@@ -600,6 +564,7 @@ actor CoreActor {
     func dismissAllRejected(_ entries: [RejectedEntry]) async {
         await visit { handle in
             for entry in entries {
+                // One the core no longer holds has nothing left to dismiss.
                 try? handle.dismissRejected(vaultId: entry.vaultId, commandId: entry.command.commandId)
             }
         }
@@ -608,8 +573,7 @@ actor CoreActor {
 
 // MARK: - What a visit returns
 
-/// What `CoreActor.load` needs to know about the window on screen. A plain
-/// value so the whole request crosses to the actor in one piece.
+/// What `CoreActor.load` needs to know about the window on screen, in one value.
 struct VaultLoadRequest: Sendable {
     let vaultId: Uuid
     let filter: TransactionFilter
@@ -680,12 +644,20 @@ struct CategoryManagement: Sendable {
     let aliases: [AliasView]
 }
 
-/// One rejected command with the vault it belongs to, so the sheet can
-/// dismiss it.
+/// One rejected command with the vault it belongs to, so the sheet can dismiss it.
 struct RejectedEntry: Sendable, Equatable {
     let vaultId: Uuid
     let vaultName: String
     let command: RejectedCommand
+}
+
+extension RejectedEntry: Identifiable {
+    var id: Uuid { command.commandId }
+    /// The localized headline for the server's code, naming the person when
+    /// the row was put on someone outside the vault.
+    var summary: String { ErrorMessages.summary(for: command.code, detail: command.detail) }
+    /// What the refused command did, in words (`CommandKindNames`).
+    var kindName: String { CommandKindNames.name(for: command.kind) }
 }
 
 /// What the core says about the sync of every local vault.

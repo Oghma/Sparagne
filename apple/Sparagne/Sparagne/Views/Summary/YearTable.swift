@@ -27,22 +27,14 @@ struct YearTable: View {
         Panel {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(String(localized: "Month by month"))
-                        .font(Face.label)
-                        .foregroundStyle(Ink.text2)
+                    SectionLabel(text: String(localized: "Month by month"), tint: Ink.text2)
                     Spacer(minLength: 8)
                     Text(String(localized: "Total = savings + cash fund \u{2212} fund expenses"))
                         .font(Face.label)
                         .foregroundStyle(Ink.text3)
                         .lineLimit(1)
                 }
-                // Wide enough, the columns share the card; too narrow, the
-                // table keeps its widths and scrolls.
-                ViewThatFits(in: .horizontal) {
-                    table(flexible: true)
-                    ScrollView(.horizontal) { table(flexible: false) }
-                        .scrollBounceBehavior(.basedOnSize)
-                }
+                FittedTable { table(flexible: $0) }
             }
         }
     }
@@ -66,7 +58,7 @@ struct YearTable: View {
     // MARK: - Header
 
     private func header(flexible: Bool) -> some View {
-        HStack(spacing: 0) {
+        SetupHeaderRow {
             Text(String(localized: "Month"))
                 .frame(width: Self.monthWidth, alignment: .leading)
                 .padding(.horizontal, Metrics.cellPad)
@@ -74,9 +66,7 @@ struct YearTable: View {
             headerTitle(String(localized: "Expenses"), flexible: flexible)
             headerTitle(String(localized: "Savings"), flexible: flexible)
             Text(String(localized: "Rate"))
-                .lineLimit(1)
-                .padding(.horizontal, Metrics.cellPad)
-                .frame(width: Self.rateWidth, alignment: .trailing)
+                .tableCell(width: Self.rateWidth, alignment: .trailing)
             headerTitle(String(localized: "Cash fund"), flexible: flexible)
             headerTitle(String(localized: "Fund expenses"), flexible: flexible)
             headerTitle(String(localized: "Total"), flexible: flexible)
@@ -87,20 +77,14 @@ struct YearTable: View {
                 headerTitle(person, flexible: flexible)
             }
         }
-        .font(Face.ui(11, .medium))
-        .foregroundStyle(Ink.text3)
-        .frame(height: Metrics.headerHeight)
-        .overlay(alignment: .bottom) { Rectangle().fill(Ink.line2).frame(height: 1) }
     }
 
     /// A long title ("Fund expenses") narrows a little rather than lose its
     /// end on the narrowest window.
     private func headerTitle(_ title: String, flexible: Bool) -> some View {
         Text(title)
-            .lineLimit(1)
             .minimumScaleFactor(0.85)
-            .padding(.horizontal, Metrics.cellPad)
-            .frame(minWidth: Self.figureWidth, maxWidth: flexible ? .infinity : Self.figureWidth, alignment: .trailing)
+            .fittedCell(Self.figureWidth, flexible: flexible, alignment: .trailing)
     }
 
     // MARK: - Rows
@@ -171,12 +155,7 @@ struct YearTable: View {
                 Text(SummaryText.capitalized(SummaryText.monthName(month.month)))
                     .lineLimit(1)
                 if row.isCurrent {
-                    Text(String(localized: "current"))
-                        .font(Face.ui(10, .semibold))
-                        .foregroundStyle(Ink.accent)
-                        .padding(.horizontal, 5)
-                        .frame(height: 16)
-                        .background(Ink.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
+                    RowTag(text: String(localized: "current"), tint: Ink.accent, opacity: 0.14)
                 }
             }
         case .sum:
@@ -199,9 +178,7 @@ struct YearTable: View {
                 Text(verbatim: "")
             }
         }
-        .lineLimit(1)
-        .padding(.horizontal, Metrics.cellPad)
-        .frame(minWidth: Self.figureWidth, maxWidth: flexible ? .infinity : Self.figureWidth, alignment: .trailing)
+        .fittedCell(Self.figureWidth, flexible: flexible, alignment: .trailing)
     }
 
     /// TASSO, in the secondary ink: it restates RISPARMIO beside it as a
@@ -220,9 +197,7 @@ struct YearTable: View {
                 Text(TransactionRow.placeholder).foregroundStyle(Ink.text3)
             }
         }
-        .lineLimit(1)
-        .padding(.horizontal, Metrics.cellPad)
-        .frame(width: Self.rateWidth, alignment: .trailing)
+        .tableCell(width: Self.rateWidth, alignment: .trailing)
     }
 
     /// TOTALE carries the verdict of the month: down on the line before is the
@@ -233,7 +208,7 @@ struct YearTable: View {
                 let tint = row.trendUp ? Ink.positive : Ink.negative
                 HStack(spacing: 4) {
                     if row.kind != .opening {
-                        Text(row.trendUp ? "\u{25B2}" : "\u{25BC}")
+                        Text(verbatim: row.trendUp ? "\u{25B2}" : "\u{25BC}")
                             .font(Face.ui(9))
                             .foregroundStyle(tint)
                     }
@@ -247,9 +222,7 @@ struct YearTable: View {
                 Text(verbatim: "")
             }
         }
-        .lineLimit(1)
-        .padding(.horizontal, Metrics.cellPad)
-        .frame(minWidth: Self.figureWidth, maxWidth: flexible ? .infinity : Self.figureWidth, alignment: .trailing)
+        .fittedCell(Self.figureWidth, flexible: flexible, alignment: .trailing)
     }
 
     // MARK: - Accessibility

@@ -2,38 +2,18 @@ import Foundation
 import Observation
 import SparagneCore
 
-/// The Mastro's cursor and the one cell being typed into, as a spreadsheet
-/// has them: a cell is selected (the cursor) or edited (the caret in it),
-/// and an edited cell is written the moment it is left, whichever way.
-///
-/// Owned by the store, not by the grid, so switching tab does not lose what
-/// is being typed, and the store can save it before the month, the lists or
-/// the vault change under it (`finish`), while the rows it belongs to are
-/// still loaded.
-///
-/// Only one cell is ever being edited, and what it says is `text` (or
-/// `flowId` for ENVELOPE, which is picked from a list). Saving a stored
-/// row's cell sends that field alone, worked out against the row as it is
-/// stored at that moment, so a sync that changed another cell of the row
-/// meanwhile is never written back over.
-///
-/// A saved cell reaches `store.rows` only once its write has landed and a
-/// reload has brought the row back. Until then the editor keeps what it
-/// saved (`shown`), and the row is that to everything the editor works out
-/// of it, the next cell's patch and its undo step included, and to the grid
-/// that draws it.
-///
-/// The new line keeps its cells in `newLine` until it is registered, which
-/// happens when the cursor leaves it with an amount in it.
-@MainActor
+/// The Mastro's cursor and the one cell being typed into, written the moment it is left.
 @Observable
 final class LedgerEditor {
+    // Owned by the store, so a tab switch keeps what is typed and a change of month, list
+    // or vault saves it first (`finish`). A stored row's cell sends its field alone, against
+    // the row as stored then, so a sync's change to another cell is never written over.
+    // Until a reload brings a saved cell back, the row reads through it (`shown`).
+
     @ObservationIgnored private weak var store: AppStore?
     /// The writes sent and not landed yet, one after the other in the order
-    /// the cells were left, and a counter that says whether one was queued
-    /// while the last was running (`settle`).
-    @ObservationIgnored private var writes: Task<Void, Never>?
-    @ObservationIgnored private var queued = 0
+    /// the cells were left.
+    @ObservationIgnored private let writes = SerialQueue()
     @ObservationIgnored private var inFlight = 0
     /// The new line holds a copy made by `duplicate` that no cell has
     /// changed yet: leaving it keeps it as it is, only ↩ registers it.
@@ -168,7 +148,7 @@ final class LedgerEditor {
             stopEditing()
             return
         }
-        if at.row == nil, let store { blankNewLine(in: store) }
+        if at.row == nil, store != nil { blankNewLine() }
         place(at: nil)
     }
 
@@ -187,8 +167,7 @@ final class LedgerEditor {
     /// open belongs to rows no longer on screen. No cursor, a blank new line.
     func reset() {
         place(at: nil)
-        newLine = store.map { RowDraft.blank(in: $0) } ?? RowDraft()
-        holdsUntouchedCopy = false
+        blankNewLine()
     }
 
     /// ⌘D and the context menu: `row` copied into the new line, the caret in
@@ -215,14 +194,7 @@ final class LedgerEditor {
     /// Waits for the writes the editor has sent: `AppStore.settle` and
     /// quitting do.
     func settle() async {
-        while let writes {
-            let generation = queued
-            await writes.value
-            if generation == queued {
-                self.writes = nil
-                return
-            }
-        }
+        await writes.settle()
     }
 
     // MARK: - What the store tells the editor
@@ -390,8 +362,8 @@ final class LedgerEditor {
         return next
     }
 
-    private func blankNewLine(in store: AppStore) {
-        newLine = RowDraft.blank(in: store)
+    private func blankNewLine() {
+        newLine = store.map { RowDraft.blank(in: $0) } ?? RowDraft()
         holdsUntouchedCopy = false
     }
 
@@ -446,11 +418,8 @@ final class LedgerEditor {
         _ work: @escaping @MainActor (AppStore) async -> Void
     ) {
         guard let store, let vaultId = store.currentVault?.id else { return }
-        queued += 1
         inFlight += 1
-        let previous = writes
-        writes = Task { [weak self] in
-            await previous?.value
+        writes.enqueue { [weak self] in
             if store.currentVault?.id == vaultId { await work(store) }
             self?.inFlight -= 1
             if let cell { self?.landed(cell) }

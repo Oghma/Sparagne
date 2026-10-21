@@ -1,8 +1,6 @@
-//! Category name normalization.
-//!
-//! `display` is what the user sees (trimmed, single spaces); `key` is the
-//! lookup key (NFKD, no diacritics, lowercase alphanumerics, punctuation as a
-//! single space).
+//! Category name normalization: `display` is what the user sees (trimmed,
+//! single spaces), `key` the lookup key (NFKD, no diacritics, lowercase
+//! alphanumerics, punctuation as a single space).
 
 use unicode_normalization::{UnicodeNormalization, char::is_combining_mark};
 

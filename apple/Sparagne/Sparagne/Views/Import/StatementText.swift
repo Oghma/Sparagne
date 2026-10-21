@@ -12,6 +12,8 @@ enum StatementText {
         switch status {
         case .new: String(localized: "New")
         case .alreadyImported: String(localized: "Imported before")
+        case .possibleDuplicate: String(localized: "Possible duplicate")
+        case .matchedTransfer: String(localized: "Transfer already there")
         case .skipped(let code, _): skipped(code)
         case .invalid(let code, _): invalid(code)
         }
@@ -20,7 +22,7 @@ enum StatementText {
     /// The core's English sentence behind a status, for the tooltip.
     static func detail(_ status: StatementRowStatus) -> String? {
         switch status {
-        case .new, .alreadyImported: nil
+        case .new, .alreadyImported, .possibleDuplicate, .matchedTransfer: nil
         case .skipped(_, let reason): reason
         case .invalid(_, let message): message
         }
@@ -33,6 +35,10 @@ enum StatementText {
         case "needs_wallet": String(localized: "Needs the other wallet")
         case "zero_amount": String(localized: "Zero amount")
         case "skipped_by_you": String(localized: "Skipped by you")
+        case "before_start": String(localized: "Before the start day")
+        case "skipped_account": String(localized: "Account left out")
+        case "internal_transfer": String(localized: "Transfer within one wallet")
+        case "transfer_pair": String(localized: "Other half of a transfer")
         default: String(localized: "Not imported")
         }
     }
@@ -57,6 +63,104 @@ enum StatementText {
         case .transferWallet, .transferFlow: String(localized: "transfer")
         case nil: TransactionRow.placeholder
         }
+    }
+
+    /// The review's KIND cell: what the row is taken for, in the kind
+    /// column's lowercase words, a `BySign` as the kind it resolved to and a
+    /// transfer with its direction, the other wallet being written beside it.
+    static func rowKind(_ action: StatementAction, resolved: TransactionKind?) -> String {
+        switch action {
+        case .bySign: kind(resolved)
+        case .expense: kind(.expense)
+        case .income: kind(.income)
+        case .refund: kind(.refund)
+        case .transferIn: String(localized: "transfer from")
+        case .transferOut: String(localized: "transfer to")
+        case .skip: String(localized: "skip")
+        }
+    }
+
+    /// What becomes of a row that matched a transaction already in the
+    /// vault, as the review's menu offers it. `skip` keeps the transaction
+    /// there as the bank's row, claimed so that no later statement takes it
+    /// for one of its own.
+    static func matchChoice(_ choice: StatementMatchChoice) -> String {
+        switch choice {
+        case .skip: String(localized: "Keep the one already there")
+        case .moveExisting: String(localized: "Move it here")
+        case .importAnyway: String(localized: "Import anyway")
+        case .replaceExisting: String(localized: "Replace it with the transfer")
+        }
+    }
+
+    /// Beside the match of a row imported by default: the match more
+    /// likely stands for another export's row, near the file's first or
+    /// last days.
+    static var importedByDefault: String {
+        String(localized: "Maybe another row’s; imported unless you choose Keep")
+    }
+
+    /// The status of the money-in half of a move between two accounts, the
+    /// transfer being written from the other half's line.
+    static func otherHalf(of line: UInt32) -> String {
+        String(localized: "Other half of line \(Int(line))")
+    }
+
+    /// Under half of a move between two accounts whose other half the file
+    /// does not hold: it is imported as what its type says.
+    static var unpairedLeg: String {
+        String(localized: "Transfer with no other half in this file")
+    }
+
+    /// Under a match dated before the start day: an entry typed up to three
+    /// days before it may still stand for one of the file's first rows.
+    static var typedBeforeStart: String {
+        String(localized: "Typed before the start date")
+    }
+
+    /// Under the entry a transfer row is imported next to, by default,
+    /// since it is not very likely its other side (days apart, typed by
+    /// hand).
+    static var mayBeOtherSide: String {
+        String(localized: "Maybe its other side: if so, choose Replace")
+    }
+
+    /// What each choice does, for the menu's tooltip and VoiceOver's hint.
+    static func matchChoiceDetail(_ choice: StatementMatchChoice) -> String {
+        switch choice {
+        case .skip: String(localized: "The transaction already in the vault stands for this row from now on, and this row is not imported.")
+        case .moveExisting: String(localized: "The transaction entered by hand moves into this statement’s wallet, and this row is not imported.")
+        case .importAnyway: String(localized: "This row is imported as well, beside the transaction already in the vault.")
+        case .replaceExisting: String(localized: "This row is imported as the transfer it is, and the income or expense that stood for it is deleted.")
+        }
+    }
+
+    /// The transaction a flagged row matched, on the dim line under it:
+    /// `2026-09-14 · Bar Centrale · Bar · in Cash`, or for a transfer
+    /// `2026-09-14 · Ricarica · from ING to Revolut`. An entry a transfer
+    /// row may replace says first what it is and where, the thing that
+    /// would be deleted, and its note last, which a hint after it may cut:
+    /// `2026-10-01 · income in Revolut · BONIFICO DA ING`.
+    static func existing(_ view: TransactionView, names: NameBook, replacing: Bool = false) -> String {
+        let row = TransactionRow(view: view, names: names)
+        var parts = [CoreDate.day(row.occurredAt)]
+        if replacing && !row.isTransfer {
+            // The kind, then the wallet as an entry's line names it: "entrata
+            // in Revolut" reads in Italian as "income in Revolut" does.
+            parts.append(kind(view.kind) + " " + String(localized: "in \(row.walletDisplay)"))
+            if !row.note.isEmpty { parts.append(row.note) }
+            return parts.joined(separator: " \u{00B7} ")
+        }
+        if !row.note.isEmpty { parts.append(row.note) }
+        if row.isTransfer {
+            let from = names.wallet(view.fromId) ?? names.flow(view.fromId) ?? TransactionRow.placeholder
+            let to = names.wallet(view.toId) ?? names.flow(view.toId) ?? TransactionRow.placeholder
+            parts.append(String(localized: "from \(from) to \(to)"))
+        } else {
+            parts.append(row.category)
+            parts.append(String(localized: "in \(row.walletDisplay)"))
+        }
+        return parts.joined(separator: " \u{00B7} ")
     }
 
     static func action(_ choice: StatementActionChoice) -> String {
@@ -127,7 +231,7 @@ enum StatementDateChoice: String, CaseIterable, Identifiable {
         switch self {
         case .dateTimeUtc: "2026-09-16 08:54:40 UTC"
         case .isoDate: "2026-09-16"
-        case .isoDateTime: "2026-09-16T08:54:40"
+        case .isoDateTime: "2026-09-16 08:54:40"
         case .dayMonthYear: "16/09/2026"
         case .monthDayYear: "09/16/2026"
         case .custom: String(localized: "Custom pattern")

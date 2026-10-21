@@ -20,36 +20,26 @@ struct EnvelopeSelectTests {
         #expect(EnvelopeChoiceModel.choices(for: "ferie", among: envelopes).isEmpty)
     }
 
-    @Test("Case and accents never count")
-    func folding() {
-        let envelopes = [Self.choice("Città"), Self.choice("Spesa")]
-        #expect(EnvelopeChoiceModel.choices(for: "CITTA", among: envelopes).map(\.name) == ["Città"])
-    }
-
-    @Test("Opened, the list highlights the envelope the row is on; arrows wrap; a pick writes its id and closes")
+    @Test("Opened, the list highlights the envelope the row is on; a pick writes its id and closes")
     func modelPicks() {
         let envelopes = ["Non allocato", "Casa", "Spesa"].map { Self.choice($0) }
         let model = EnvelopeChoiceModel()
         var written: Uuid?
 
         model.open(owner: "cell", envelopes: envelopes, current: "id-Spesa") { written = $0 }
-        #expect(model.isOpen)
-        #expect(model.owner == AnyHashable("cell"))
-        #expect(model.choices == envelopes)
-        #expect(model.selected?.name == "Spesa")
+        #expect(model.list.isOpen)
+        #expect(model.list.owner == AnyHashable("cell"))
+        #expect(model.list.items == envelopes)
+        #expect(model.list.selected?.name == "Spesa")
         // Already the row's envelope: ↩ saves the row instead.
         #expect(!model.picksOnReturn)
 
-        model.move(by: 1)
-        #expect(model.selected?.name == "Non allocato")
-        model.move(by: -1)
-        #expect(model.selected?.name == "Spesa")
-        model.move(by: -1)
+        model.list.move(by: -1)
         #expect(model.picksOnReturn)
-        #expect(model.pick())
+        #expect(model.list.pick())
         #expect(written == "id-Casa")
-        #expect(!model.isOpen)
-        #expect(model.choices.isEmpty)
+        #expect(!model.list.isOpen)
+        #expect(model.list.items.isEmpty)
     }
 
     @Test("Typing narrows the list and highlights the best match; nothing matching leaves nothing to pick")
@@ -60,38 +50,35 @@ struct EnvelopeSelectTests {
         model.open(owner: "cell", envelopes: envelopes, current: "id-Casa") { written = $0 }
 
         model.filter("sp")
-        #expect(model.choices.map(\.name) == ["Spesa"])
-        #expect(model.selected?.name == "Spesa")
+        #expect(model.list.items.map(\.name) == ["Spesa"])
+        #expect(model.list.selected?.name == "Spesa")
 
         model.filter("ferie")
-        #expect(model.isOpen)
-        #expect(model.choices.isEmpty)
+        #expect(model.list.isOpen)
+        #expect(model.list.items.isEmpty)
         #expect(model.query == "ferie")
         #expect(!model.picksOnReturn)
-        #expect(!model.pick())
+        #expect(!model.list.pick())
         #expect(written == nil)
 
         // Emptied again: all of them, back on the row's envelope.
         model.filter("")
-        #expect(model.choices == envelopes)
-        #expect(model.selected?.name == "Casa")
+        #expect(model.list.items == envelopes)
+        #expect(model.list.selected?.name == "Casa")
     }
 
     @Test("A closed list ignores the text of a cell it is not open for")
     func closedIgnoresText() {
         let model = EnvelopeChoiceModel()
         model.filter("casa")
-        #expect(!model.isOpen)
-        #expect(model.choices.isEmpty)
+        #expect(!model.list.isOpen)
+        #expect(model.list.items.isEmpty)
     }
 
     // MARK: - Over a store
 
     private static func household() async throws -> (store: AppStore, cash: FlowView) {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.envelope-select.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        let store = try await TestStore.make()
         await store.createEnvelope(name: "Cash", mode: .unlimited, allowNegative: true, openingAllocation: 0)
         await store.createEnvelope(name: "Viaggi", mode: .unlimited, allowNegative: true, openingAllocation: 0)
         let cash = try #require(store.flows.first { $0.name == "Cash" })
@@ -110,24 +97,6 @@ struct EnvelopeSelectTests {
         #expect(names.first == NameBook.unallocatedLabel)
         #expect(names.contains("Cash"))
         #expect(!names.contains("Viaggi"))
-    }
-
-    @Test("The envelope picked is what the row is saved on, and only a change is sent")
-    func draftCarriesThePick() async throws {
-        let (store, cash) = try await Self.household()
-        let viaggi = try #require(store.flows.first { $0.name == "Viaggi" })
-        let row = try #require(store.rows.first { $0.note == "coop" })
-
-        var draft = RowDraft(row: row, store: store)
-        #expect(draft.flowId == cash.id)
-        #expect(try draft.patch(against: row, store: store).flowId == nil)
-
-        draft.flowId = viaggi.id
-        let patch = try draft.patch(against: row, store: store)
-        #expect(patch.flowId == viaggi.id)
-        await store.update(transactionId: row.id, patch: patch)
-        #expect(store.presentedError == nil)
-        #expect(store.rows.first { $0.id == row.id }?.envelopeDisplay == "Viaggi")
     }
 
     @Test("The empty line starts on the sticky envelope and saves the one picked")

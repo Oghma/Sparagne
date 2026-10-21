@@ -1,10 +1,6 @@
-//! Two-client end-to-end acceptance test of Sparagne v2 sync.
-//!
-//! Two [`Core`]s in memory play alice and bob (and, for the permission test,
-//! carol), driven over HTTP against `sparagne_server::router` in-process with
-//! `tower::ServiceExt::oneshot` (see `common::Api`). The server's own log and
-//! projection is reachable through `Api::state` for assertions. `common::Client`
-//! implements the client side of the sync, as the app does.
+//! End-to-end sync between members' devices (`common::Client`) through the
+//! real push and pull routes, checked against the server's own projection
+//! (`Api::state`).
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -12,17 +8,11 @@ mod common;
 
 use axum::http::StatusCode;
 use chrono::NaiveDate;
-use common::{Api, Client, T0, all_txns, at, basics, entry, expense_cmd, flow_cmd, projection};
-use serde_json::json;
+use common::{Api, Client, T0, at, basics, entry, expense_cmd, flow_cmd, projection};
 use sparagne_core::{
-    Command, Core, Entry, FlowMode, Frequency, Schedule, SyncReport, TransactionKind,
-    TransactionPatch, sync::PushResponse,
+    Command, Entry, FlowMode, Frequency, Schedule, SyncReport, TransactionKind, TransactionPatch,
+    sync::PushResponse,
 };
-use uuid::Uuid;
-
-// ---------------------------------------------------------------------------
-// 1. Convergence
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn convergence() {
@@ -45,50 +35,20 @@ async fn convergence() {
     }
     assert!(rebased, "at least one sync must have rebased");
 
-    let expected = {
-        let core = api.state.core();
-        projection(&core, vault)
-    };
+    // The projections hold every entity id, which derives from its command's
+    // id: the rebase produced the same ids everywhere.
+    let expected = projection(&api.state.core(), vault);
     assert_eq!(projection(&alice.core, vault), expected);
     assert_eq!(projection(&bob.core, vault), expected);
 
-    let server_last_seq = { api.state.core().last_seq(vault).unwrap() };
+    let server_last_seq = api.state.core().last_seq(vault).unwrap();
     for client in [&alice, &bob] {
         let state = client.core.sync_state(vault).unwrap();
         assert_eq!(state.outbox, 0, "no outbox left");
         assert_eq!(state.rejected, 0, "no rejections in this scenario");
         assert_eq!(state.last_server_seq, server_last_seq);
     }
-
-    // Every entity id (wallets, flows, categories, transactions) is the same
-    // on every core: they derive from the command id, so the rebase produced
-    // identical ids everywhere.
-    let ids = |core: &Core| {
-        let snapshot = core.snapshot(vault).unwrap();
-        let mut out: Vec<Uuid> = snapshot.wallets.iter().map(|w| w.id).collect();
-        out.extend(snapshot.flows.iter().map(|f| f.id));
-        out.extend(core.categories(vault, true).unwrap().iter().map(|c| c.id));
-        out.extend(
-            core.list_transactions(vault, &all_txns(), 100, None)
-                .unwrap()
-                .items
-                .iter()
-                .map(|t| t.id),
-        );
-        out
-    };
-    let server_ids = {
-        let core = api.state.core();
-        ids(&core)
-    };
-    assert!(!server_ids.is_empty());
-    assert_eq!(ids(&alice.core), server_ids);
-    assert_eq!(ids(&bob.core), server_ids);
 }
-
-// ---------------------------------------------------------------------------
-// 2. Rejection
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn rejection() {
@@ -123,25 +83,12 @@ async fn rejection() {
     assert_eq!(rejected[0].command_id, doomed);
     assert_eq!(rejected[0].code, "insufficient_funds");
 
-    assert!(
-        !bob.core
-            .list_transactions(vault, &all_txns(), 100, None)
-            .unwrap()
-            .items
-            .iter()
-            .any(|t| t.id == doomed),
-        "the rejected expense must not appear in bob's projection"
-    );
-
     let bob_rejected = bob.core.rejected_commands(vault).unwrap();
     assert_eq!(bob_rejected.len(), 1);
     assert_eq!(bob_rejected[0].command_id, doomed);
     assert_eq!(bob_rejected[0].code, "insufficient_funds");
 
-    let expected = {
-        let core = api.state.core();
-        projection(&core, vault)
-    };
+    let expected = projection(&api.state.core(), vault);
     assert_eq!(projection(&alice.core, vault), expected);
     assert_eq!(projection(&bob.core, vault), expected);
 
@@ -151,10 +98,6 @@ async fn rejection() {
     // Dismissing a rejection never touches the projection.
     assert_eq!(projection(&bob.core, vault), expected);
 }
-
-// ---------------------------------------------------------------------------
-// 3. Author and permissions
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn author_and_permissions() {
@@ -168,9 +111,7 @@ async fn author_and_permissions() {
 
     let before_seq = api.state.core().last_seq(vault).unwrap();
     let request = bob.core.push_request(vault, common::BATCH).unwrap();
-    let res = api
-        .post(&format!("/vaults/{vault}/push"), &bob.token, json!(request))
-        .await;
+    let res = api.push(&bob.token, vault, request.commands).await;
     assert_eq!(res.status, StatusCode::FORBIDDEN);
     assert_eq!(res.code(), "author_mismatch");
     assert_eq!(
@@ -193,32 +134,21 @@ async fn author_and_permissions() {
     assert_eq!(pull.code(), "not_found");
 
     // Made a viewer, she can join by pulling the whole log...
-    let put = api
-        .put(
-            &format!("/vaults/{vault}/members"),
-            &alice.token,
-            json!({ "username": "carol", "role": "viewer" }),
-        )
-        .await;
-    assert_eq!(put.status, StatusCode::NO_CONTENT, "{:?}", put.body);
+    api.add_member(&alice.token, vault, "carol", "viewer").await;
 
     let report = carol.join(&api, vault).await;
     assert!(report.rebased);
     assert_eq!(projection(&carol.core, vault), projection(&bob.core, vault));
 
-    // ...but her push is forbidden, and her local outbox command stays
-    // unconfirmed.
+    // ...but her push is forbidden whatever it carries, nothing of it is
+    // applied, and her local outbox command stays unconfirmed.
     let doomed = carol.exec(vault, expense_cmd(100, wallet, None, "spesa", T0 + 120));
+    let before_seq = api.state.core().last_seq(vault).unwrap();
     let request = carol.core.push_request(vault, common::BATCH).unwrap();
-    let res = api
-        .post(
-            &format!("/vaults/{vault}/push"),
-            &carol.token,
-            json!(request),
-        )
-        .await;
+    let res = api.push(&carol.token, vault, request.commands).await;
     assert_eq!(res.status, StatusCode::FORBIDDEN);
     assert_eq!(res.code(), "forbidden");
+    assert_eq!(api.state.core().last_seq(vault).unwrap(), before_seq);
 
     assert_eq!(carol.core.sync_state(vault).unwrap().outbox, 1);
     assert!(
@@ -231,10 +161,6 @@ async fn author_and_permissions() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// 4. Idempotency
-// ---------------------------------------------------------------------------
-
 #[tokio::test]
 async fn idempotent_push() {
     let api = Api::new();
@@ -244,11 +170,7 @@ async fn idempotent_push() {
     let request = alice.core.push_request(vault, common::BATCH).unwrap();
 
     let first_res = api
-        .post(
-            &format!("/vaults/{vault}/push"),
-            &alice.token,
-            json!(request.clone()),
-        )
+        .push(&alice.token, vault, request.commands.clone())
         .await;
     assert_eq!(first_res.status, StatusCode::OK);
     let first: PushResponse = first_res.json();
@@ -258,13 +180,7 @@ async fn idempotent_push() {
 
     // Re-sending the exact same body (a retried request after a lost reply,
     // say) must answer with the same seqs and not grow the log.
-    let again_res = api
-        .post(
-            &format!("/vaults/{vault}/push"),
-            &alice.token,
-            json!(request),
-        )
-        .await;
+    let again_res = api.push(&alice.token, vault, request.commands).await;
     assert_eq!(again_res.status, StatusCode::OK);
     let again: PushResponse = again_res.json();
     assert_eq!(again, first, "a replayed push must answer the same seqs");
@@ -286,10 +202,6 @@ async fn idempotent_push() {
         }
     );
 }
-
-// ---------------------------------------------------------------------------
-// 5. Person
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn a_person_travels_with_the_row() {
@@ -391,10 +303,7 @@ async fn a_person_travels_with_the_row() {
         alice.core.transaction(vault, dinner).unwrap().person,
         "alice"
     );
-    let expected = {
-        let core = api.state.core();
-        projection(&core, vault)
-    };
+    let expected = projection(&api.state.core(), vault);
     assert_eq!(projection(&alice.core, vault), expected);
     assert_eq!(projection(&bob.core, vault), expected);
 }

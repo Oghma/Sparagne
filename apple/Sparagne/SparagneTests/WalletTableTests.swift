@@ -8,19 +8,6 @@ import Testing
 /// a renamed row sends back and what the empty line creates. The draft is a
 /// plain struct, so none of this needs a view.
 struct WalletTableTests {
-    private static func makeStore() throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.wallets.\(UUID().uuidString)"))
-        return AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
-    }
-
-    private static func vault() async throws -> AppStore {
-        let store = try makeStore()
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
-        #expect(store.presentedError == nil)
-        return store
-    }
-
     private static func wallet(name: String = "Conto") -> WalletView {
         WalletView(id: UUID().uuidString, name: name, balance: 0, archived: false)
     }
@@ -75,7 +62,7 @@ struct WalletTableTests {
 
     @Test("The empty line creates the wallet and its opening goes to Unallocated")
     func newLineCreates() async throws {
-        let store = try await Self.vault()
+        let store = try await TestStore.make()
         var line = WalletDraft()
         line.name = "  Carta  "
         line.opening = "-250,00"
@@ -94,9 +81,19 @@ struct WalletTableTests {
         #expect(unallocated.balance == 100_000 - 25_000)
     }
 
+    @Test("The total row adds up every wallet, a card in debt taking its share off")
+    func total() {
+        let wallets = [
+            WalletView(id: "conto", name: "Conto", balance: 100_000, archived: false),
+            WalletView(id: "carta", name: "Carta", balance: -25_000, archived: false),
+        ]
+        #expect(SetupFigures.total(of: wallets) == 75_000)
+        #expect(SetupFigures.total(of: []) == 0)
+    }
+
     @Test("The rename reaches the core")
     func renameReachesTheStore() async throws {
-        let store = try await Self.vault()
+        let store = try await TestStore.make()
         let wallet = try #require(store.wallets.first { $0.name == "Conto" })
         var draft = WalletDraft(wallet: wallet)
         draft.name = "Conto BPER"

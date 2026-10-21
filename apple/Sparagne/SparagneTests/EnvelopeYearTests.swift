@@ -9,7 +9,8 @@ import Testing
 struct EnvelopeYearTests {
     private static let june = MonthKey(year: 2026, month: 6)
 
-    private static func flow(_ name: String, mode: FlowMode = .unlimited, unallocated: Bool = false) -> FlowView {
+    /// An envelope whose id is its name, empty.
+    static func flow(_ name: String, mode: FlowMode = .unlimited, unallocated: Bool = false) -> FlowView {
         FlowView(
             id: name,
             name: name,
@@ -58,16 +59,16 @@ struct EnvelopeYearTests {
             flows: Self.flows,
             flowPerson: [],
             balances: [
-                BalanceDelta(bucket: 0, targetId: "Vacanze", delta: 100_000),
-                BalanceDelta(bucket: 2, targetId: "Vacanze", delta: 50_000),
+                BucketTargetTotals(bucket: 0, targetId: "Vacanze", delta: 100_000),
+                BucketTargetTotals(bucket: 2, targetId: "Vacanze", delta: 50_000),
                 // A move out of the fund in June counts: it is where the
                 // money stands, whatever moved it.
-                BalanceDelta(bucket: 6, targetId: "Vacanze", delta: -20_000),
+                BucketTargetTotals(bucket: 6, targetId: "Vacanze", delta: -20_000),
                 // July is after the month on screen.
-                BalanceDelta(bucket: 7, targetId: "Vacanze", delta: -100_000),
-                BalanceDelta(bucket: 1, targetId: "Spesa", delta: 7_000),
+                BucketTargetTotals(bucket: 7, targetId: "Vacanze", delta: -100_000),
+                BucketTargetTotals(bucket: 1, targetId: "Spesa", delta: 7_000),
                 // An envelope the table does not list is nobody's balance.
-                BalanceDelta(bucket: 1, targetId: "Vecchia", delta: 9_000),
+                BucketTargetTotals(bucket: 1, targetId: "Vecchia", delta: 9_000),
             ],
             upTo: Self.june,
             people: []

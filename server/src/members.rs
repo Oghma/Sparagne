@@ -1,7 +1,6 @@
-//! Membership routes: who may read and write a vault.
-//!
-//! The owner's row is written when the vault is created and can never be
-//! changed or removed. Everyone else can leave on their own.
+//! Membership routes: who may read and write a vault. The owner's row is
+//! written when the vault is created and can never be changed or removed;
+//! everyone else can leave on their own.
 
 use axum::{extract::State, http::StatusCode};
 use chrono::Utc;
@@ -74,7 +73,7 @@ pub async fn remove(
             if username == user.username {
                 return match membership(&db, vault_id, user.id)? {
                     MemberRole::Owner => Err(ApiError::forbidden()),
-                    _ => db.remove_membership(vault_id, user.id).map(|_| ()),
+                    _ => db.remove_membership(vault_id, user.id),
                 };
             }
             require_owner(&db, vault_id, user.id)?;
@@ -86,7 +85,7 @@ pub async fn remove(
                 Some(MemberRole::Owner) => return Err(ApiError::forbidden()),
                 Some(_) => {}
             }
-            db.remove_membership(vault_id, target.id).map(|_| ())
+            db.remove_membership(vault_id, target.id)
         })
         .await?;
     Ok(StatusCode::NO_CONTENT)

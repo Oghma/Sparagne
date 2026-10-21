@@ -1,15 +1,14 @@
 import Foundation
 import SparagneCore
 
-/// What the Ricorrenze tab reads off the store and the one list it loads
-/// itself, the agenda of the next 30 days.
+/// What the Ricorrenze tab reads off the store, and the agenda it loads.
 extension AppStore {
     /// How far ahead "Prossimi 30 giorni" looks.
     static let agendaDays = 30
 
     /// Every period of the running templates from the day after `today` to
     /// 30 days on, into `upcomingRecurring` (`RecurringAgenda`). Reads the
-    /// templates already loaded (`loadRecurringTemplates`): the tab calls it
+    /// templates `reload()` already loaded: the tab calls it
     /// again whenever they change, whenever the due list does, and when the
     /// day turns.
     ///

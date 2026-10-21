@@ -35,20 +35,17 @@ struct SparagneApp: App {
                 // ⌘K is the only way into the command palette, so a vault
                 // that is only read keeps it, under the name of what the
                 // panel then is (`QuickAddOverlay.commandsOnly`).
-                Button(
+                post(
                     store?.canWrite == false
                         ? String(localized: "Command Palette\u{2026}")
-                        : String(localized: "Quick Add\u{2026}")
-                ) {
-                    NotificationCenter.default.post(name: .focusQuickAdd, object: nil)
-                }
+                        : String(localized: "Quick Add\u{2026}"),
+                    .focusQuickAdd
+                )
                 .keyboardShortcut("k", modifiers: .command)
 
-                Button(String(localized: "Duplicate Last Row")) {
-                    NotificationCenter.default.post(name: .duplicateLastRow, object: nil)
-                }
-                .keyboardShortcut("d", modifiers: .command)
-                .disabled(store?.canWrite == false)
+                post(String(localized: "Duplicate Last Row"), .duplicateLastRow)
+                    .keyboardShortcut("d", modifiers: .command)
+                    .disabled(store?.canWrite == false)
             }
 
             // The standard View menu: the column is a property of the view,
@@ -71,28 +68,20 @@ struct SparagneApp: App {
             }
 
             CommandGroup(after: .importExport) {
-                Button(String(localized: "Import Statement\u{2026}")) {
-                    NotificationCenter.default.post(name: .importStatement, object: nil)
-                }
-                .keyboardShortcut("i", modifiers: [.command, .shift])
-                .disabled(store?.currentVault == nil || store?.isReadOnly == true)
+                post(String(localized: "Import Statement\u{2026}"), .importStatement)
+                    .keyboardShortcut("i", modifiers: [.command, .shift])
+                    .disabled(store?.currentVault == nil || store?.isReadOnly == true)
 
-                Button(String(localized: "Export CSV\u{2026}")) {
-                    NotificationCenter.default.post(name: .exportCSV, object: nil)
-                }
-                .keyboardShortcut("e", modifiers: .command)
+                post(String(localized: "Export CSV\u{2026}"), .exportCSV)
+                    .keyboardShortcut("e", modifiers: .command)
 
-                Button(String(localized: "Export All Transactions\u{2026}")) {
-                    NotificationCenter.default.post(name: .exportAllTransactions, object: nil)
-                }
-                .disabled(store?.currentVault == nil)
+                post(String(localized: "Export All Transactions\u{2026}"), .exportAllTransactions)
+                    .disabled(store?.currentVault == nil)
 
                 Divider()
 
-                Button(String(localized: "Back Up Database\u{2026}")) {
-                    NotificationCenter.default.post(name: .backupDatabase, object: nil)
-                }
-                .disabled(store == nil)
+                post(String(localized: "Back Up Database\u{2026}"), .backupDatabase)
+                    .disabled(store == nil)
             }
 
             CommandMenu(String(localized: "Ledger")) {
@@ -104,10 +93,8 @@ struct SparagneApp: App {
 
                 Divider()
 
-                Button(String(localized: "Find\u{2026}")) {
-                    NotificationCenter.default.post(name: .focusSearch, object: nil)
-                }
-                .keyboardShortcut("f", modifiers: .command)
+                post(String(localized: "Find\u{2026}"), .focusSearch)
+                    .keyboardShortcut("f", modifiers: .command)
 
                 Divider()
 
@@ -118,31 +105,21 @@ struct SparagneApp: App {
             }
 
             CommandMenu(String(localized: "Vault")) {
-                Button(String(localized: "New Vault\u{2026}")) {
-                    NotificationCenter.default.post(name: .newVault, object: nil)
-                }
-                Button(String(localized: "Rename Vault\u{2026}")) {
-                    NotificationCenter.default.post(name: .renameVault, object: nil)
-                }
-                .disabled(!permissions.mayRename)
+                post(String(localized: "New Vault\u{2026}"), .newVault)
+                post(String(localized: "Rename Vault\u{2026}"), .renameVault)
+                    .disabled(!permissions.mayRename)
                 // Greyed out for a shared vault I do not own: the core and
                 // the server would both refuse the command anyway.
-                Button(String(localized: "Delete Vault\u{2026}")) {
-                    NotificationCenter.default.post(name: .deleteVault, object: nil)
-                }
-                .disabled(!permissions.mayDelete)
+                post(String(localized: "Delete Vault\u{2026}"), .deleteVault)
+                    .disabled(!permissions.mayDelete)
                 // A member's way out of a shared vault; the owner deletes it.
-                Button(String(localized: "Leave Vault\u{2026}")) {
-                    NotificationCenter.default.post(name: .leaveVault, object: nil)
-                }
-                .disabled(!permissions.mayLeave)
+                post(String(localized: "Leave Vault\u{2026}"), .leaveVault)
+                    .disabled(!permissions.mayLeave)
 
                 Divider()
 
-                Button(String(localized: "Manage\u{2026}")) {
-                    NotificationCenter.default.post(name: .openManagement, object: nil)
-                }
-                .keyboardShortcut("m", modifiers: [.command, .shift])
+                post(String(localized: "Manage\u{2026}"), .openManagement)
+                    .keyboardShortcut("m", modifiers: [.command, .shift])
 
                 Button(String(localized: "Wallets, Envelopes & Categories\u{2026}")) { store?.tab = .setup }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
@@ -150,10 +127,8 @@ struct SparagneApp: App {
                 Button(String(localized: "New Recurring\u{2026}")) { store?.requestNewRecurring() }
                 .disabled(store?.canWrite != true)
 
-                Button(String(localized: "Move Between Envelopes\u{2026}")) {
-                    NotificationCenter.default.post(name: .moveBetweenEnvelopes, object: nil)
-                }
-                .disabled(store?.canWrite != true)
+                post(String(localized: "Move Between Envelopes\u{2026}"), .moveBetweenEnvelopes)
+                    .disabled(store?.canWrite != true)
             }
         }
 
@@ -163,6 +138,11 @@ struct SparagneApp: App {
         }
     }
 
+    /// A menu item that only tells the window it was chosen.
+    private func post(_ title: String, _ name: Notification.Name) -> some View {
+        Button(title) { NotificationCenter.default.post(name: name, object: nil) }
+    }
+
     /// The same rules as the top bar's vault selector and the palette
     /// (`VaultPermissions`).
     private var permissions: VaultPermissions {
@@ -170,11 +150,7 @@ struct SparagneApp: App {
     }
 }
 
-/// Menu commands that act on state of the window's own views (a focus, a
-/// sheet, a file panel) reach them through notifications: the menu bar is a
-/// scene, the ledger is a view, and the only thing they need to agree on is
-/// the name of the action. A command that only changes the store (the tab,
-/// the month, Nuova ricorrenza…) calls it directly.
+/// Menu commands that act on the window's own views (a focus, a sheet, a file panel) reach them by name.
 extension Notification.Name {
     /// ⌘K: opens the quick-add line over the grid.
     static let focusQuickAdd = Notification.Name("it.oghma.sparagne.focusQuickAdd")
@@ -206,9 +182,7 @@ extension Notification.Name {
     static let backupDatabase = Notification.Name("it.oghma.sparagne.backupDatabase")
 }
 
-/// The Settings window: the account when the app has a sync engine, a line
-/// about where the data lives when it has none (a demo database). Painted on
-/// the window's sheet ground, title bar included, like the main window.
+/// The Settings window: the account with a sync engine, where the data lives without one.
 private struct SettingsView: View {
     let engine: SyncEngine?
 

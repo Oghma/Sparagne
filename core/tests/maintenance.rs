@@ -5,88 +5,18 @@
 
 mod common;
 
-use std::path::{Path, PathBuf};
-
-use common::{T0, all, entry, wallet_cmd};
+use common::{
+    T0, TempDb, all, create_vault, entry,
+    sync::{ALL, category, exec, projection, pull, sync, vault_of},
+    wallet_cmd,
+};
 use sparagne_core::{
-    CategoryView, Command, CommandEnvelope, Core, Currency, DomainError, SyncReport, SyncState,
-    TransactionView, VaultSnapshot, sync::PushRequest,
+    Command, CommandEnvelope, Core, DomainError, SyncReport, SyncState, sync::PushRequest,
 };
 use uuid::Uuid;
 
-// ---------------------------------------------------------------------------
-// Harness
-// ---------------------------------------------------------------------------
-
-/// A push or pull limit that is no limit.
-const ALL: usize = usize::MAX;
-
-/// A database path in the temp directory, removed with its WAL files on drop.
-struct TempDb(PathBuf);
-
-impl TempDb {
-    fn new(label: &str) -> Self {
-        Self(std::env::temp_dir().join(format!("sparagne-{label}-{}.sqlite", Uuid::now_v7())))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        for suffix in ["", "-wal", "-shm"] {
-            let _ = std::fs::remove_file(format!("{}{suffix}", self.0.display()));
-        }
-    }
-}
-
-fn exec(core: &mut Core, vault: Uuid, author: &str, command: Command) -> Uuid {
-    core.execute(CommandEnvelope::new(vault, author, command))
-        .unwrap()
-        .result_id
-        .unwrap_or(vault)
-}
-
-fn create_vault(core: &mut Core, name: &str) -> Uuid {
-    core.execute(CommandEnvelope::create_vault("alice", name, Currency::Eur))
-        .unwrap()
-        .result_id
-        .unwrap()
-}
-
 fn spend(amount: i64, wallet: Uuid, category: &str, secs: i64) -> Command {
     Command::Expense(entry(amount, Some(wallet), None, Some(category), secs))
-}
-
-fn category(name: &str) -> Command {
-    Command::CreateCategory {
-        name: name.to_string(),
-    }
-}
-
-/// Push the whole outbox to `server`, fold the answer back, pull, fold back.
-fn sync(client: &mut Core, server: &mut Core, vault: Uuid) {
-    let request = client.push_request(vault, ALL).unwrap();
-    let response = server.serve_push(vault, &request).unwrap();
-    client.apply_push_response(vault, &response).unwrap();
-    let since = client.sync_state(vault).unwrap().last_server_seq;
-    client
-        .integrate_pull(vault, &server.serve_pull(vault, since, ALL).unwrap())
-        .unwrap();
-}
-
-type Projection = (VaultSnapshot, Vec<TransactionView>, Vec<CategoryView>);
-
-fn projection(core: &Core, vault: Uuid) -> Projection {
-    (
-        core.snapshot(vault).unwrap(),
-        core.list_transactions(vault, &all(), 200, None)
-            .unwrap()
-            .items,
-        core.categories(vault, true).unwrap(),
-    )
 }
 
 fn zeros() -> SyncState {
@@ -100,8 +30,7 @@ fn zeros() -> SyncState {
 /// Alice's vault with a wallet and one spend, pushed to `server`.
 fn synced() -> (Core, Core, Uuid, Uuid) {
     let mut server = Core::open_in_memory().unwrap();
-    let mut alice = Core::open_in_memory().unwrap();
-    let vault = create_vault(&mut alice, "Casa");
+    let (mut alice, vault) = vault_of("alice", "Casa");
     let wallet = exec(&mut alice, vault, "alice", wallet_cmd("Cash", 10_000));
     exec(
         &mut alice,
@@ -114,19 +43,15 @@ fn synced() -> (Core, Core, Uuid, Uuid) {
     (server, alice, vault, wallet)
 }
 
-// ---------------------------------------------------------------------------
-// backup_to
-// ---------------------------------------------------------------------------
-
 #[test]
 fn a_backup_opens_with_the_same_vaults_and_transactions() {
     let source = TempDb::new("source");
     let copy = TempDb::new("backup");
     let mut core = Core::open(source.path()).unwrap();
-    let casa = create_vault(&mut core, "Casa");
+    let casa = create_vault(&mut core, "alice", "Casa");
     let wallet = exec(&mut core, casa, "alice", wallet_cmd("Cash", 10_000));
     exec(&mut core, casa, "alice", spend(12_00, wallet, "Spesa", T0));
-    let viaggi = create_vault(&mut core, "Viaggi");
+    let viaggi = create_vault(&mut core, "alice", "Viaggi");
     let casa_before = projection(&core, casa);
 
     core.backup_to(copy.path()).unwrap();
@@ -180,14 +105,10 @@ fn a_backup_never_overwrites_a_file() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// forget_vault
-// ---------------------------------------------------------------------------
-
 #[test]
 fn forgetting_a_live_vault_drops_projection_log_outbox_and_rejections() {
     let (_server, mut alice, vault, wallet) = synced();
-    let other = create_vault(&mut alice, "Altro");
+    let other = create_vault(&mut alice, "alice", "Altro");
     let other_before = projection(&alice, other);
 
     // One refused command and two still waiting in the outbox.
@@ -261,7 +182,7 @@ fn a_forgotten_vault_joins_again_with_a_pull_from_zero() {
     assert_eq!(alice.forget_vault(vault).unwrap(), 1);
 
     let report = alice
-        .integrate_pull(vault, &server.serve_pull(vault, 0, ALL).unwrap())
+        .integrate_pull(vault, &pull(&server, vault, 0))
         .unwrap();
     assert!(report.rebased);
     assert_eq!(report.received, 3);
@@ -283,10 +204,6 @@ fn a_forgotten_vault_joins_again_with_a_pull_from_zero() {
         }
     );
 }
-
-// ---------------------------------------------------------------------------
-// reject_outbox
-// ---------------------------------------------------------------------------
 
 #[test]
 fn reject_outbox_turns_the_whole_outbox_into_rejections() {

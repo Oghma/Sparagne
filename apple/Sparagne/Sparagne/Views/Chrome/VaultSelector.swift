@@ -55,11 +55,7 @@ struct VaultSelector: View {
         } label: {
             label
         }
-        // A plain button style keeps the label as drawn: the default menu
-        // button would replace it with a system pop-up button.
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
+        .plainMenu()
         .fixedSize()
         .accessibilityLabel(String(localized: "Vault"))
         .accessibilityValue(name)

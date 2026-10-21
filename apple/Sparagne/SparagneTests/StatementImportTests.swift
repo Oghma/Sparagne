@@ -9,75 +9,19 @@ import Testing
 /// assertion is about what the vault holds afterwards. No real statement is
 /// used anywhere.
 struct StatementImportTests {
-    // MARK: - Fixtures
-
-    private static let cardHeader = "timestamp,type,description,status,amount,currency,card,"
-        + "card holder name,original amount,original currency,cashback earned,cashback currency,"
-        + "category,spending mode"
-
-    /// A card row; the columns the import does not look at are filled in.
-    private static func cardRow(
-        _ at: String,
-        _ type: String,
-        _ description: String,
-        _ status: String,
-        _ amount: String,
-        currency: String = "EUR",
-        category: String = ""
-    ) -> String {
-        "\(at),\(type),\(description),\(status),\(amount),\(currency),1234,SAM TESTER,"
-            + "\(amount),\(currency),,,\(category),standard"
-    }
-
-    /// Eight rows, newest first as card exports are. Lines count the header,
-    /// so the first row is line 2.
-    private static let card = ([cardHeader] + [
-        cardRow("2026-09-18 19:42:07 UTC", "card_spend", "OSTERIA DEL PONTE", "PENDING", "42.50"), // 2
-        cardRow("2026-09-17 08:15:33 UTC", "card_spend", "FORNO BIANCO", "CLEARED", "3.20", category: "5462 - Bakeries"), // 3
-        cardRow("2026-09-16 12:03:10 UTC", "card_spend", "METRO TICKET", "CLEARED", "2.10"), // 4
-        cardRow("2026-09-15 16:20:00 UTC", "card_refund", "SHOE SHOP", "CLEARED", "-24.99"), // 5
-        cardRow("2026-09-14 21:05:12 UTC", "card_spend", "CINEMA NUOVO", "CANCELLED", "9.00"), // 6
-        cardRow("2026-09-13 10:00:00 UTC", "topup", "Top-up from bank", "", "150.00"), // 7
-        cardRow("2026-09-12 09:30:00 UTC", "liquid_deposit", "Liquid deposit", "", "50.00", currency: "USD"), // 8
-        cardRow("2026-09-11 18:22:41 UTC", "card_spend", "GREEN GROCER", "CLEARED", "14.75"), // 9
-    ]).joined(separator: "\n") + "\n"
-
-    private static func defaults() throws -> UserDefaults {
-        try #require(UserDefaults(suiteName: "sparagne.tests.\(UUID().uuidString)"))
-    }
-
     /// Vault `Main` with the card wallet `Card` and a `Bank` holding 1000.00.
     /// A past `forno bianco` filed under Bakery gives the history something
-    /// to suggest; it is added while `Card` is the only wallet, so the
-    /// quick-add needs no wallet marker.
+    /// to suggest.
     private static func vault() async throws -> (store: AppStore, card: Uuid, bank: Uuid) {
-        let store = AppStore(core: try CoreActor.inMemory(author: "tester"), defaults: try defaults())
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Card", openingBalance: 0)
-        await store.submit(quickAdd: "-3.20 forno bianco #Bakery")
-        await store.createWallet(name: "Bank", openingBalance: 100_000)
-        #expect(store.presentedError == nil)
-        let card = try #require(store.wallets.first { $0.name == "Card" }).id
-        let bank = try #require(store.wallets.first { $0.name == "Bank" }).id
-        return (store, card, bank)
-    }
-
-    private static func row(_ model: StatementImportModel, line: UInt32) throws -> StatementRow {
-        try #require(model.preview?.rows.first { $0.line == line })
-    }
-
-    /// Every transaction of the vault, voided and transfers included.
-    private static func transactions(_ store: AppStore) async throws -> [TransactionView] {
-        let vaultId = try #require(store.currentVault?.id)
-        let filter = TransactionFilter(includeVoided: true, includeTransfers: true, ascending: true)
-        return try await store.core.transactions(vaultId: vaultId, filter: filter, limit: 500, cursor: nil).items
+        let store = try await StatementFixture.vault(typed: ["-3.20 forno bianco #Bakery"], wallets: ["Bank": 100_000])
+        return (store, try StatementFixture.wallet("Card", in: store), try StatementFixture.wallet("Bank", in: store))
     }
 
     // MARK: - The mapping store
 
     @Test("A remembered mapping comes back for the same vault and header, in any case or padding")
     func mappingStoreRoundTrip() throws {
-        let mappings = StatementMappingStore(defaults: try Self.defaults())
+        let mappings = try StatementFixture.mappings()
         var mapping = StatementImportModel.blankMapping(delimiter: ";")
         mapping.dateColumn = "Data"
         mapping.amountColumn = "Importo"
@@ -93,7 +37,7 @@ struct StatementImportTests {
 
     @Test("Another header or another vault remembers nothing")
     func mappingStoreKeying() throws {
-        let mappings = StatementMappingStore(defaults: try Self.defaults())
+        let mappings = try StatementFixture.mappings()
         let mapping = StatementImportModel.blankMapping(delimiter: ",")
         mappings.remember(mapping, vaultId: "v-1", headers: ["date", "amount"])
 
@@ -117,7 +61,7 @@ struct StatementImportTests {
     @Test("A Latin-1 bank export with no preset opens on a blank continental mapping and previews once mapped")
     func latinBankExport() async throws {
         let (store, card, _) = try await Self.vault()
-        let model = StatementImportModel(store: store, mappings: StatementMappingStore(defaults: try Self.defaults()))
+        let model = StatementImportModel(store: store, mappings: try StatementFixture.mappings())
         let lines = "Data;Importo;Descrizione\n16/09/2026;-3,20;Caff\u{E8} della stazione\n"
         let data = try #require(lines.data(using: .isoLatin1))
         #expect(String(data: data, encoding: .utf8) == nil)
@@ -138,11 +82,88 @@ struct StatementImportTests {
         model.walletId = card
         await model.refreshPreview()
 
-        let row = try Self.row(model, line: 2)
+        let row = try StatementFixture.row(model, line: 2)
         #expect(row.status == .new)
         #expect(row.kind == .expense)
         #expect(row.amount == 320)
         #expect(row.payee == "Caffè della stazione")
+    }
+
+    // MARK: - Guessing the formats
+
+    /// A current-account export in Italian, split on `;`: date-times with a
+    /// space, amounts with a decimal point, which the blank `;` mapping
+    /// takes for day-first dates and decimal commas.
+    private static let current = [
+        "Tipo;Prodotto;Data di inizio;Data di completamento;Descrizione;Importo;Costo;Valuta;State;Saldo",
+        "Pagamento;Attuale;2026-10-16 13:34:44;2026-10-16 13:34:45;To Tobia Tesan;-100.79;0.00;EUR;COMPLETATO;507.26",
+    ].joined(separator: "\n") + "\n"
+
+    /// `model` with the current-account export's date and amount columns
+    /// picked into `wallet`, and previewed.
+    private static func pickColumns(_ model: StatementImportModel, into wallet: Uuid) async {
+        model.mapping.dateColumn = "Data di inizio"
+        model.mapping.amountColumn = "Importo"
+        model.mapping.descriptionColumns = ["Descrizione"]
+        model.walletId = wallet
+        await model.refreshPreview()
+    }
+
+    @Test("A blank mapping guesses date-times and a decimal point from the columns picked, and the row reads")
+    func blankMappingGuessesFormats() async throws {
+        let (store, card, _) = try await Self.vault()
+        let model = StatementImportModel(store: store, mappings: try StatementFixture.mappings())
+        await model.load(data: Data(Self.current.utf8), fileName: "account-statement.csv")
+        #expect(model.source == .blank)
+        #expect(model.mapping.dateFormat == .dayMonthYear)
+        #expect(model.mapping.decimalComma)
+
+        await Self.pickColumns(model, into: card)
+
+        #expect(model.mapping.dateFormat == .isoDateTime)
+        #expect(!model.mapping.decimalComma)
+        // The picker shows the format as the file writes it.
+        #expect(StatementDateChoice(model.mapping.dateFormat).label == "2026-09-16 08:54:40")
+        let row = try StatementFixture.row(model, line: 2)
+        #expect(row.status == .new)
+        #expect(row.kind == .expense)
+        #expect(row.amount == 10_079)
+        #expect(row.payee == "To Tobia Tesan")
+    }
+
+    @Test("A format set by hand is never guessed over, until another file is read")
+    func handSetFormatStays() async throws {
+        let (store, card, _) = try await Self.vault()
+        let model = StatementImportModel(store: store, mappings: try StatementFixture.mappings())
+        await model.load(data: Data(Self.current.utf8), fileName: "account-statement.csv")
+
+        // The switch set by hand, to what the blank mapping already says.
+        model.chooseDecimalComma(true)
+        await Self.pickColumns(model, into: card)
+
+        #expect(model.mapping.dateFormat == .isoDateTime)
+        #expect(model.mapping.decimalComma)
+        let row = try StatementFixture.row(model, line: 2)
+        guard case .invalid(let code, _) = row.status else {
+            Issue.record("the amount should not read with a decimal comma, got \(row.status)")
+            return
+        }
+        #expect(code == "invalid_amount")
+
+        // A date format picked by hand stays whatever column is picked next,
+        // and so does the switch.
+        model.chooseDateFormat(.dateTimeUtc)
+        model.mapping.dateColumn = "Data di completamento"
+        model.mapping.amountColumn = "Saldo"
+        await model.refreshPreview()
+        #expect(model.mapping.dateFormat == .dateTimeUtc)
+        #expect(model.mapping.decimalComma)
+
+        // The same file read again starts over.
+        await model.load(data: Data(Self.current.utf8), fileName: "account-statement.csv")
+        await Self.pickColumns(model, into: card)
+        #expect(model.mapping.dateFormat == .isoDateTime)
+        #expect(!model.mapping.decimalComma)
     }
 
     // MARK: - Preview and import
@@ -150,9 +171,9 @@ struct StatementImportTests {
     @Test("The card header opens on the preset, and the preview counts every row")
     func presetAndPreviewCounts() async throws {
         let (store, card, _) = try await Self.vault()
-        let model = StatementImportModel(store: store, mappings: StatementMappingStore(defaults: try Self.defaults()))
+        let model = StatementImportModel(store: store, mappings: try StatementFixture.mappings())
 
-        await model.load(data: Data(Self.card.utf8), fileName: "card.csv")
+        await model.load(data: Data(StatementFixture.cardOfEveryKind.utf8), fileName: "card.csv")
 
         #expect(model.detection?.presetId == "card-transactions")
         guard case .preset = model.source else {
@@ -170,26 +191,26 @@ struct StatementImportTests {
 
         #expect(model.previewProblem == nil)
         #expect(model.counts == .init(new: 4, alreadyImported: 0, skipped: 4, invalid: 0, rounded: 0))
-        let pending = try Self.row(model, line: 2)
+        let pending = try StatementFixture.row(model, line: 2)
         #expect(pending.status == .skipped(code: "skipped_status", reason: "status PENDING is skipped"))
-        let cancelled = try Self.row(model, line: 6)
+        let cancelled = try StatementFixture.row(model, line: 6)
         #expect(StatementText.status(cancelled.status) == StatementText.skipped("skipped_status"))
-        let topup = try Self.row(model, line: 7)
+        let topup = try StatementFixture.row(model, line: 7)
         #expect(topup.kind == .transferWallet)
         guard case .skipped(let code, _) = topup.status else {
             Issue.record("the top-up should wait for its wallet")
             return
         }
         #expect(code == "needs_wallet")
-        let deposit = try Self.row(model, line: 8)
+        let deposit = try StatementFixture.row(model, line: 8)
         guard case .skipped(let depositCode, _) = deposit.status else {
             Issue.record("the liquid deposit should be skipped by its rule")
             return
         }
         #expect(depositCode == "skipped_by_rule")
         // The history's category for the payee fills the field in.
-        let bakery = try Self.row(model, line: 3)
-        let metro = try Self.row(model, line: 4)
+        let bakery = try StatementFixture.row(model, line: 3)
+        let metro = try StatementFixture.row(model, line: 4)
         #expect(bakery.matchedCategory == nil)
         #expect(model.categoryText(for: bakery) == "Bakery")
         #expect(model.categoryText(for: metro) == "")
@@ -198,8 +219,8 @@ struct StatementImportTests {
     @Test("A top-up with its source wallet chosen becomes a transfer into the card")
     func topupBecomesTransfer() async throws {
         let (store, card, bank) = try await Self.vault()
-        let model = StatementImportModel(store: store, mappings: StatementMappingStore(defaults: try Self.defaults()))
-        await model.load(data: Data(Self.card.utf8), fileName: "card.csv")
+        let model = StatementImportModel(store: store, mappings: try StatementFixture.mappings())
+        await model.load(data: Data(StatementFixture.cardOfEveryKind.utf8), fileName: "card.csv")
         model.walletId = card
         // The target is not offered as the other side of a transfer.
         #expect(model.counterWallets.map(\.id) == [bank])
@@ -210,7 +231,7 @@ struct StatementImportTests {
             .withCounterWallet(bank)
         await model.refreshPreview()
 
-        let topup = try Self.row(model, line: 7)
+        let topup = try StatementFixture.row(model, line: 7)
         #expect(topup.status == .new)
         #expect(topup.counterWalletId == bank)
         #expect(model.counts.new == 5)
@@ -220,7 +241,7 @@ struct StatementImportTests {
         #expect(model.problem == nil)
         #expect(model.step == .report)
         #expect(model.report?.executed == 5)
-        let imported = try await Self.transactions(store)
+        let imported = try await StatementFixture.transactions(store)
         let transfer = try #require(imported.first { $0.kind == .transferWallet })
         #expect(transfer.fromId == bank)
         #expect(transfer.toId == card)
@@ -236,9 +257,9 @@ struct StatementImportTests {
     @Test("A typed category and a ticked-off row reach the import, and the next import finds nothing new")
     func overridesAndReimport() async throws {
         let (store, card, bank) = try await Self.vault()
-        let mappings = StatementMappingStore(defaults: try Self.defaults())
+        let mappings = try StatementFixture.mappings()
         let model = StatementImportModel(store: store, mappings: mappings)
-        await model.load(data: Data(Self.card.utf8), fileName: "card.csv")
+        await model.load(data: Data(StatementFixture.cardOfEveryKind.utf8), fileName: "card.csv")
         model.walletId = card
         let topupRule = try #require(model.mapping.typeRules.firstIndex { $0.value == "topup" })
         model.mapping.typeRules[topupRule].action = .transferIn(fromWalletId: bank)
@@ -264,7 +285,7 @@ struct StatementImportTests {
         #expect(report.deduplicated == 0)
         #expect(report.rejected.isEmpty)
 
-        let imported = try await Self.transactions(store)
+        let imported = try await StatementFixture.transactions(store)
         #expect(imported.first { $0.note == "FORNO BIANCO" }?.category == "Bakery")
         #expect(imported.first { $0.note == "METRO TICKET" }?.category == "Transport")
         #expect(imported.first { $0.note == "SHOE SHOP" }?.kind == .refund)
@@ -275,7 +296,7 @@ struct StatementImportTests {
         // Same file again, in a new sheet: the mapping is remembered, top-up
         // wallet included, and every row already in the vault is recognised.
         let again = StatementImportModel(store: store, mappings: mappings)
-        await again.load(data: Data(Self.card.utf8), fileName: "card.csv")
+        await again.load(data: Data(StatementFixture.cardOfEveryKind.utf8), fileName: "card.csv")
         #expect(again.source == .remembered)
         #expect(again.mapping.typeRules[topupRule].action == .transferIn(fromWalletId: bank))
         again.walletId = card
@@ -283,7 +304,7 @@ struct StatementImportTests {
 
         // The row ticked off last time was never imported, so it is new.
         #expect(again.counts == .init(new: 1, alreadyImported: 4, skipped: 3, invalid: 0, rounded: 0))
-        let grocer = try Self.row(again, line: 9)
+        let grocer = try StatementFixture.row(again, line: 9)
         #expect(grocer.status == .new)
         again.setIncluded(false, line: 9)
 
@@ -291,7 +312,7 @@ struct StatementImportTests {
 
         #expect(again.report?.executed == 0)
         #expect(again.report?.deduplicated == 4)
-        let after = try await Self.transactions(store)
+        let after = try await StatementFixture.transactions(store)
         #expect(after.count == imported.count)
     }
 
@@ -300,12 +321,12 @@ struct StatementImportTests {
     @Test("The step strip goes back to any page passed, ahead only as far as the footer's button, and nowhere after the import")
     func reachableSteps() async throws {
         let (store, card, _) = try await Self.vault()
-        let model = StatementImportModel(store: store, mappings: StatementMappingStore(defaults: try Self.defaults()))
+        let model = StatementImportModel(store: store, mappings: try StatementFixture.mappings())
         #expect(model.isReachable(.file))
         #expect(!model.isReachable(.mapping))
         #expect(!model.isReachable(.review))
 
-        await model.load(data: Data(Self.card.utf8), fileName: "card.csv")
+        await model.load(data: Data(StatementFixture.cardOfEveryKind.utf8), fileName: "card.csv")
         #expect(model.isReachable(.file))
         #expect(model.isReachable(.mapping))
         // Two wallets and none chosen yet: nothing to review.
@@ -339,7 +360,7 @@ struct StatementImportTests {
 
     @Test("Every status code the core sends has its own translation")
     func statusCodesAreTranslated() {
-        let skipped = ["skipped_by_rule", "skipped_status", "needs_wallet", "zero_amount", "skipped_by_you"]
+        let skipped = ["skipped_by_rule", "skipped_status", "needs_wallet", "zero_amount", "skipped_by_you", "before_start"]
             .map(StatementText.skipped)
         let invalid = ["invalid_row", "invalid_date", "invalid_amount", "currency_mismatch"]
             .map(StatementText.invalid)

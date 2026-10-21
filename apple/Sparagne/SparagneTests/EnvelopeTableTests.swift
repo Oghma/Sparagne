@@ -9,21 +9,6 @@ import Testing
 /// a refused amount points at. The draft is a plain struct, so none of this
 /// needs a view.
 struct EnvelopeTableTests {
-    private static func makeStore() throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.envelopes.\(UUID().uuidString)"))
-        return AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
-    }
-
-    /// A vault whose Unallocated holds the wallet's opening balance, which is
-    /// what a new envelope's allocation is moved out of.
-    private static func vault() async throws -> AppStore {
-        let store = try makeStore()
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
-        #expect(store.presentedError == nil)
-        return store
-    }
-
     /// An envelope as the store would hand it to the table.
     private static func flow(
         name: String = "Casa",
@@ -160,7 +145,7 @@ struct EnvelopeTableTests {
 
     @Test("The empty line parses its kind, its cap and its allocation, and creates the envelope")
     func newLineCreates() async throws {
-        let store = try await Self.vault()
+        let store = try await TestStore.make()
         var line = EnvelopeDraft()
         line.name = "  Emergenza  "
         line.kind = .income
@@ -195,7 +180,7 @@ struct EnvelopeTableTests {
 
     @Test("The diff reaches the core as an update of the changed fields only")
     func patchReachesTheStore() async throws {
-        let store = try await Self.vault()
+        let store = try await TestStore.make()
         await store.createEnvelope(name: "Casa", mode: .netCapped(cap: 150_000_00), allowNegative: false, openingAllocation: 0)
         let flow = try #require(store.flows.first { $0.name == "Casa" })
 

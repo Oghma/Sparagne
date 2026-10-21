@@ -1,17 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// The figures of the Mastro's status line: average,
-/// count and sum, the way a spreadsheet's status bar reads the cells it is
-/// pointed at.
-///
-/// The scope is what the user is looking at: two or more picked rows when
-/// there are, otherwise every row on screen. One picked row is not a range
-/// worth summing (a plain click picks nothing, a ⌘-click picks one), so it
-/// counts as no selection rather than as a sum of a single amount.
-///
-/// Pure, so the arithmetic is tested without a window
-/// (`SparagneTests/SheetStatsTests.swift`).
+/// The Mastro status line's average, count and sum: two or more picked rows, else every row.
 struct SheetStats: Equatable, Sendable {
     enum Scope: Equatable, Sendable {
         /// Every row on screen.

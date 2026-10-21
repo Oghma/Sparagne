@@ -1,9 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// Opens the database, then hands the window over to `MainWindow`. Owns the
-/// store through a binding so `SparagneApp` can share the same instance
-/// with its menu commands, the Settings scene and the app delegate.
+/// Opens the database and hands the window to `MainWindow`; the store is shared with the menus, Settings and the app delegate.
 struct ContentView: View {
     @Binding var store: AppStore?
     @Binding var engine: SyncEngine?
@@ -29,38 +27,30 @@ struct ContentView: View {
     private func open() async {
         guard store == nil, launchFailure == nil else { return }
         do {
-            if let database = LaunchOptions.database {
-                // Another database, with no engine: nothing in it is pushed,
-                // and the window has no account or sharing to offer. New rows
-                // are signed with the name chosen for rows written offline.
-                let core = try CoreActor.onDisk(named: database, author: AccountStore.loggedOutAuthor())
-                let opened = AppStore(core: core, defaultCategories: DefaultCategories.forAppLanguage())
-                if let tab = LaunchOptions.tab { opened.tab = tab }
-                store = opened
-                await opened.bootstrap()
-                return
-            }
-            let core = try CoreActor.onDisk()
+            // Another database has no engine: nothing in it is pushed, and
+            // the window has no account or sharing to offer. Its new rows are
+            // signed with the name chosen for rows written offline.
+            let other = LaunchOptions.database
+            let core = try other.map { try CoreActor.onDisk(named: $0, author: AccountStore.loggedOutAuthor()) }
+                ?? CoreActor.onDisk()
             let opened = AppStore(core: core, defaultCategories: DefaultCategories.forAppLanguage())
             if let tab = LaunchOptions.tab { opened.tab = tab }
-            // The engine adopts the account's username as the author and
-            // starts the first sync right after bootstrap.
-            // It prepares before the bootstrap so the
-            // first command is already signed with the account's name.
-            let sync = SyncEngine(core: core, store: opened, account: AccountStore())
+            let sync = other == nil ? SyncEngine(core: core, store: opened, account: AccountStore()) : nil
             store = opened
             engine = sync
-            await sync.prepare()
+            // The engine adopts the account's username before the bootstrap,
+            // so the first command is already signed with it, and starts the
+            // first sync right after.
+            await sync?.prepare()
             await opened.bootstrap()
-            sync.start()
+            sync?.start()
         } catch {
             launchFailure = error.localizedDescription
         }
     }
 }
 
-/// The single window: the four sheets behind the tab bar, plus the modal
-/// sheets, the alerts and the undo toast.
+/// The single window: the sheet tabs, the modal sheets, the alerts and the undo toasts.
 struct MainWindow: View {
     @Bindable var store: AppStore
     /// `nil` only before the database is open.
@@ -70,8 +60,7 @@ struct MainWindow: View {
     @State private var openedLaunchSheet = false
     @Environment(\.openSettings) private var openSettings
 
-    /// The sheets the window can present. Associated values seed the sheet
-    /// with the entity being renamed or edited.
+    /// The sheets the window presents, seeded with the vault they are about.
     enum SheetKind: Identifiable {
         case vault
         case renameVault(VaultView)
@@ -142,29 +131,15 @@ struct MainWindow: View {
                 // the cache from the last round stands in meanwhile.
                 await engine?.refreshMembers(ofVault: store.currentVault?.id)
             }
-            .onReceive(NotificationCenter.default.publisher(for: .openManagement)) { _ in
-                sheet = .manage
-            }
+            .onPosted(.openManagement) { sheet = .manage }
             // The Vault menu and the palette act on the vault on screen; the
             // management sheet seeds the same sheets with the vault it shows.
-            .onReceive(NotificationCenter.default.publisher(for: .newVault)) { _ in
-                sheet = .vault
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .renameVault)) { _ in
-                if let vault = store.currentVault { sheet = .renameVault(vault) }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .deleteVault)) { _ in
-                if let vault = store.currentVault { sheet = .deleteVault(vault) }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .leaveVault)) { _ in
-                if let vault = store.currentVault { sheet = .leaveVault(vault) }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .importStatement)) { _ in
-                if store.currentVault != nil { sheet = .importStatement }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .moveBetweenEnvelopes)) { _ in
-                if store.canWrite { sheet = .moveBetweenEnvelopes }
-            }
+            .onPosted(.newVault) { sheet = .vault }
+            .onPosted(.renameVault) { if let vault = store.currentVault { sheet = .renameVault(vault) } }
+            .onPosted(.deleteVault) { if let vault = store.currentVault { sheet = .deleteVault(vault) } }
+            .onPosted(.leaveVault) { if let vault = store.currentVault { sheet = .leaveVault(vault) } }
+            .onPosted(.importStatement) { if store.currentVault != nil { sheet = .importStatement } }
+            .onPosted(.moveBetweenEnvelopes) { if store.canWrite { sheet = .moveBetweenEnvelopes } }
             // Back Up Database and Export All Transactions: file panels owned
             // by the exporter (`Support/VaultExporter.swift`).
             .modifier(VaultExportHandlers(store: store))
@@ -262,9 +237,16 @@ struct MainWindow: View {
         case .manage:
             ManagementSheet(store: store, engine: engine, present: { sheet = $0 })
         case .importStatement:
-            StatementImportSheet(store: store)
+            StatementImportSheet(store: store, engine: engine)
         case .moveBetweenEnvelopes:
             EnvelopeMoveSheet(store: store)
         }
+    }
+}
+
+private extension View {
+    /// `action` whenever a menu item or the palette posts `name`.
+    func onPosted(_ name: Notification.Name, perform action: @escaping () -> Void) -> some View {
+        onReceive(NotificationCenter.default.publisher(for: name)) { _ in action() }
     }
 }

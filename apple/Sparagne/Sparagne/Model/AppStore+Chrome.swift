@@ -1,20 +1,14 @@
 import Foundation
 import SparagneCore
 
-/// What the window's chrome reads off the store: the top bar's due pill and
-/// the Ricorrenze tab's count.
+/// What the window's chrome reads off the store, and the reveals the RIEPILOGO asks for.
 extension AppStore {
     /// Every period waiting for a decision, over all the templates: a
     /// template three months behind counts three times, since each period is
-    /// confirmed or skipped on its own.
-    var dueRecurringCount: Int {
-        pendingRecurringItems.reduce(0) { $0 + $1.due.count }
-    }
-
-    /// The due count the chrome shows: none on a vault the account only
+    /// confirmed or skipped on its own. None on a vault the account only
     /// reads, where nothing can be confirmed or skipped.
     var actionableDueCount: Int {
-        isReadOnly ? 0 : dueRecurringCount
+        isReadOnly ? 0 : pendingRecurringItems.reduce(0) { $0 + $1.due.count }
     }
 
     /// A row of the RIEPILOGO was clicked, one of its top expenses or the
@@ -77,11 +71,6 @@ extension AppStore {
             from: CoreDate.utcString(MonthKey(year: month.year, month: 1).start()),
             to: month.bounds().to,
             kinds: [.income, .expense, .refund],
-            includeVoided: false,
-            includeTransfers: false,
-            walletId: nil,
-            flowId: nil,
-            text: nil,
             person: person,
             ascending: true
         )
@@ -94,7 +83,7 @@ extension AppStore {
                     limit: Self.pageSize,
                     cursor: cursor
                 )
-                if let row = page.items.first(where: Self.isUncategorized) {
+                if let row = page.items.first(where: { TransactionRow.isUncategorized($0.category, isSystem: $0.categoryIsSystem) }) {
                     reveal(
                         transactionId: row.id,
                         occurredAt: row.occurredAt,
@@ -109,11 +98,5 @@ extension AppStore {
             return
         }
         tab = .ledger
-    }
-
-    /// The system category's stored name, not its localized label: the core
-    /// keeps it in English whatever the window's language.
-    private static func isUncategorized(_ view: TransactionView) -> Bool {
-        view.categoryIsSystem && view.category.lowercased() == "uncategorized"
     }
 }

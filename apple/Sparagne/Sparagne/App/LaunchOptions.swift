@@ -1,30 +1,21 @@
 import Foundation
 
-/// What the command line can change about one launch.
-///
-/// `-SparagneDatabase demo.sqlite` opens another database in the app's folder
-/// instead of the real one, for trying the app on made-up rows: the
-/// development fixture writes one (`core/examples/seed.rs`). A value that
-/// starts with `/` or `~` is a path, which the sandbox of a signed build will
-/// not let the app open. Nothing in that database is synced, so its rows,
-/// signed by people who are not the account, never reach a server.
-///
-/// `-SparagneTab ledger` opens the window on one sheet tab (`summary`,
-/// `ledger`, `recurring`, `allocation`, `setup`), and `-SparagneSheet manage` opens one of
-/// the window's sheets or the Settings window, so a screenshot of either
-/// needs no keyboard driving.
-///
-/// Read from the arguments alone, never from the saved preferences, so the
-/// option lasts one launch and cannot leave the app on the wrong file.
+/// What the command line changes about one launch, read from the arguments alone so it lasts that launch.
 enum LaunchOptions {
     static let databaseKey = "SparagneDatabase"
     static let tabKey = "SparagneTab"
     static let sheetKey = "SparagneSheet"
 
-    /// The other database, `nil` for the real one.
-    static var database: String? {
-        database(in: UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain))
+    /// The launch's own arguments, never the saved preferences.
+    private static var arguments: [String: Any] {
+        UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
     }
+
+    /// `-SparagneDatabase demo.sqlite`: another database in the app's folder,
+    /// never synced, its rows signed by people who are not the account; a value
+    /// starting with `/` or `~` is a path, which a signed build's sandbox
+    /// refuses. `nil` for the real one.
+    static var database: String? { database(in: arguments) }
 
     static func database(in arguments: [String: Any]) -> String? {
         guard let value = arguments[databaseKey] as? String else { return nil }
@@ -32,10 +23,9 @@ enum LaunchOptions {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// The tab to open on, `nil` for the usual one.
-    static var tab: LedgerTab? {
-        tab(in: UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain))
-    }
+    /// `-SparagneTab ledger`: the tab to open on (`summary`, `ledger`,
+    /// `recurring`, `allocation`, `setup`), `nil` for the usual one.
+    static var tab: LedgerTab? { tab(in: arguments) }
 
     static func tab(in arguments: [String: Any]) -> LedgerTab? {
         guard let value = arguments[tabKey] as? String else { return nil }
@@ -47,9 +37,7 @@ enum LaunchOptions {
     /// `importStatement`, `move`, `rejected` or `settings`,
     /// matched without regard to case. The ones about sharing need an
     /// account, so a demo database opens nothing for them.
-    static var sheet: String? {
-        sheet(in: UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain))
-    }
+    static var sheet: String? { sheet(in: arguments) }
 
     static func sheet(in arguments: [String: Any]) -> String? {
         guard let value = arguments[sheetKey] as? String else { return nil }

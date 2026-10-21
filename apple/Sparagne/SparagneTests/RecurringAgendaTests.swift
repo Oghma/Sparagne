@@ -195,10 +195,7 @@ struct RecurringAgendaTests {
 struct UpcomingRecurringStoreTests {
     @Test("The store's agenda is the running templates' next thirty days")
     func storeAgenda() async throws {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.upcoming.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "tester"), defaults: defaults)
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10_000)
+        let store = try await TestStore.make(vault: "Main", wallet: "Cash", opening: 10_000, author: "tester")
         let today = CoreDate.day(Date())
         await store.createRecurring(
             kind: .expense,
@@ -224,10 +221,7 @@ struct UpcomingRecurringStoreTests {
 
     @Test("The table's next dates are worked out per template: the oldest due period, or the first one ahead")
     func storeNextDates() async throws {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.upcoming.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "tester"), defaults: defaults)
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10_000)
+        let store = try await TestStore.make(vault: "Main", wallet: "Cash", opening: 10_000, author: "tester")
         let today = CoreDate.day(Date())
         let twoDaysAgo = try #require(NaiveDay.adding(-2, to: today))
         let inAWeek = try #require(NaiveDay.adding(7, to: today))

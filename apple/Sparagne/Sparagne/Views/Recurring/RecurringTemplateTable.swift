@@ -8,11 +8,7 @@ enum RecurringSelection: Hashable {
     case new
 }
 
-/// Column geometry of "Modelli", shared by the heading and the rows. The
-/// three text columns take what is left, down to their minimums, which fit
-/// the window's narrowest width beside the inspector: 1176 less the
-/// inspector's 340 and the margins leaves about 800 points, and the widths
-/// below add up to 794. A wider column has to be paid for by another.
+/// Column widths of "Modelli": beside the inspector the narrowest window leaves about 800 points, these 794.
 private enum TemplateColumn {
     /// Wide enough for "Enabled", which is longer than the canvas's
     /// "Attiva".
@@ -36,13 +32,9 @@ private enum TemplateColumn {
     /// heading "Titolare".
     static let owner: CGFloat = 64
     static let categoryMinimum: CGFloat = 74
-    static let padding: CGFloat = 8
 }
 
-/// "Modelli": every template as a 26-point row,
-/// archived ones at the bottom, dimmed, with Ripristina. A click selects a
-/// row and the inspector edits it; the switch pauses or resumes it in place;
-/// the last row starts a new one.
+/// "Modelli": every template as a row the inspector edits; the last row starts a new one.
 struct RecurringTemplateTable: View {
     let store: AppStore
     let today: NaiveDate
@@ -59,7 +51,9 @@ struct RecurringTemplateTable: View {
         let names = NameBook(snapshot: store.snapshot)
         Panel(padding: 0) {
             VStack(alignment: .leading, spacing: 0) {
-                RecurringCardHeader(title: String(localized: "Templates")) {
+                // Not `hint:`: without its two-line limit the words sit where
+                // they always have.
+                CardHeading(title: String(localized: "Templates")) {
                     Text(String(localized: "click a row to edit it"))
                         .font(Face.ui(11.5, .medium))
                         .foregroundStyle(Ink.text3)
@@ -88,27 +82,18 @@ struct RecurringTemplateTable: View {
         ])
     }
 
-    // MARK: - Heading
-
     private var header: some View {
-        HStack(spacing: 0) {
-            cell(width: TemplateColumn.enabled) { Text(String(localized: "Enabled")) }
-            cell(minWidth: TemplateColumn.descriptionMinimum) { Text(String(localized: "Description")) }
-            cell(width: TemplateColumn.amount, alignment: .trailing) { Text(String(localized: "Amount")) }
-            cell(minWidth: TemplateColumn.cadenceMinimum) { Text(String(localized: "Cadence")) }
-            cell(width: TemplateColumn.next) { Text(String(localized: "Next")) }
-            cell(width: TemplateColumn.wallet) { Text(String(localized: "Wallet")) }
-            cell(width: TemplateColumn.envelope) { Text(String(localized: "Envelope")) }
-            cell(width: TemplateColumn.owner) { Text(RecurringInspector.ownerLabel) }
-            cell(minWidth: TemplateColumn.categoryMinimum) { Text(String(localized: "Category")) }
+        SetupHeaderRow(horizontalPadding: 4, accessibilityHeader: true) {
+            Text(String(localized: "Enabled")).tableCell(width: TemplateColumn.enabled)
+            Text(String(localized: "Description")).tableCell(minWidth: TemplateColumn.descriptionMinimum)
+            Text(String(localized: "Amount")).tableCell(width: TemplateColumn.amount, alignment: .trailing)
+            Text(String(localized: "Cadence")).tableCell(minWidth: TemplateColumn.cadenceMinimum)
+            Text(String(localized: "Next")).tableCell(width: TemplateColumn.next)
+            Text(String(localized: "Wallet")).tableCell(width: TemplateColumn.wallet)
+            Text(String(localized: "Envelope")).tableCell(width: TemplateColumn.envelope)
+            Text(RecurringInspector.ownerLabel).tableCell(width: TemplateColumn.owner)
+            Text(String(localized: "Category")).tableCell(minWidth: TemplateColumn.categoryMinimum)
         }
-        .font(Face.ui(11, .medium))
-        .foregroundStyle(Ink.text3)
-        .padding(.horizontal, 4)
-        .frame(height: Metrics.headerHeight)
-        .overlay(alignment: .bottom) { Rectangle().fill(Ink.line2).frame(height: 1) }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
     }
 
     // MARK: - A template
@@ -121,16 +106,15 @@ struct RecurringTemplateTable: View {
         let side = template.archived ? Ink.text3 : Ink.text2
         let ownerLeft = store.ownerHasLeft(template)
         return HStack(spacing: 0) {
-            cell(width: TemplateColumn.enabled) {
-                FormSwitch(
-                    label: String(localized: "Enabled \(RecurringTitle.of(template))"),
-                    isOn: template.enabled && !template.archived
-                ) { on in
-                    Task { await store.setRecurringEnabled(template.id, on) }
-                }
-                .disabled(!store.canWrite || template.archived)
+            FormSwitch(
+                label: String(localized: "Enabled \(RecurringTitle.of(template))"),
+                isOn: template.enabled && !template.archived
+            ) { on in
+                Task { await store.setRecurringEnabled(template.id, on) }
             }
-            cell(minWidth: TemplateColumn.descriptionMinimum) {
+            .disabled(!store.canWrite || template.archived)
+            .tableCell(width: TemplateColumn.enabled)
+            Group {
                 if ownerLeft {
                     // The note beside the title where both fit; at the
                     // narrowest widths the owner's red name says it alone.
@@ -145,44 +129,39 @@ struct RecurringTemplateTable: View {
                     Text(RecurringTitle.of(template)).foregroundStyle(ink)
                 }
             }
-            cell(width: TemplateColumn.amount, alignment: .trailing) {
-                Text(RecurringAmount.text(template))
-                    .foregroundStyle(template.archived ? Ink.text3 : template.kind == .income ? Ink.positive : ink)
-                    .accessibilityLabel("\(RecurringAmount.text(template)), \(DueRecurringText.kind(template.kind))")
-            }
-            cell(minWidth: TemplateColumn.cadenceMinimum) {
-                Text(ScheduleFormatting.describe(template.schedule)).foregroundStyle(side)
-            }
-            cell(width: TemplateColumn.next) { nextCell(template, ink: ink) }
-            cell(width: TemplateColumn.wallet) {
-                Text(DueRecurringText.wallet(template, names: names)).foregroundStyle(side)
-            }
-            cell(width: TemplateColumn.envelope) {
-                Text(DueRecurringText.envelope(template, names: names)).foregroundStyle(side)
-            }
-            cell(width: TemplateColumn.owner) {
-                // An owner who left the vault: its periods wait for another.
-                Text(template.owner)
-                    .foregroundStyle(ownerLeft && !template.archived ? Ink.negative : side)
-                    .help(ifAny: ownerLeft ? AppStore.noLongerAMember : nil)
-                    .accessibilityLabel(
-                        ([RecurringInspector.ownerLabel, template.owner] + (ownerLeft ? [AppStore.noLongerAMember] : []))
-                            .joined(separator: ", ")
-                    )
-            }
-            cell(minWidth: TemplateColumn.categoryMinimum) {
-                Text(template.category.flatMap { $0.isEmpty ? nil : $0 } ?? TransactionRow.placeholder)
-                    .foregroundStyle(side)
-            }
+            .tableCell(minWidth: TemplateColumn.descriptionMinimum)
+            Text(RecurringAmount.text(template))
+                .foregroundStyle(template.archived ? Ink.text3 : template.kind == .income ? Ink.positive : ink)
+                .accessibilityLabel("\(RecurringAmount.text(template)), \(DueRecurringText.kind(template.kind))")
+                .tableCell(width: TemplateColumn.amount, alignment: .trailing)
+            Text(ScheduleFormatting.describe(template.schedule)).foregroundStyle(side)
+                .tableCell(minWidth: TemplateColumn.cadenceMinimum)
+            nextCell(template, ink: ink).tableCell(width: TemplateColumn.next)
+            Text(DueRecurringText.wallet(template, names: names)).foregroundStyle(side)
+                .tableCell(width: TemplateColumn.wallet)
+            Text(DueRecurringText.envelope(template, names: names)).foregroundStyle(side)
+                .tableCell(width: TemplateColumn.envelope)
+            // An owner who left the vault: its periods wait for another.
+            Text(template.owner)
+                .foregroundStyle(ownerLeft && !template.archived ? Ink.negative : side)
+                .help(ifAny: ownerLeft ? AppStore.noLongerAMember : nil)
+                .accessibilityLabel(
+                    ([RecurringInspector.ownerLabel, template.owner] + (ownerLeft ? [AppStore.noLongerAMember] : []))
+                        .joined(separator: ", ")
+                )
+                .tableCell(width: TemplateColumn.owner)
+            Text(template.category.flatMap { $0.isEmpty ? nil : $0 } ?? TransactionRow.placeholder)
+                .foregroundStyle(side)
+                .tableCell(minWidth: TemplateColumn.categoryMinimum)
         }
-        .font(Face.ui(12))
+        .font(Face.row)
         .padding(.horizontal, 4)
         .frame(height: 26)
         .background(background(key, isSelected: isSelected))
         .overlay(alignment: .bottom) { Rectangle().fill(Ink.rowLine).frame(height: 1) }
         .contentShape(Rectangle())
         .onTapGesture { select(key) }
-        .onHover { inside in hover(key, inside) }
+        .hoverId($hovered, key)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         .accessibilityAction(named: String(localized: "Edit")) { select(key) }
@@ -239,66 +218,35 @@ struct RecurringTemplateTable: View {
     private var newRow: some View {
         let key = RecurringSelection.new
         return HStack(spacing: 0) {
-            cell(width: TemplateColumn.enabled, alignment: .center) {
-                Image(systemName: "plus")
-                    .font(.system(size: 10, weight: .bold))
-                    .accessibilityHidden(true)
-            }
-            cell(minWidth: TemplateColumn.descriptionMinimum) {
-                Text(String(localized: "New recurring entry\u{2026}"))
-            }
-            cell(width: TemplateColumn.amount, alignment: .trailing) { Text(LedgerMoney.bare(0)) }
-            cell(minWidth: TemplateColumn.cadenceMinimum) { Text(ScheduleFormatting.every(1, .month)) }
-            cell(width: TemplateColumn.next) { Text(verbatim: "") }
-            cell(width: TemplateColumn.wallet) { Text(verbatim: "") }
-            cell(width: TemplateColumn.envelope) { Text(verbatim: "") }
-            cell(width: TemplateColumn.owner) { Text(store.currentAuthor) }
-            cell(minWidth: TemplateColumn.categoryMinimum) { Text(verbatim: "") }
+            Image(systemName: "plus")
+                .font(.system(size: 10, weight: .bold))
+                .accessibilityHidden(true)
+                .tableCell(width: TemplateColumn.enabled, alignment: .center)
+            Text(String(localized: "New recurring entry\u{2026}")).tableCell(minWidth: TemplateColumn.descriptionMinimum)
+            Text(LedgerMoney.bare(0)).tableCell(width: TemplateColumn.amount, alignment: .trailing)
+            Text(ScheduleFormatting.every(1, .month)).tableCell(minWidth: TemplateColumn.cadenceMinimum)
+            Text(verbatim: "").tableCell(width: TemplateColumn.next)
+            Text(verbatim: "").tableCell(width: TemplateColumn.wallet)
+            Text(verbatim: "").tableCell(width: TemplateColumn.envelope)
+            Text(store.currentAuthor).tableCell(width: TemplateColumn.owner)
+            Text(verbatim: "").tableCell(minWidth: TemplateColumn.categoryMinimum)
         }
-        .font(Face.ui(12))
+        .font(Face.row)
         .foregroundStyle(selection == key ? Ink.text2 : Ink.text3)
         .padding(.horizontal, 4)
         .frame(height: 26)
         .background(background(key, isSelected: selection == key))
         .contentShape(Rectangle())
         .onTapGesture { select(key) }
-        .onHover { inside in hover(key, inside) }
+        .hoverId($hovered, key)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(localized: "New recurring entry\u{2026}"))
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { select(key) }
     }
 
-    // MARK: - Pieces
-
     private func background(_ key: RecurringSelection, isSelected: Bool) -> Color {
         if isSelected { return Ink.accent.opacity(0.14) }
         return hovered == key ? Ink.raised : .clear
-    }
-
-    private func hover(_ key: RecurringSelection, _ inside: Bool) {
-        if inside {
-            hovered = key
-        } else if hovered == key {
-            hovered = nil
-        }
-    }
-
-    private func cell<Content: View>(
-        width: CGFloat? = nil,
-        minWidth: CGFloat? = nil,
-        alignment: Alignment = .leading,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        content()
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .padding(.horizontal, TemplateColumn.padding)
-            .frame(
-                minWidth: width ?? minWidth,
-                idealWidth: width,
-                maxWidth: width ?? .infinity,
-                alignment: alignment
-            )
     }
 }

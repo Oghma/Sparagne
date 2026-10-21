@@ -122,12 +122,68 @@ the plan as it is. Each transfer is an ordinary ledger row, the same as
 File › Import Statement… (⇧⌘I) reads a bank or card CSV (UTF-8, falling back
 to Windows-1252/Latin-1). It recognises the built-in `card-transactions`
 preset from the header, or reopens the mapping last used for the same vault
-and header. Pick the columns, the date and amount format, what each row type
-becomes (expense, income, refund, transfer from or to another wallet, skip, by
-sign), the statuses to skip, and the target wallet and envelope. The preview
-shows what happens to every row; new rows can be left out or given a category,
-prefilled from the vault's history. Importing the same file again adds
-nothing.
+and header, with that import's wallet, envelope and start day (two banks
+exporting the same header share them, wallet included). Pick the
+columns, the date and amount format, what each row type becomes (expense,
+income, refund, transfer from or to another wallet, skip, by sign), the
+statuses to skip, and the target wallet and envelope. Description rules come
+before the types: the first one whose text the bank's description holds, case
+aside, decides the row's kind, category and a cleaner note, so
+`PAGAMENTO POS; BAR CENTRALE MILANO` can become an expense under Bar noted
+`Bar Centrale`. A start day leaves the older rows out; an entry typed into a
+wallet also searched up to 3 days before it can still stand for one of the
+file's first rows, while that wallet's older entries and its transfers from
+before the start day never do.
+
+The preview shows what happens to every row. Each row can be given another
+kind (a transfer names the other wallet), note, category (prefilled from the
+vault's history) and envelope, or be left out; its context menu makes a
+description rule from it. A row with the same amount going the same way as a
+transaction already in the vault (an expense for money out, an income or a
+refund for money in), at most 3 days apart, in the statement's wallet or in
+one ticked under "Duplicates also in" (chosen anew for every file), is a
+possible duplicate and is not imported: the transaction found stands for it.
+One found in another wallet, such as a spend typed by hand into Cash, is moved
+into the statement's wallet or the row imported anyway; one in the statement's
+wallet is kept or the row imported anyway. A wallet forgotten under
+"Duplicates also in" cannot be made up for by importing the file again: its
+rows are in by then. The review and the mapping page name the wallets whose
+entries look like new rows of the file, never one a statement goes to, with a
+button that ticks them. The other side of a transfer between two of your
+wallets, already recorded from the other bank's statement or by hand, is
+recognised at most 4 days apart and not imported twice; recorded as an income
+or expense instead, it can be deleted and replaced by the transfer. That is
+the default when the entry is at most a day apart, or up to four days when
+another bank's export put it into a wallet statements go to (the app knows
+them from the imports it remembers, so a bonifico that spans a weekend is
+replaced by default once the receiving bank's export is in), never for an
+entry in a wallet searched under "Duplicates also in" or dated before the
+start day. Any matched row can be left out with its box, which writes and
+records nothing. Near a file's first or last days, a match that another
+export's row already stands for is more likely that row's neighbour: the row
+is imported by default, and the review says so. A synced vault is synced
+before the preview and again before the import; if the plan changed
+meanwhile, or the preview had not caught up with the last change, nothing is
+written and the review says so. Importing the same file again adds nothing.
+
+An export holding every account of yours, as the BudgetBakers Wallet app
+writes it (`;`, one row per movement with its `account`, its `type` saying
+the way and a `transfer` flag), opens on the `Wallet (BudgetBakers)` preset.
+The mapping page lists the accounts of the account column with their rows;
+each goes to the file's wallet, to another wallet, or is left out, and the
+choice is remembered with the import, those wallets then counting as wallets
+statements go to. The two halves of a move between two accounts are paired,
+at most a day apart: when both go to one wallet nothing is written, since the
+money stays there; when they go to two, one transfer is written and the other
+half reads as its pair. A half whose other half is not in the file is imported
+as its type says, and the review notes it. Giving an account its own wallet
+later leaves its rows already imported where they are, but a move between two
+accounts that both went to Cash wrote nothing then, and read again it would
+become a transfer between the new wallets, dated back among rows that stayed
+in Cash: set the start day to the day the accounts get their own wallets.
+
+Every rule the import follows, with its thresholds, and its known limits are
+in [docs/STATEMENTS.md](docs/STATEMENTS.md).
 
 File › Export All Transactions… writes every transaction of the vault as CSV,
 voided rows and transfers included. File › Back Up Database… saves a
@@ -137,22 +193,3 @@ delete `sparagne.sqlite-wal` and `sparagne.sqlite-shm` if present, and replace
 `~/Library/Containers/it.oghma.sparagne/Data/Library/Application Support/Sparagne/`
 for a signed (sandboxed) build and in `~/Library/Application Support/Sparagne/`
 for an unsigned one; `lsof -p $(pgrep -x Sparagne) | grep sqlite` tells which.
-
-### Import from v1
-
-A Sparagne v1 database is replayed into a v2 one as commands, so the history
-arrives with the rules of v2 applied to it:
-
-```sh
-cargo run -p sparagne_core --example import_v1 -- \
-    <v1.sqlite> \
-    ~/Library/Containers/it.oghma.sparagne/Data/Library/Application\ Support/Sparagne/sparagne.sqlite \
-    --author <username> [--vault <name>] [--tz Europe/Rome]
-```
-
-The v1 file is opened read-only; close the app before writing to its database.
-The import is idempotent, so running it again changes nothing. It prints a
-report with the counts per entity, the v1 fields that have no v2 counterpart
-and the commands the core refused. The imported commands sit in the outbox and
-reach the server at the first sync.
-

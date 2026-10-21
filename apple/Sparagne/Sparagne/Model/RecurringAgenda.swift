@@ -1,47 +1,36 @@
 import Foundation
 import SparagneCore
 
-/// `scheduleOccurrences(schedule:from:limit:)`, the core's list of a
-/// schedule's next dates, passed in rather than called directly so the
-/// agenda and the inspector's preview can be tested on a schedule of their
-/// own making.
+/// The core's `scheduleOccurrences`, passed in so tests can give schedules of their own.
 typealias ScheduleOccurrences = (Schedule, NaiveDate, UInt32) throws -> [NaiveDate]
 
-/// The core's `scheduleOccurrences`, in the shape `ScheduleOccurrences` takes
-/// (the generated function has argument labels). Pure arithmetic with no
-/// database behind it, so it is called on the main actor directly rather
-/// than through `CoreActor`.
+/// The core's `scheduleOccurrences`, pure arithmetic, so called on the main actor.
 enum CoreSchedule {
     static func occurrences(_ schedule: Schedule, _ from: NaiveDate, _ limit: UInt32) throws -> [NaiveDate] {
         try scheduleOccurrences(schedule: schedule, from: from, limit: limit)
     }
 }
 
-/// Day arithmetic on the core's `yyyy-MM-dd` dates. A `NaiveDate` has no time
-/// zone, so the arithmetic must not have one either: a Gregorian calendar in
-/// UTC, where a day is always 24 hours and a daylight-saving change never
-/// moves midnight onto the day before.
+/// Day arithmetic on `yyyy-MM-dd` in UTC, where a day is always 24 hours.
 enum NaiveDay {
-    private static let utc = TimeZone(identifier: "UTC") ?? .gmt
-
     private static var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = utc
+        calendar.timeZone = CoreDate.utc
         return calendar
     }
 
     /// `"2026-10-07"` plus `days`, or `nil` for a string that is not a day.
     static func adding(_ days: Int, to day: NaiveDate) -> NaiveDate? {
-        guard let date = CoreDate.localDay(day, timeZone: utc),
+        guard let date = CoreDate.localDay(day, timeZone: CoreDate.utc),
               let moved = calendar.date(byAdding: .day, value: days, to: date)
         else { return nil }
-        return CoreDate.day(moved, timeZone: utc)
+        return CoreDate.day(moved, timeZone: CoreDate.utc)
     }
 
     /// Whole days from `start` to `end`: positive when `end` is later.
     static func days(from start: NaiveDate, to end: NaiveDate) -> Int? {
-        guard let from = CoreDate.localDay(start, timeZone: utc),
-              let to = CoreDate.localDay(end, timeZone: utc)
+        guard let from = CoreDate.localDay(start, timeZone: CoreDate.utc),
+              let to = CoreDate.localDay(end, timeZone: CoreDate.utc)
         else { return nil }
         return calendar.dateComponents([.day], from: from, to: to).day
     }
@@ -49,7 +38,7 @@ enum NaiveDay {
     /// The year, month and day of a `yyyy-MM-dd`, for seeding a new
     /// template's day of the month or of the week from today.
     static func components(_ day: NaiveDate) -> (year: Int, month: Int, day: Int, isoWeekday: Int)? {
-        guard let date = CoreDate.localDay(day, timeZone: utc) else { return nil }
+        guard let date = CoreDate.localDay(day, timeZone: CoreDate.utc) else { return nil }
         let parts = calendar.dateComponents([.year, .month, .day, .weekday], from: date)
         guard let year = parts.year, let month = parts.month, let dayOfMonth = parts.day,
               let weekday = parts.weekday
@@ -60,20 +49,10 @@ enum NaiveDay {
     }
 }
 
-/// The Ricorrenze tab's "Prossimi 30 giorni": every
-/// period of the templates that run, from tomorrow to `days` days from today,
-/// with what they add up to on each side.
-///
-/// It starts tomorrow because today belongs to "Da confermare": a period of
-/// today is either due, and listed there, or already recorded or skipped. A
-/// day is never counted in both cards.
+/// "Prossimi 30 giorni": the running templates' periods from tomorrow, today being due's.
 struct RecurringAgenda: Equatable {
     /// Soonest first; on the same day, by the template's title.
-    let tiles: [UpcomingPeriod]
-
-    init(tiles: [UpcomingPeriod]) {
-        self.tiles = tiles
-    }
+    let tiles: [DuePeriod]
 
     /// The expenses expected in the window, in minor units.
     var expenses: Int64 { total(of: .expense) }
@@ -103,11 +82,11 @@ struct RecurringAgenda: Equatable {
         // One more than the days in the window would ever need: a daily
         // template has at most `days` dates in it.
         let limit = UInt32(days + 1)
-        var tiles: [UpcomingPeriod] = []
+        var tiles: [DuePeriod] = []
         for template in templates where template.enabled && !template.archived {
             guard let dates = try? occurrences(template.schedule, first, limit) else { continue }
             for date in dates where date >= first && date <= last {
-                tiles.append(UpcomingPeriod(template: template, date: date))
+                tiles.append(DuePeriod(template: template, date: date))
             }
         }
         tiles.sort { lhs, rhs in
@@ -121,9 +100,7 @@ struct RecurringAgenda: Equatable {
     }
 }
 
-/// What a template is called on screen: its note, or its category when it has
-/// no note, as the canvas names "mutuo" and "Netflix". Neither is required,
-/// so the last resort is the placeholder dash.
+/// A template's name on screen: its note, else its category, else the placeholder dash.
 enum RecurringTitle {
     static func of(_ template: RecurringView) -> String {
         if let note = template.note?.trimmingCharacters(in: .whitespaces), !note.isEmpty { return note }

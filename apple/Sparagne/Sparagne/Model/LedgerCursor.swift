@@ -7,8 +7,7 @@ struct CellFocus: Hashable, Sendable {
     let field: RowField
 }
 
-/// The cells a row is typed into, in the order the columns are laid out,
-/// which is also the order ⇥ walks them in (`LedgerCursor`).
+/// The cells a row is typed into, in column order, which is the order ⇥ walks.
 enum RowField: Hashable, CaseIterable, Sendable {
     case date
     case flow
@@ -48,15 +47,11 @@ enum CursorMove: Hashable, Sendable {
     case tab, backTab
 }
 
-/// Where the grid's cursor can go, and which cells can be typed into: a
-/// value with no SwiftUI in it, so the moves are tested without a window
-/// (`SparagneTests/LedgerCursorTests.swift`).
-///
-/// The lines are the stored rows on screen, in their order, then the new
-/// line when the vault can be written to. The recurring periods waiting
-/// among the rows are not lines here: they are not rows, and ↑ ↓ pass over
-/// them.
+/// Where the grid's cursor can go and which cells take typing, with no SwiftUI in it.
 struct LedgerCursor {
+    // The lines are the stored rows, then the new line when the vault can be written; the
+    // due periods among them are not lines, and ↑ ↓ pass over them.
+
     /// The stored rows on screen, top to bottom.
     let rows: [TransactionRow]
     /// The vault on screen can be written to: the new line is there, and the

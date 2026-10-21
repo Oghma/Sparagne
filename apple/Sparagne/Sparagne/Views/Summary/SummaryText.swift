@@ -5,14 +5,9 @@ import SparagneCore
 enum SummaryText {
     /// `"ottobre"`, `"October"`: the locale's own casing. The ledger's
     /// `LedgerDate.fullMonth` shouts for the grid's headings; running text
-    /// ("fino a ottobre", "a settembre") reads wrong shouted
-    /// (sentence case).
+    /// ("fino a ottobre", "a settembre") reads wrong shouted.
     static func monthName(_ month: Int, locale: Locale = .autoupdatingCurrent) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = locale
-        let symbols = calendar.standaloneMonthSymbols
-        guard symbols.indices.contains(month - 1) else { return "\(month)" }
-        return symbols[month - 1]
+        LedgerDate.monthName(month, style: .standalone, locale: locale)
     }
 
     /// The same with a capital, for a title: `"Agosto 2026"`.
@@ -50,17 +45,12 @@ enum SummaryText {
     // MARK: - Categories
 
     /// The core names its two system categories in English; the RIEPILOGO
-    /// says them in the user's language, as the Mastro's panel does
-    /// (`CategoryBreakdown.name`). The line that folds the lighter
-    /// categories is "Other".
+    /// and the Mastro's panel say them in the user's language, as the grid
+    /// does (`TransactionRow`). The line that folds the lighter categories
+    /// is "Other".
     static func categoryName(_ name: String, isSystem: Bool, isOther: Bool = false) -> String {
         if isOther { return String(localized: "Other") }
-        guard isSystem else { return name }
-        switch name.lowercased() {
-        case "uncategorized": return String(localized: "Uncategorized")
-        case "opening": return String(localized: "Opening")
-        default: return name
-        }
+        return TransactionRow.categoryLabel(name, isSystem: isSystem)
     }
 
     // MARK: - Things to do

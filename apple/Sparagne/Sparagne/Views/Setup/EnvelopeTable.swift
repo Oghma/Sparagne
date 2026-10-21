@@ -1,9 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// Column geometry of the envelope table, as the canvas has it:
-/// fixed widths so the header, the rows and the empty
-/// line agree without a layout pass. NOME takes what is left.
+/// Column widths, fixed so the header, the rows and the empty line agree without a layout pass.
 private enum EnvelopeColumn {
     static let nameMinimum: CGFloat = 100
     static let type: CGFloat = 104
@@ -12,13 +10,7 @@ private enum EnvelopeColumn {
     static let balance: CGFloat = 120
 }
 
-/// The envelopes of the vault as an editable table:
-/// the last line adds one, every cell edits in place.
-///
-/// Editing is per row, exactly as in the ledger (`Views/Ledger/LedgerGrid`):
-/// clicking a cell opens the whole row on a draft, ↩ commits the diff as one
-/// `UpdateFlow` with only the changed fields, esc throws the draft away and
-/// leaving the row saves it the way a spreadsheet does.
+/// The vault's envelopes as a table edited by rows (`editsRows`); the last line adds one.
 struct EnvelopeTable: View {
     @Bindable var store: AppStore
 
@@ -27,8 +19,6 @@ struct EnvelopeTable: View {
     @State private var editing: Uuid?
     @State private var draft = EnvelopeDraft()
     @State private var newLine = EnvelopeDraft()
-    /// The row under the pointer: it tints the row, and it also tells a blur
-    /// caused by the row's own menu from a real departure (see `focusMoved`).
     @State private var hovered: Uuid?
     @FocusState private var focus: EnvelopeCell?
 
@@ -44,24 +34,15 @@ struct EnvelopeTable: View {
                 archived
             }
         }
-        // A different vault means different envelopes: whatever was half
-        // typed belongs to the vault that is gone.
-        .onChange(of: store.currentVault?.id) { _, _ in
-            editing = nil
-            focus = nil
+        .editsRows(editing: $editing, focus: $focus, hovered: hovered, store: store) {
             newLine = EnvelopeDraft()
-        }
-        .onChange(of: focus) { old, new in focusMoved(from: old, to: new) }
-        // Turned read-only under an open row: it could not be saved.
-        .onChange(of: store.isReadOnly) { _, _ in cancel() }
+        } commit: { commit($0) }
     }
 
     /// The top bar's search; the empty line stays.
     private func matchesFilter(_ name: String) -> Bool {
         TableFilter.matches(store.tabFilter, [name])
     }
-
-    // MARK: - Header
 
     private var header: some View {
         SetupHeaderRow {
@@ -89,18 +70,8 @@ struct EnvelopeTable: View {
                 displayCells(flow)
             }
         }
-        .onHover { inside in
-            if inside {
-                hovered = flow.id
-            } else if hovered == flow.id {
-                hovered = nil
-            }
-        }
-        .onKeyPress(.escape) {
-            guard isEditing else { return .ignored }
-            cancel()
-            return .handled
-        }
+        .hoverId($hovered, flow.id)
+        .onEscape(when: isEditing, perform: cancel)
         .contextMenu {
             // Unallocated is a system envelope: the core refuses to update or
             // archive it.
@@ -151,24 +122,10 @@ struct EnvelopeTable: View {
         .onTapGesture { open(flow, at: .negative) }
         balanceCell(flow)
             .onTapGesture { open(flow, at: .name) }
-        actionCell(flow, system: system)
-    }
-
-    /// The archive icon, only for the row under the pointer: the same
-    /// `ArchiveFlow` the context menu already sends, one click closer.
-    /// Hidden while editing, so it never fights a row's own commit-on-blur.
-    @ViewBuilder
-    private func actionCell(_ flow: FlowView, system: Bool) -> some View {
-        SetupCell(width: SetupColumn.action) {
-            if !system, hovered == flow.id, store.canWrite {
-                SetupIconButton(
-                    symbol: "archivebox",
-                    help: String(localized: "Archive"),
-                    label: String(localized: "Archive \(flow.name)")
-                ) {
-                    Task { await store.archiveEnvelope(flow.id) }
-                }
-            }
+        // Only on a closed row, so it never fights the open row's save on
+        // leaving.
+        SetupArchiveCell(name: flow.name, shown: !system && hovered == flow.id && store.canWrite) {
+            Task { await store.archiveEnvelope(flow.id) }
         }
     }
 
@@ -177,16 +134,17 @@ struct EnvelopeTable: View {
     @ViewBuilder
     private func editingCells(_ flow: FlowView) -> some View {
         SetupCell {
-            textField($draft.name, key: EnvelopeCell(row: flow.id, field: .name), placeholder: "")
+            SetupTextField(
+                placeholder: "", text: $draft.name,
+                focus: $focus, key: EnvelopeCell(row: flow.id, field: .name), submit: commitFocusedLine
+            )
         }
         .frame(minWidth: EnvelopeColumn.nameMinimum)
         typeCell($draft)
         SetupCell(width: EnvelopeColumn.cap, alignment: .trailing) {
-            textField(
-                $draft.cap,
-                key: EnvelopeCell(row: flow.id, field: .cap),
-                placeholder: String(localized: "cap…"),
-                alignment: .trailing
+            SetupTextField(
+                placeholder: String(localized: "cap…"), text: $draft.cap, alignment: .trailing,
+                focus: $focus, key: EnvelopeCell(row: flow.id, field: .cap), submit: commitFocusedLine
             )
         }
         negativeCell($draft)
@@ -211,12 +169,11 @@ struct EnvelopeTable: View {
         }
     }
 
-    // MARK: - The archived envelopes
-
-    @ViewBuilder
     private var archived: some View {
         ForEach(store.archivedFlows.filter { matchesFilter($0.name) }, id: \.id) { flow in
-            SetupRow(highlighted: hovered == flow.id) {
+            SetupArchivedRow(name: flow.name, id: flow.id, hovered: $hovered, canWrite: store.canWrite) {
+                Task { await store.restoreEnvelope(flow.id) }
+            } cells: {
                 SetupCell {
                     Text(flow.name).font(Face.row).foregroundStyle(Ink.text3).strikethrough()
                 }
@@ -235,31 +192,6 @@ struct EnvelopeTable: View {
                 SetupCell(width: EnvelopeColumn.balance, alignment: .trailing) {
                     Text(LedgerMoney.amount(flow.balance)).font(Face.row).foregroundStyle(Ink.text3)
                 }
-                SetupCell(width: SetupColumn.action) {
-                    if hovered == flow.id, store.canWrite {
-                        SetupIconButton(
-                            symbol: "tray.and.arrow.up",
-                            help: String(localized: "Restore"),
-                            label: String(localized: "Restore \(flow.name)")
-                        ) {
-                            Task { await store.restoreEnvelope(flow.id) }
-                        }
-                    }
-                }
-            }
-            .onHover { inside in
-                if inside {
-                    hovered = flow.id
-                } else if hovered == flow.id {
-                    hovered = nil
-                }
-            }
-            .contextMenu {
-                if store.canWrite {
-                    Button(String(localized: "Restore")) {
-                        Task { await store.restoreEnvelope(flow.id) }
-                    }
-                }
             }
         }
     }
@@ -273,56 +205,35 @@ struct EnvelopeTable: View {
         let active = focus?.row == nil && focus != nil
         return SetupRow(highlighted: active, editing: active) {
             SetupCell {
-                textField(
-                    $newLine.name,
-                    key: EnvelopeCell(row: nil, field: .name),
-                    placeholder: String(localized: "New envelope…")
+                SetupTextField(
+                    placeholder: String(localized: "New envelope…"), text: $newLine.name,
+                    focus: $focus, key: EnvelopeCell(row: nil, field: .name), submit: commitFocusedLine
                 )
             }
             .frame(minWidth: EnvelopeColumn.nameMinimum)
             typeCell($newLine, emptyLabel: String(localized: "No cap"))
             SetupCell(width: EnvelopeColumn.cap, alignment: .trailing) {
-                textField(
-                    $newLine.cap,
-                    key: EnvelopeCell(row: nil, field: .cap),
-                    placeholder: "—",
-                    alignment: .trailing
+                SetupTextField(
+                    placeholder: "—", text: $newLine.cap, alignment: .trailing,
+                    focus: $focus, key: EnvelopeCell(row: nil, field: .cap), submit: commitFocusedLine
                 )
             }
             negativeCell($newLine)
             SetupCell(width: EnvelopeColumn.balance, alignment: .trailing) {
-                textField(
-                    $newLine.allocation,
-                    key: EnvelopeCell(row: nil, field: .allocation),
-                    placeholder: String(localized: "allocation"),
-                    alignment: .trailing
+                SetupTextField(
+                    placeholder: String(localized: "allocation"), text: $newLine.allocation, alignment: .trailing,
+                    focus: $focus, key: EnvelopeCell(row: nil, field: .allocation), submit: commitFocusedLine
                 )
             }
             SetupCell(width: SetupColumn.action) { EmptyView() }
         }
-        .onKeyPress(.escape) {
+        .onEscape {
             newLine = EnvelopeDraft()
             focus = nil
-            return .handled
         }
     }
 
     // MARK: - Shared cells
-
-    private func textField(
-        _ text: Binding<String>,
-        key: EnvelopeCell,
-        placeholder: String,
-        alignment: TextAlignment = .leading
-    ) -> some View {
-        TextField(placeholder, text: text)
-            .textFieldStyle(.plain)
-            .font(Face.row)
-            .multilineTextAlignment(alignment)
-            .foregroundStyle(Ink.text)
-            .focused($focus, equals: key)
-            .onSubmit { commitFocusedLine() }
-    }
 
     /// TIPO is a menu, not text: the three kinds are the whole vocabulary
     /// and a typo has no meaning here. On the empty
@@ -362,7 +273,7 @@ struct EnvelopeTable: View {
     }
 
     private var dash: some View {
-        Text("—").font(Face.row).foregroundStyle(Ink.text3)
+        Text(verbatim: "—").font(Face.row).foregroundStyle(Ink.text3)
     }
 
     private static func label(negative: Bool) -> String {
@@ -396,37 +307,16 @@ struct EnvelopeTable: View {
         focus = EnvelopeCell(row: flow.id, field: field.caret)
     }
 
-    /// esc: throw the draft away. `editing` is cleared before the focus, so
-    /// the focus change that follows is not read as "left the row" and does
-    /// not save what esc was meant to undo.
     private func cancel() {
         editing = nil
         focus = nil
     }
 
-    /// ↩ in whichever line holds the caret.
     private func commitFocusedLine() {
         if let row = focus?.row {
             if commit(row) { focus = nil }
         } else {
             Task { await commitNewLine() }
-        }
-    }
-
-    /// The commit on blur a spreadsheet does: ⇥ off the last cell of the row,
-    /// a click on another row or on the categories table all write what was
-    /// typed, as `LedgerGrid.commitIfLeft` does.
-    ///
-    /// The exception is the row's own menu and its NEG button: opening a menu
-    /// resigns the text field without giving the focus to anything, which
-    /// would close the row under the pointer. The pointer is what tells the
-    /// two apart, so a blur while hovering the open row is not a departure.
-    private func focusMoved(from old: EnvelopeCell?, to new: EnvelopeCell?) {
-        guard let editing else { return }
-        if let new {
-            if new.row != editing { commit(editing) }
-        } else if old?.row == editing, hovered != editing {
-            commit(editing)
         }
     }
 
@@ -492,14 +382,8 @@ struct EnvelopeTable: View {
     }
 }
 
-// MARK: - Focus
-
-/// A cell of the envelope table: which row (nil = the empty line) and which
-/// field. Only the text cells appear here, because only they can hold a caret.
-struct EnvelopeCell: Hashable {
-    let row: Uuid?
-    let field: EnvelopeField
-}
+/// A text cell of the envelope table: only the text cells can hold a caret.
+typealias EnvelopeCell = SetupFocus<EnvelopeField>
 
 /// The cells a line is typed into. `allocation` is the empty line's SALDO,
 /// which is the opening allocation and exists nowhere else.
@@ -522,10 +406,7 @@ enum EnvelopeField: Hashable, CaseIterable {
 
 // MARK: - The three kinds of cap
 
-/// `FlowMode` as a flat choice, the way the TIPO column reads
-/// (nessuno / netto / entrate). The mode is data, not a
-/// type, so this is a lossless split into
-/// "which kind" plus "how much".
+/// `FlowMode` as the TIPO column reads it: which kind of cap, with the amount apart.
 enum EnvelopeCapKind: String, CaseIterable, Identifiable {
     case none
     case net
@@ -541,7 +422,6 @@ enum EnvelopeCapKind: String, CaseIterable, Identifiable {
         }
     }
 
-    /// True when the kind needs an amount beside it.
     var isCapped: Bool { self != .none }
 
     init(_ mode: FlowMode) {
@@ -586,10 +466,7 @@ struct EnvelopePatch: Equatable {
     var isEmpty: Bool { name == nil && mode == nil && allowNegative == nil }
 }
 
-/// The text and the choices in the cells of the line being edited. Everything
-/// stays a string until it commits, so a half-typed cap never has to be a
-/// number. A plain struct with no view in it, so the diff and the parsing are
-/// testable on their own.
+/// The text and the choices in the cells of the line being edited, strings until it commits.
 struct EnvelopeDraft: Equatable {
     var name = ""
     var kind: EnvelopeCapKind = .none

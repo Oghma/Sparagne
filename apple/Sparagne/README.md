@@ -25,7 +25,7 @@ which is the only thing that talks to `CoreHandle`).
 | `Sparagne/Views/Setup/` | The Setup tab (⌘4, ⌘⇧C): vault card, wallets, envelopes and categories as editable tables, the merge sheet |
 | `Sparagne/Model/YearModel.swift` | `YearSummary.build`, the arithmetic behind the Riepilogo; beside it in `Model/` `SummaryCategories`, `CategoryHeat`, `EnvelopeYear`, `FixedCosts` and `SummaryTodo` |
 | `Sparagne/Views/Chrome/PersonSegments.swift` | The person control, shared by the Mastro's filter bar and the Riepilogo's heading |
-| `Sparagne/Model/` (other) | Pure models, tested without a window: `LedgerLines` (due periods among the rows), `LedgerCursor` (where each key moves the grid's cursor), `LedgerEditor` (the cell being typed into, written when it is left), `RowDraft`, `SheetStats`, `QuickAddTokens`, `SyncPillState`, `RecurringAgenda` / `RecurringDraft` / `RecurringNext` / `RecurringMonthly` |
+| `Sparagne/Model/` (other) | Pure models, tested without a window: `LedgerLines` (due periods among the rows), `LedgerCursor` (where each key moves the grid's cursor), `LedgerEditor` (the cell being typed into, written when it is left), `RowDraft`, `SheetStats`, `QuickAddTokens`, `SyncPillState`, `RecurringAgenda` / `RecurringDraft` / `RecurringNext` / `RecurringMonthly`, `ScheduleDraft` (the Quando that Ricorrenze and Riparto both edit) |
 | `Sparagne/Views/ManagementSheet.swift` | Vault picker plus wallet and envelope balances and management (⌘⇧M); the window has no sidebar |
 | `Sparagne/Views/Sheets.swift` | Onboarding, new wallet/envelope, rename and edit-envelope sheets |
 | `Sparagne/Views/SyncViews.swift` | The rejected-changes and share sheets (the sync status is the top bar's `SyncPill`) |

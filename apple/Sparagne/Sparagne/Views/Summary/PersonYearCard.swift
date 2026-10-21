@@ -59,9 +59,7 @@ struct PersonYearCard: View {
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: 8) {
-                Text(String(localized: "By person"))
-                    .font(Face.label)
-                    .foregroundStyle(Ink.text2)
+                SectionLabel(text: String(localized: "By person"), tint: Ink.text2)
                     .accessibilityAddTraits(.isHeader)
                 VStack(spacing: 0) {
                     header
@@ -77,21 +75,15 @@ struct PersonYearCard: View {
     }
 
     private var header: some View {
-        HStack(spacing: 0) {
+        SetupHeaderRow {
             Text(verbatim: "")
                 .frame(width: Self.labelWidth, alignment: .leading)
                 .padding(.horizontal, Metrics.cellPad)
             ForEach(year.personFigures, id: \.person) { figures in
                 Text(figures.person)
-                    .lineLimit(1)
-                    .padding(.horizontal, Metrics.cellPad)
-                    .frame(minWidth: Self.figureWidth, maxWidth: .infinity, alignment: .trailing)
+                    .tableCell(minWidth: Self.figureWidth, alignment: .trailing)
             }
         }
-        .font(Face.ui(11, .medium))
-        .foregroundStyle(Ink.text3)
-        .frame(height: Metrics.headerHeight)
-        .overlay(alignment: .bottom) { Rectangle().fill(Ink.line2).frame(height: 1) }
         .accessibilityHidden(true)
     }
 
@@ -105,12 +97,10 @@ struct PersonYearCard: View {
             ForEach(year.personFigures, id: \.person) { figures in
                 Text(line.text(figures))
                     .foregroundStyle(line.tint(figures))
-                    .lineLimit(1)
-                    .padding(.horizontal, Metrics.cellPad)
-                    .frame(minWidth: Self.figureWidth, maxWidth: .infinity, alignment: .trailing)
+                    .tableCell(minWidth: Self.figureWidth, alignment: .trailing)
             }
         }
-        .font(Face.ui(12))
+        .font(Face.row)
         .frame(height: Metrics.rowHeight)
         .overlay(alignment: .bottom) {
             if line.id != lines.last?.id {

@@ -1,9 +1,7 @@
-//! Accounts, password hashing and bearer tokens.
-//!
-//! Passwords are argon2id PHC strings; a token is 32 random bytes shown once
-//! as base64url and stored as its sha256 digest. Neither is ever logged.
-//! Every password check and every registration first goes through
-//! [`crate::ratelimit`].
+//! Accounts, password hashing and bearer tokens. Passwords are argon2id PHC
+//! strings; a token is 32 random bytes shown once as base64url and stored as
+//! its sha256 digest. Neither is ever logged. Every password check and every
+//! registration first goes through [`crate::ratelimit`].
 
 use std::{net::IpAddr, time::Instant};
 
@@ -18,7 +16,7 @@ use axum::{
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
 use rand::Rng;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use sparagne_core::sync::{Credentials, TokenResponse};
 use uuid::Uuid;
@@ -69,12 +67,6 @@ impl FromRequestParts<AppState> for CurrentUser {
             token_hash,
         })
     }
-}
-
-/// Body of `GET /me`.
-#[derive(Clone, Debug, Serialize)]
-pub struct MeResponse {
-    pub username: String,
 }
 
 /// `POST /auth/register`. Every attempt counts against the caller's address
@@ -187,13 +179,6 @@ pub async fn change_password(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// `GET /me`.
-pub async fn me(user: CurrentUser) -> Json<MeResponse> {
-    Json(MeResponse {
-        username: user.username,
-    })
-}
-
 fn issue_token(
     state: &AppState,
     db: &crate::db::ServerDb,
@@ -239,7 +224,6 @@ pub fn validate_username(username: &str) -> ApiResult<()> {
     Ok(())
 }
 
-/// Passwords are at least 8 characters.
 pub fn validate_password(password: &str) -> ApiResult<()> {
     if password.chars().count() < PASSWORD_MIN {
         return Err(ApiError::invalid_request(format!(
@@ -268,7 +252,6 @@ fn verify_password(state: &AppState, password: &str, hash: &str) -> bool {
         .is_ok()
 }
 
-/// 32 random bytes as base64url without padding.
 fn new_token() -> String {
     let mut bytes = [0u8; TOKEN_BYTES];
     rand::rng().fill_bytes(&mut bytes);
@@ -277,18 +260,21 @@ fn new_token() -> String {
 
 /// Lowercase hex sha256, the shape tokens are stored in.
 fn digest(token: &str) -> String {
-    let hash = Sha256::digest(token.as_bytes());
-    let mut out = String::with_capacity(hash.len() * 2);
-    for byte in hash {
-        out.push(hex_digit(byte >> 4));
-        out.push(hex_digit(byte & 0x0f));
-    }
-    out
+    Sha256::digest(token.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
-const fn hex_digit(nibble: u8) -> char {
-    match nibble {
-        0..=9 => (b'0' + nibble) as char,
-        _ => (b'a' + nibble - 10) as char,
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_token_is_stored_as_its_lowercase_hex_sha256() {
+        assert_eq!(
+            digest("rQ7-xY_0"),
+            "da6347c9cf335c6dc4426118fb3fa8e598570818861710c0edaf78c3b0cd3fbb"
+        );
     }
 }

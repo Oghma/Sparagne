@@ -15,9 +15,10 @@ struct StatementImportSheet: View {
     let store: AppStore
     @State private var model: StatementImportModel
     @State private var choosingFile = false
-    /// The list under the review's CATEGORY field being typed into
-    /// (`StatementReview`). Held here because the footer's ↩ and esc are
-    /// the list's while it is open.
+    /// The list under the CATEGORY field being typed into, the review's
+    /// (`StatementReview`) or a description rule's (`StatementMappingEditor`).
+    /// Held here because the footer's ↩ and esc are the list's while it is
+    /// open.
     @State private var completion = CategoryCompletionModel()
     @Environment(\.dismiss) private var dismiss
 
@@ -25,13 +26,21 @@ struct StatementImportSheet: View {
     /// banks call their exports.
     private static let fileTypes: [UTType] = [.commaSeparatedText, .tabSeparatedText, .plainText, .text]
 
-    /// Wider and taller than the other sheets: the review has eight columns.
-    private static let size = CGSize(width: 880, height: 640)
+    /// Wider and taller than the other sheets: the review has nine columns,
+    /// ten for an export holding several accounts, an editable note among
+    /// them. Still narrower than the window's narrowest (`ContentView`,
+    /// 1176).
+    private static let size = CGSize(width: 1140, height: 640)
 
-    /// `model` is for previews, which open the sheet on a file already read.
-    init(store: AppStore, model: StatementImportModel? = nil) {
+    /// `engine` syncs the vault before a file is planned and before it is
+    /// imported (`StatementImportModel.syncRound`); `nil` for a database that
+    /// never syncs.
+    init(store: AppStore, engine: SyncEngine? = nil) {
         self.store = store
-        _model = State(initialValue: model ?? StatementImportModel(store: store))
+        _model = State(initialValue: StatementImportModel(
+            store: store,
+            sync: engine.map { StatementImportModel.syncRound(on: $0) }
+        ))
     }
 
     var body: some View {
@@ -76,13 +85,14 @@ struct StatementImportSheet: View {
         case .file:
             filePage
         case .mapping:
-            ScrollView { StatementMappingEditor(model: model) }
+            ScrollView { StatementMappingEditor(model: model, completion: completion) }
                 .scrollBounceBehavior(.basedOnSize)
+                .hangingCategoryList(completion)
         case .review:
             StatementReview(model: model, completion: completion)
         case .report:
             if let report = model.report {
-                ScrollView { StatementReportView(report: report) }
+                ScrollView { StatementReportView(report: report, replaced: model.replaced) }
                     .scrollBounceBehavior(.basedOnSize)
             }
         }
@@ -119,20 +129,58 @@ struct StatementImportSheet: View {
     // MARK: - Under the page
 
     /// What went wrong, what still stands between the user and the next
-    /// page, or the counts the import would make.
+    /// page, or the counts the import would make; under it, quietly, a sync
+    /// on its way or one that did not get through.
     @ViewBuilder
     private var status: some View {
-        if let problem = model.problem {
-            ProblemNote(problem: problem)
-        } else if !store.isReadOnly {
-            switch model.step {
-            case .file, .report:
-                EmptyView()
-            case .mapping:
-                mappingStatus
-            case .review:
-                reviewStatus
+        VStack(alignment: .leading, spacing: 6) {
+            if let problem = model.problem {
+                ProblemNote(problem: problem)
+            } else if !store.isReadOnly {
+                switch model.step {
+                case .file, .report:
+                    EmptyView()
+                case .mapping:
+                    mappingStatus
+                case .review:
+                    reviewStatus
+                }
             }
+            syncStatus
+        }
+    }
+
+    /// The sync the import asked for: a quiet line while it runs, so a slow
+    /// server never reads as a hang, and a quiet note when it did not get
+    /// through, which stops nothing.
+    @ViewBuilder
+    private var syncStatus: some View {
+        if model.isSyncing {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini)
+                Text(String(localized: "Syncing with the server…"))
+            }
+            .font(Face.ui(11.5))
+            .foregroundStyle(Ink.text3)
+        } else if !model.changedLines.isEmpty, model.step == .review {
+            // The import synced, found the plan changed and wrote nothing.
+            FormNote(
+                String(localized: "Something changed after syncing: check the rows marked and import again."),
+                tone: .warning,
+                indented: false
+            )
+        } else if model.previewWasStale, model.step == .review {
+            // ↩ came before the preview of the last change: nothing written.
+            FormNote(
+                String(localized: "The preview was not up to date: nothing was written. Check it and import again."),
+                tone: .warning,
+                indented: false
+            )
+        } else if model.syncFailed, model.step != .file {
+            FormNote(
+                String(localized: "Not synced first: rows imported on another device may not show as imported yet."),
+                indented: false
+            )
         }
     }
 
@@ -156,6 +204,8 @@ struct StatementImportSheet: View {
         if let problem = model.previewProblem {
             ProblemNote(problem: problem)
         } else {
+            // The core's advice to search one more wallet, ticked in a click.
+            LookalikeNotes(model: model, indented: false)
             HStack(spacing: 8) {
                 StatementCountsLine(counts: model.counts)
                 Spacer(minLength: 8)
@@ -171,8 +221,12 @@ struct StatementImportSheet: View {
     /// Cancel (esc), the way back, and the page's next move (↩). On the
     /// review, esc goes back to the columns rather than closing the sheet,
     /// so a stray esc never throws the mapping away; and while a CATEGORY
-    /// field's list is open both keys are the list's (`completing`), or ↩
-    /// would pick and import at once.
+    /// field's list is open, on the review or in a description rule, both
+    /// keys are the list's (`completing`), or ↩ would pick and move on at
+    /// once.
+    ///
+    /// An import with nothing new to add still runs when it moves rows
+    /// entered by hand into the statement's wallet.
     @ViewBuilder
     private var buttons: some View {
         if store.isReadOnly {
@@ -183,22 +237,38 @@ struct StatementImportSheet: View {
                 FormCancelButton { dismiss() }
                 FormPrimaryButton(title: String(localized: "Choose File…")) { choosingFile = true }
             case .mapping:
-                FormCancelButton { dismiss() }
+                FormCancelButton(shortcut: !completion.isOpen) { dismiss() }
                 Button(String(localized: "Choose Another File…")) { choosingFile = true }
                     .buttonStyle(.chrome(.bordered))
-                FormPrimaryButton(title: String(localized: "Preview")) { model.step = .review }
+                FormPrimaryButton(title: String(localized: "Preview"), shortcut: !completion.isOpen) { model.step = .review }
                     .disabled(model.preview == nil || model.previewProblem != nil)
             case .review:
                 FormCancelButton(title: String(localized: "Back"), shortcut: !completion.isOpen) { model.step = .mapping }
                     .disabled(model.isImporting)
-                FormPrimaryButton(title: String(localized: "Import \(model.counts.new) rows"), shortcut: !completion.isOpen) {
+                FormPrimaryButton(title: importTitle, shortcut: !completion.isOpen) {
                     Task { await model.runImport() }
                 }
-                .disabled(model.counts.new == 0 || model.isImporting || model.isPreviewing || model.preview == nil)
+                .disabled(!model.counts.writesAnything || model.isImporting || model.isPreviewing || model.preview == nil)
             case .report:
                 FormPrimaryButton(title: String(localized: "Done")) { dismiss() }
             }
         }
+    }
+
+    /// What the review's ↩ does: import the rows it writes (new ones and
+    /// transfers replacing an entry), or, with none, move the rows typed by
+    /// hand that the statement found elsewhere, or else confirm the matches
+    /// kept as they are.
+    private var importTitle: String {
+        let counts = model.counts
+        if counts.written == 0 && counts.moves > 0 {
+            return String(localized: "Move \(counts.moves) rows")
+        }
+        let matches = counts.possibleDuplicates + counts.matchedTransfers
+        if counts.written == 0 && matches > 0 {
+            return String(localized: "Confirm \(matches) matches")
+        }
+        return String(localized: "Import \(counts.written) rows")
     }
 }
 
@@ -306,43 +376,33 @@ private struct ProblemNote: View {
 }
 
 /// `To import 4 · Already imported 0 · Skipped 4 · Invalid 0 · Rounded 0`:
-/// the preview's counts as the import will make them, drawn like the
-/// window's status line (`StatusLine`), with the invalid rows in the
-/// negative ink and the zeros dimmed.
+/// the preview's counts as the import will make them, as a status line,
+/// with the invalid rows in the negative ink and the zeros dimmed. The rows
+/// matched to a transaction already in the vault, and the ones of those to
+/// be moved, follow only when there are any.
 private struct StatementCountsLine: View {
     let counts: StatementImportModel.Counts
 
-    private var items: [(label: String, value: Int, tint: Color)] {
-        [
+    var body: some View {
+        StatusLine(items: items)
+    }
+
+    private var items: [StatusItem] {
+        let always: [(String, Int, Color)] = [
             (String(localized: "To import"), counts.new, Ink.text),
             (String(localized: "Already imported"), counts.alreadyImported, Ink.text),
             (String(localized: "Skipped"), counts.skipped, Ink.text),
             (String(localized: "Invalid"), counts.invalid, Ink.negative),
             (String(localized: "Rounded"), counts.rounded, Ink.text),
         ]
-    }
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                if index > 0 {
-                    Text(verbatim: "\u{00B7}")
-                        .padding(.horizontal, 7)
-                        .accessibilityHidden(true)
-                }
-                Text(item.label)
-                Text(verbatim: String(item.value))
-                    .fontWeight(.medium)
-                    .foregroundStyle(item.value == 0 ? Ink.text3 : item.tint)
-                    .padding(.leading, 4)
-            }
+        let whenAny: [(String, Int, Color)] = [
+            (String(localized: "Possible duplicates"), counts.possibleDuplicates, Ink.text),
+            (String(localized: "Transfers already there"), counts.matchedTransfers, Ink.text),
+            (String(localized: "To move"), counts.moves, Ink.text),
+            (String(localized: "To replace"), counts.replaces, Ink.text),
+        ]
+        return (always + whenAny.filter { $0.1 > 0 }).map { label, value, tint in
+            StatusItem(label: label, value: String(value), tint: value == 0 ? Ink.text3 : tint)
         }
-        .font(Face.ui(11.5))
-        .foregroundStyle(Ink.text3)
-        .lineLimit(1)
-        .fixedSize()
-        // One sentence for VoiceOver, as the window's status line reads.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(StatusLine.spoken(items.map { StatusItem(label: $0.label, value: String($0.value)) }))
     }
 }

@@ -1,18 +1,6 @@
 import Foundation
 import SparagneCore
 
-/// One category's net expense in one bucket of the core's
-/// `category_bucket_totals`. Bucket 0 is everything before January, 1...12
-/// the months of the year.
-struct CategoryBucket: Hashable, Sendable {
-    let bucket: Int
-    let categoryId: Uuid
-    let name: String
-    let isSystem: Bool
-    let netExpense: Int64
-    let count: Int
-}
-
 /// One line of the months x categories grid.
 struct CategoryHeatRow: Identifiable, Hashable, Sendable {
     /// The category, `nil` on the "other" line.
@@ -27,9 +15,7 @@ struct CategoryHeatRow: Identifiable, Hashable, Sendable {
     var id: String { categoryId ?? "other" }
 }
 
-/// The RIEPILOGO's months x categories grid: the same lines as the year's
-/// category list, each month's net expense in a cell shaded against the
-/// heaviest cell of the grid.
+/// The RIEPILOGO's months x categories grid, each cell shaded against the heaviest.
 struct CategoryHeat: Hashable, Sendable {
     /// In the order of the category list.
     let rows: [CategoryHeatRow]
@@ -52,16 +38,17 @@ struct CategoryHeat: Hashable, Sendable {
     /// a month after the one on screen, whose cells stay zero. A category the
     /// list leaves out with no "other" line (it spent nothing over the year,
     /// a refund having made up for it) has no line here either.
-    static func build(buckets: [CategoryBucket], shares: [CategoryShare], upTo: MonthKey) -> CategoryHeat {
+    static func build(buckets: [BucketCategoryTotals], shares: [CategoryShare], upTo: MonthKey) -> CategoryHeat {
         let elapsedMonths = min(max(upTo.month, 0), 12)
         let named = Set(shares.compactMap(\.categoryId))
         var sums: [Uuid: [Int64]] = [:]
         var other = Array(repeating: Int64(0), count: 12)
-        for bucket in buckets where (1...12).contains(bucket.bucket) && bucket.bucket <= elapsedMonths {
+        for bucket in buckets where (1...12).contains(bucket.bucket) && Int(bucket.bucket) <= elapsedMonths {
+            let index = Int(bucket.bucket) - 1
             if named.contains(bucket.categoryId) {
-                sums[bucket.categoryId, default: Array(repeating: 0, count: 12)][bucket.bucket - 1] += bucket.netExpense
+                sums[bucket.categoryId, default: Array(repeating: 0, count: 12)][index] += bucket.netExpense
             } else {
-                other[bucket.bucket - 1] += bucket.netExpense
+                other[index] += bucket.netExpense
             }
         }
 

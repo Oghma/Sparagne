@@ -1,25 +1,29 @@
 //! From a statement and a mapping to one planned row per record: what the row
-//! is, the id its command gets and, when it is new, the command itself.
-//!
-//! Every row is read on its own first ([`Context::read`]); a second pass over
-//! the file numbers the rows with the same key, turns keys into ids and looks
-//! the ids up in the log.
+//! is, the id its command gets and, when it is new, the command itself. Each
+//! row is read on its own ([`Context::read`]), given its id, looked up in the
+//! log and decided with the user's override ([`Context::decide`]); the rows
+//! are then matched against the vault ([`matching::claim`]), and last the
+//! user's `skip` leaves out the rows still new.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
+use chrono::NaiveDate;
 use chrono_tz::Tz;
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 use uuid::Uuid;
 
 use super::amount::{Amount, parse_amount};
 use super::csv::{self, Record};
 use super::dates::{StatementDate, parse_date};
+use super::matching;
 use super::{
-    AmountSign, STATEMENT_NAMESPACE, StatementAction, StatementDateFormat, StatementMapping,
+    AmountSign, STATEMENT_NAMESPACE, StatementAction, StatementDateFormat,
+    StatementDescriptionRule, StatementLookalike, StatementMapping, StatementMatchChoice,
     StatementOptions, StatementRow, StatementRowOverride, StatementRowStatus,
 };
 use crate::{
-    Command, Core, Currency, DomainError, Entry, Result, TransactionKind, normalize_category_key,
+    Command, Core, Currency, DomainError, Entry, Result, TransactionKind, TransactionPatch,
+    normalize_category_key,
 };
 
 /// Version of the key format, first in every key: changing the format means
@@ -29,117 +33,326 @@ const KEY_VERSION: &str = "v1";
 /// A row of the statement with what happens to it.
 pub(super) struct Planned {
     pub row: StatementRow,
-    /// The command of a [`StatementRowStatus::New`] row.
+    /// The command of a [`StatementRowStatus::New`] row, or of one replacing
+    /// its match.
     pub command: Option<Command>,
+    /// The entry the row would replace is the statement row of the wallet
+    /// the row names (its import wrote it, or its claim or move names it):
+    /// replacing it claims that wallet's side of the transfer for that row.
+    pub replaces_other_row: bool,
+    /// The money-out half of a move between two accounts of the file, which
+    /// writes the transfer: the id of the money-in half, whose side the
+    /// import claims for it.
+    pub paired_in: Option<Uuid>,
 }
 
-/// Reads every row of `text` and decides what becomes of it. Writes nothing.
+impl Planned {
+    pub(super) fn new(row: StatementRow, command: Option<Command>) -> Self {
+        Self {
+            row,
+            command,
+            replaces_other_row: false,
+            paired_in: None,
+        }
+    }
+}
+
+/// The user's overrides by line; the last one of a line wins.
+pub(super) type Overrides<'o> = HashMap<u32, &'o StatementRowOverride>;
+
+/// Every row of a statement with what happens to it, and the wallets worth
+/// checking for rows typed by hand.
+pub(super) struct Plan {
+    pub rows: Vec<Planned>,
+    pub lookalikes: Vec<StatementLookalike>,
+}
+
+/// Reads every row of `text` and decides what becomes of it, with the user's
+/// `overrides`. Writes nothing.
 pub(super) fn plan(
     core: &Core,
     vault_id: Uuid,
     text: &str,
     mapping: &StatementMapping,
     options: &StatementOptions,
-) -> Result<Vec<Planned>> {
+    overrides: &[StatementRowOverride],
+) -> Result<Plan> {
     let delimiter = delimiter(&mapping.delimiter)?;
     let mut records = csv::records(text, delimiter);
     let context = Context::new(core, vault_id, &mut records, mapping, options)?;
+    let overrides: Overrides<'_> = overrides.iter().map(|o| (o.line, o)).collect();
 
+    // The row's own command, or the move, the claim or the replacement an
+    // earlier import made for it, whatever became of it: a command refused
+    // by the server stays in the log, and executing it again would be a
+    // no-op.
     let mut known = core
         .conn
-        .prepare_cached("SELECT EXISTS(SELECT 1 FROM commands WHERE id = ?1)")?;
+        .prepare_cached("SELECT id, payload FROM commands WHERE id IN (?1, ?2, ?3, ?4)")?;
+    // The claim made under a transaction's own id: a transfer that took the
+    // place of an entry, claimed on the side of the row the entry stood for.
+    let mut taken_over = core
+        .conn
+        .prepare_cached("SELECT payload FROM commands WHERE id = ?1")?;
     let mut occurrences: HashMap<String, u32> = HashMap::new();
     let mut planned = Vec::new();
+    // The transactions that stand for the rows already imported: never a
+    // match for another row.
+    let mut standing = HashSet::new();
     for record in records {
-        let Draft {
-            mut row,
-            outcome,
-            key,
-        } = context.read(&record);
+        let draft = context.read(&record);
+        let mut id = Uuid::nil();
         let mut imported = false;
-        if let Some(key) = key {
+        if let Some(key) = &draft.key {
             let seen = occurrences.entry(key.clone()).or_insert(0);
-            row.command_id = command_id(&format!("{key}|{seen}"));
+            id = row_id(&format!("{key}|{seen}"));
             *seen += 1;
-            imported = known.query_row(params![row.command_id], |r| r.get(0))?;
-        }
-        let mut command = None;
-        row.status = if imported {
-            StatementRowStatus::AlreadyImported
-        } else {
-            match outcome {
-                Outcome::Import(planned_command) => {
-                    command = Some(planned_command);
-                    StatementRowStatus::New
-                }
-                Outcome::Skip(code, reason) => StatementRowStatus::Skipped {
-                    code: code.to_string(),
-                    reason,
-                },
-                Outcome::Invalid(code, message) => StatementRowStatus::Invalid {
-                    code: code.to_string(),
-                    message,
-                },
+            let ids = params![id, move_id(id), claim_id(id), replace_id(id)];
+            let found =
+                known.query_map(ids, |r| Ok((r.get::<_, Uuid>(0)?, r.get::<_, String>(1)?)))?;
+            let mut named = Vec::new();
+            for command in found {
+                let (command_id, payload) = command?;
+                imported = true;
+                named.push(if command_id == id {
+                    id
+                } else {
+                    named_transaction(&payload).unwrap_or(id)
+                });
             }
+            for transaction in named {
+                standing.insert(transaction);
+                let successor = taken_over
+                    .query_row(params![claim_id(transaction)], |r| r.get::<_, String>(0))
+                    .optional()?;
+                if let Some(successor) = successor.as_deref().and_then(named_transaction) {
+                    standing.insert(successor);
+                }
+            }
+        }
+        // A row in the log stays imported whatever the rules or the user now
+        // say, so its override changes nothing.
+        let user = if imported {
+            None
+        } else {
+            overrides.get(&record.line).copied()
         };
-        planned.push(Planned { row, command });
+        let mut item = context.decide(draft, user);
+        item.row.command_id = id;
+        if imported {
+            item.row.status = StatementRowStatus::AlreadyImported;
+            item.command = None;
+        }
+        planned.push(item);
     }
-    Ok(planned)
+    // The file's own moves between accounts first: their halves match
+    // nothing in the vault.
+    matching::pair_legs(&mut planned, &overrides);
+    let lookalikes = matching::claim(core, vault_id, options, &overrides, &standing, &mut planned)?;
+    leave_out(&mut planned, &overrides);
+    Ok(Plan {
+        rows: planned,
+        lookalikes,
+    })
 }
 
-/// Applies the user's changes to the new rows: skip them, or change their
-/// category or note. Overrides of rows that are not new change nothing; the
-/// last override of a line wins.
-pub(super) fn apply_overrides(planned: &mut [Planned], overrides: &[StatementRowOverride]) {
-    let by_line: HashMap<u32, &StatementRowOverride> =
-        overrides.iter().map(|o| (o.line, o)).collect();
-    for item in planned {
-        let Some(user) = by_line.get(&item.row.line) else {
-            continue;
+/// The id of the command that moves the row typed by hand for the
+/// statement row `row_id` into the statement's wallet: derived from the
+/// row's, so moving it again is a no-op and, once it is in the log, the row
+/// reads as imported.
+pub(super) fn move_id(row_id: Uuid) -> Uuid {
+    Uuid::new_v5(&row_id, b"move-existing")
+}
+
+/// The id of the command that claims, for the statement row `row_id`, the
+/// transaction that stands for it: the match the user left in place, or
+/// the statement wallet's side of a transfer. Derived from the row's, like
+/// [`move_id`].
+pub(super) fn claim_id(row_id: Uuid) -> Uuid {
+    Uuid::new_v5(&row_id, b"claim")
+}
+
+/// The move ([`move_id`]) or the claim an import writes for a flagged row,
+/// once the new rows are in: a duplicate to move goes to `wallet`; one left
+/// in place, or the other side of a transfer, is claimed with an
+/// `UpdateTransaction` naming the wallet (or the transfer's side) it already
+/// has, which changes nothing but says, in the log, which row it stands for.
+/// Nothing for a row imported anyway.
+pub(super) fn afterwards(row: &StatementRow, wallet: Uuid) -> Option<(Uuid, Command)> {
+    let existing = row.existing.as_ref()?;
+    let entry = |wallet_id| TransactionPatch {
+        wallet_id: Some(wallet_id),
+        ..TransactionPatch::default()
+    };
+    let (id, patch) = match (&row.status, row.match_choice?) {
+        (StatementRowStatus::PossibleDuplicate, StatementMatchChoice::MoveExisting) => {
+            (move_id(row.command_id), entry(wallet))
+        }
+        (StatementRowStatus::PossibleDuplicate, StatementMatchChoice::Skip) => {
+            (claim_id(row.command_id), entry(existing.wallet_id?))
+        }
+        (StatementRowStatus::MatchedTransfer, StatementMatchChoice::Skip) => (
+            claim_id(row.command_id),
+            side(existing.from_id == Some(wallet), wallet),
+        ),
+        _ => return None,
+    };
+    Some((id, update(existing.id, patch)))
+}
+
+/// The claim of the statement wallet's side of the transfer a new row
+/// creates (the transfer's id is the row's), with its id.
+pub(super) fn own_side(row_id: Uuid, command: &Command, wallet: Uuid) -> Option<(Uuid, Command)> {
+    let Command::TransferWallet { from_wallet_id, .. } = command else {
+        return None;
+    };
+    Some((
+        claim_id(row_id),
+        update(row_id, side(*from_wallet_id == wallet, wallet)),
+    ))
+}
+
+/// What an import writes, all at once, for the money-out half of a move
+/// between two accounts of the file (`row_id`, its transfer `command`): the
+/// transfer under the half's id, and the claims of both its sides, the
+/// money-in half's (`in_row`) under that half's claim id, so it reads as
+/// imported from then on too.
+pub(super) fn paired(row_id: Uuid, command: Command, in_row: Uuid) -> Vec<(Uuid, Command)> {
+    let Command::TransferWallet {
+        from_wallet_id,
+        to_wallet_id,
+        ..
+    } = command
+    else {
+        return vec![(row_id, command)];
+    };
+    vec![
+        (row_id, command),
+        (claim_id(row_id), update(row_id, side(true, from_wallet_id))),
+        (claim_id(in_row), update(row_id, side(false, to_wallet_id))),
+    ]
+}
+
+/// The id of the command that voids, for the statement row `row_id`, the
+/// entry that stood for the transfer the row is. Derived from the row's,
+/// like [`move_id`].
+pub(super) fn replace_id(row_id: Uuid) -> Uuid {
+    Uuid::new_v5(&row_id, b"replace")
+}
+
+/// What an import writes, all at once, for a row replacing its match: the
+/// row's transfer under the row's id, the void of the entry, the claim of
+/// the statement wallet's side and, when the entry stood for the named
+/// wallet's statement row (`other_row`), the claim of that wallet's side
+/// under the entry's own claim id, which a later preview of that statement
+/// follows from the row to the transfer. With their ids, in that order.
+pub(super) fn replacing(
+    row: &StatementRow,
+    command: Command,
+    wallet: Uuid,
+    other_row: bool,
+) -> Vec<(Uuid, Command)> {
+    let Some(existing) = row.existing.as_ref() else {
+        return vec![(row.command_id, command)];
+    };
+    let mut batch = Vec::new();
+    batch.extend(own_side(row.command_id, &command, wallet));
+    if other_row
+        && let Command::TransferWallet {
+            from_wallet_id,
+            to_wallet_id,
+            ..
+        } = &command
+    {
+        let other = if *from_wallet_id == wallet {
+            *to_wallet_id
+        } else {
+            *from_wallet_id
         };
-        if item.row.status != StatementRowStatus::New {
-            continue;
+        batch.push((
+            claim_id(existing.id),
+            update(row.command_id, side(*from_wallet_id == other, other)),
+        ));
+    }
+    let void = Command::VoidTransaction {
+        transaction_id: existing.id,
+    };
+    batch.insert(0, (replace_id(row.command_id), void));
+    batch.insert(0, (row.command_id, command));
+    batch
+}
+
+/// A patch naming `wallet` as the source (`from`) or the destination of a
+/// transfer.
+fn side(from: bool, wallet: Uuid) -> TransactionPatch {
+    if from {
+        TransactionPatch {
+            from_id: Some(wallet),
+            ..TransactionPatch::default()
         }
-        if user.skip {
-            item.row.status = StatementRowStatus::Skipped {
-                code: "skipped_by_you".to_string(),
-                reason: "skipped by you".to_string(),
-            };
-            item.command = None;
-            continue;
-        }
-        let note = user
-            .note
-            .as_deref()
-            .map(|note| compose_note(note, item.row.original.as_deref()));
-        match item.command.as_mut() {
-            Some(Command::Income(entry) | Command::Expense(entry) | Command::Refund(entry)) => {
-                if let Some(category) = &user.category {
-                    let category = category.trim();
-                    entry.category = (!category.is_empty()).then(|| category.to_string());
-                }
-                if let Some(note) = note {
-                    entry.note = note;
-                }
-            }
-            Some(Command::TransferWallet { note: current, .. }) => {
-                if let Some(note) = note {
-                    *current = note;
-                }
-            }
-            _ => {}
+    } else {
+        TransactionPatch {
+            to_id: Some(wallet),
+            ..TransactionPatch::default()
         }
     }
+}
+
+fn update(transaction_id: Uuid, patch: TransactionPatch) -> Command {
+    Command::UpdateTransaction {
+        transaction_id,
+        patch,
+    }
+}
+
+/// The transaction a move, a claim or a replacement (as the log stores it)
+/// names.
+fn named_transaction(payload: &str) -> Option<Uuid> {
+    match serde_json::from_str(payload).ok()? {
+        Command::UpdateTransaction { transaction_id, .. }
+        | Command::VoidTransaction { transaction_id } => Some(transaction_id),
+        _ => None,
+    }
+}
+
+/// The user's `skip` on the rows still new.
+fn leave_out(planned: &mut [Planned], overrides: &Overrides<'_>) {
+    for item in planned {
+        if item.row.status == StatementRowStatus::New
+            && overrides.get(&item.row.line).is_some_and(|user| user.skip)
+        {
+            item.row.status = skipped_by_you();
+            item.command = None;
+        }
+    }
+}
+
+pub(super) fn skipped(code: &str, reason: String) -> StatementRowStatus {
+    StatementRowStatus::Skipped {
+        code: code.to_string(),
+        reason,
+    }
+}
+
+fn invalid(code: &str, message: String) -> StatementRowStatus {
+    StatementRowStatus::Invalid {
+        code: code.to_string(),
+        message,
+    }
+}
+
+pub(super) fn skipped_by_you() -> StatementRowStatus {
+    skipped("skipped_by_you", "skipped by you".to_string())
 }
 
 /// The id of the row whose full key (occurrence index included) is `key`.
-fn command_id(key: &str) -> Uuid {
+fn row_id(key: &str) -> Uuid {
     Uuid::new_v5(&STATEMENT_NAMESPACE, key.as_bytes())
 }
 
 /// The one-character delimiter of a mapping. `\t` and `tab` spelled out are
 /// read as a tab.
-fn delimiter(value: &str) -> Result<char> {
+pub(super) fn delimiter(value: &str) -> Result<char> {
     let bad = || {
         DomainError::InvalidCommand(format!(
             "the delimiter must be one character, not '{value}'"
@@ -158,34 +371,95 @@ fn delimiter(value: &str) -> Result<char> {
     Ok(c)
 }
 
-// ---------------------------------------------------------------------------
-// Reading one row
-// ---------------------------------------------------------------------------
-
-/// A row read on its own, before the file-wide pass gives it an id.
-struct Draft {
+/// A row read on its own, before the file-wide pass gives it an id and
+/// [`Context::decide`] says what becomes of it.
+struct Draft<'a> {
     row: StatementRow,
-    outcome: Outcome,
     /// The key without the occurrence index; `None` when the date or the
     /// amount could not be read, and the row then keeps the nil id.
     key: Option<String>,
+    /// Why the record is no row at all (`invalid_row`).
+    broken: Option<String>,
+    /// What the type rules and the default action make of the row.
+    base: &'a StatementAction,
+    /// The description rule that matched, by position in [`Context::rules`].
+    rule: Option<usize>,
+    /// The type column's value, for the reason of a skip.
+    type_value: Option<String>,
+    /// Whether the money goes out; `None` when the amount is unreadable.
+    outflow: Option<bool>,
+    /// The row's status, when `skip_statuses` holds it.
+    skipped_status: Option<String>,
+    /// The first reason the row cannot be imported, whatever it is taken
+    /// for.
+    problem: Option<StatementRowStatus>,
 }
 
-/// The cells of a row the outcome depends on, read once.
-struct Cells<'r> {
-    type_value: Option<&'r str>,
-    status: Option<&'r str>,
-    currency: Option<&'r str>,
-    date: std::result::Result<StatementDate, String>,
-    amount: std::result::Result<Amount, String>,
+/// Who said what a row is, for the reason of a skip.
+enum By<'r> {
+    User,
+    /// A description rule, with its text.
+    Rule(&'r str),
+    /// The type rules or the default action, with the type column's value.
+    Mapping(Option<&'r str>),
 }
 
-/// What a row becomes when its id is not in the log yet. `Skip` and
-/// `Invalid` carry the code of [`StatementRowStatus`] and the English detail.
-enum Outcome {
-    Import(Command),
-    Skip(&'static str, String),
-    Invalid(&'static str, String),
+impl By<'_> {
+    fn skip(&self) -> StatementRowStatus {
+        let reason = match self {
+            Self::User => return skipped_by_you(),
+            Self::Rule(text) => format!("description contains \"{text}\" is skipped"),
+            Self::Mapping(None) => "skipped by the mapping".to_string(),
+            Self::Mapping(Some(value)) => format!("type {value} is skipped"),
+        };
+        skipped("skipped_by_rule", reason)
+    }
+}
+
+/// A [`StatementDescriptionRule`] ready to be matched. A rule whose
+/// `contains` is blank is none, so a rule still being typed never fails a
+/// preview.
+struct Rule<'a> {
+    /// Position in [`StatementMapping::description_rules`].
+    index: u32,
+    /// `contains` lowercased, inner runs of spaces collapsed: what the
+    /// lowercased payee must hold.
+    needle: String,
+    /// `contains` trimmed, inner runs of spaces collapsed, for the reason of
+    /// a skip.
+    text: String,
+    action: Option<&'a StatementAction>,
+    /// Non-blank, trimmed.
+    category: Option<String>,
+    /// Non-blank, trimmed.
+    note: Option<String>,
+}
+
+impl<'a> Rule<'a> {
+    fn all(rules: &'a [StatementDescriptionRule]) -> Vec<Self> {
+        let filled = |value: &Option<String>| {
+            value
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        };
+        rules
+            .iter()
+            .enumerate()
+            .filter_map(|(index, rule)| {
+                let text = collapse(std::iter::once(rule.contains.as_str()));
+                (!text.is_empty()).then(|| Rule {
+                    index: u32::try_from(index).unwrap_or(u32::MAX),
+                    needle: text.to_lowercase(),
+                    text,
+                    action: rule.action.as_ref(),
+                    category: filled(&rule.category),
+                    note: filled(&rule.note),
+                })
+            })
+            .collect()
+    }
 }
 
 /// The indices of the mapped columns in the header.
@@ -202,6 +476,8 @@ struct Columns {
     category: Option<usize>,
     original_amount: Option<usize>,
     original_currency: Option<usize>,
+    account: Option<usize>,
+    transfer: Option<usize>,
 }
 
 impl Columns {
@@ -209,21 +485,15 @@ impl Columns {
     /// A blank optional column is no column.
     fn resolve(headers: &[String], mapping: &StatementMapping) -> Result<Self> {
         let find = |name: &str| -> Result<usize> {
-            let wanted = name.trim().to_lowercase();
-            if wanted.is_empty() {
+            let name = name.trim();
+            if name.is_empty() {
                 return Err(DomainError::InvalidCommand(
                     "the mapping leaves a required column blank".to_string(),
                 ));
             }
-            headers
-                .iter()
-                .position(|h| h.trim().to_lowercase() == wanted)
-                .ok_or_else(|| {
-                    DomainError::InvalidCommand(format!(
-                        "column '{}' is not in the statement",
-                        name.trim()
-                    ))
-                })
+            csv::column(headers, name).ok_or_else(|| {
+                DomainError::InvalidCommand(format!("column '{name}' is not in the statement"))
+            })
         };
         let optional = |name: &Option<String>| -> Result<Option<usize>> {
             match name.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
@@ -247,6 +517,8 @@ impl Columns {
             category: optional(&mapping.category_column)?,
             original_amount: optional(&mapping.original_amount_column)?,
             original_currency: optional(&mapping.original_currency_column)?,
+            account: optional(&mapping.account_column)?,
+            transfer: optional(&mapping.transfer_column)?,
         })
     }
 }
@@ -260,13 +532,24 @@ struct Context<'a> {
     flow_id: Option<Uuid>,
     currency: Currency,
     tz: Tz,
+    /// Rows dated before it, in their own offset, are skipped.
+    since: Option<NaiveDate>,
     /// Normalized name or alias -> name of an active, non-system category.
     categories: HashMap<String, String>,
+    /// Every wallet of the vault, whether it is archived.
+    wallets: HashMap<Uuid, bool>,
+    /// The envelopes an entry can go to, Unallocated included.
+    active_flows: HashSet<Uuid>,
+    unallocated: Uuid,
+    /// The description rules that are rules, in order.
+    rules: Vec<Rule<'a>>,
+    /// Account trimmed and lowercased -> its wallet, `None` to leave it out.
+    accounts: HashMap<String, Option<Uuid>>,
 }
 
 impl<'a> Context<'a> {
-    /// Checks the vault, the wallets, the flow, the timezone and the mapping
-    /// against the header, which it takes from `records`.
+    /// Checks the vault, the wallets, the flow, the timezone, the rules and
+    /// the mapping against the header, which it takes from `records`.
     fn new(
         core: &Core,
         vault_id: Uuid,
@@ -275,8 +558,12 @@ impl<'a> Context<'a> {
         options: &StatementOptions,
     ) -> Result<Self> {
         let snapshot = core.snapshot(vault_id)?;
-        let wallet_exists = |id: Uuid| snapshot.wallets.iter().any(|w| w.id == id);
-        if !wallet_exists(options.wallet_id) {
+        let wallets: HashMap<Uuid, bool> = snapshot
+            .wallets
+            .iter()
+            .map(|w| (w.id, w.archived))
+            .collect();
+        if !wallets.contains_key(&options.wallet_id) {
             return Err(DomainError::NotFound(format!(
                 "wallet {}",
                 options.wallet_id
@@ -287,12 +574,40 @@ impl<'a> Context<'a> {
         {
             return Err(DomainError::NotFound(format!("flow {flow}")));
         }
-        let actions = mapping.type_rules.iter().map(|rule| &rule.action);
-        for other in actions
-            .chain([&mapping.default_action])
-            .filter_map(counter_wallet)
+        // An archived one is fine: an entry can be moved out of it.
+        if let Some(other) = options
+            .also_check_wallets
+            .iter()
+            .chain(
+                options
+                    .account_wallets
+                    .iter()
+                    .filter_map(|a| a.wallet_id.as_ref()),
+            )
+            .find(|id| !wallets.contains_key(id))
         {
-            if !wallet_exists(other) {
+            return Err(DomainError::NotFound(format!("wallet {other}")));
+        }
+        // The last of an account listed twice wins, as an override's does.
+        let accounts = options
+            .account_wallets
+            .iter()
+            .map(|account| (account_key(&account.account), account.wallet_id))
+            .collect();
+        let rules = Rule::all(&mapping.description_rules);
+        for rule in &rules {
+            if let Some(category) = &rule.category {
+                normalize_category_key(category)?;
+            }
+        }
+        let actions = mapping
+            .type_rules
+            .iter()
+            .map(|rule| &rule.action)
+            .chain(rules.iter().filter_map(|rule| rule.action))
+            .chain([&mapping.default_action]);
+        for other in actions.filter_map(counter_wallet) {
+            if !wallets.contains_key(&other) {
                 return Err(DomainError::NotFound(format!("wallet {other}")));
             }
             if other == options.wallet_id {
@@ -312,50 +627,60 @@ impl<'a> Context<'a> {
                 "the custom date pattern is empty".to_string(),
             ));
         }
-
-        let header = records
-            .next()
-            .ok_or_else(|| DomainError::InvalidCommand("the statement is empty".to_string()))?;
-        if header.unclosed_quote {
-            return Err(DomainError::InvalidCommand(
-                "the header of the statement never closes a quote".to_string(),
-            ));
-        }
         Ok(Self {
-            columns: Columns::resolve(&header.fields, mapping)?,
+            columns: Columns::resolve(&csv::header(records)?, mapping)?,
             mapping,
             vault_id,
             wallet_id: options.wallet_id,
             flow_id: options.flow_id,
             currency: snapshot.currency,
             tz,
+            since: options.since,
             categories: category_names(core, vault_id)?,
+            active_flows: snapshot
+                .flows
+                .iter()
+                .filter(|f| !f.archived)
+                .map(|f| f.id)
+                .collect(),
+            unallocated: snapshot.unallocated_flow_id,
+            wallets,
+            rules,
+            accounts,
         })
     }
 
-    /// Everything about one record, but its id and whether it is in the log.
-    fn read(&self, record: &Record) -> Draft {
+    /// The wallet the rows of `account` go to: the one the options give it
+    /// (`None` leaves them out), else the options' wallet, as for every row
+    /// of a file without an account column.
+    fn wallet_of(&self, account: Option<&str>) -> Option<Uuid> {
+        match account.and_then(|account| self.accounts.get(&account_key(account))) {
+            Some(listed) => *listed,
+            None => Some(self.wallet_id),
+        }
+    }
+
+    /// Everything about one record that holds whatever the user says, but
+    /// its id and whether it is in the log.
+    fn read(&self, record: &Record) -> Draft<'a> {
         let mut row = StatementRow {
             line: record.line,
-            command_id: Uuid::nil(),
-            status: StatementRowStatus::New,
-            kind: None,
-            occurred_at: None,
-            amount: 0,
-            rounded: false,
-            payee: String::new(),
-            bank_category: None,
-            matched_category: None,
-            counter_wallet_id: None,
-            original: None,
+            action: self.mapping.default_action.clone(),
+            ..StatementRow::default()
         };
-        let invalid = |row, message: String| Draft {
+        let broken = |row, message: String| Draft {
             row,
-            outcome: Outcome::Invalid("invalid_row", message),
             key: None,
+            broken: Some(message),
+            base: &self.mapping.default_action,
+            rule: None,
+            type_value: None,
+            outflow: None,
+            skipped_status: None,
+            problem: None,
         };
         if record.unclosed_quote {
-            return invalid(
+            return broken(
                 row,
                 "a quoted field is never closed, so the rest of the file is in this row"
                     .to_string(),
@@ -364,7 +689,7 @@ impl<'a> Context<'a> {
         // Empty cells past the header are the trailing delimiter some banks
         // end every row with, not a ragged row.
         if !csv::agrees(record, self.columns.count) {
-            return invalid(
+            return broken(
                 row,
                 format!(
                     "the row has {} columns, the header {}",
@@ -377,114 +702,236 @@ impl<'a> Context<'a> {
         let optional = |index: Option<usize>| index.map(field).filter(|v| !v.is_empty());
 
         row.payee = collapse(self.columns.description.iter().map(|&i| field(i)));
+        row.account = optional(self.columns.account).map(|account| account.trim().to_string());
+        row.wallet_id = self.wallet_of(row.account.as_deref());
+        row.transfer_leg = optional(self.columns.transfer).is_some_and(truthy);
         row.bank_category = optional(self.columns.category).map(str::to_string);
         row.matched_category = row
             .bank_category
             .as_deref()
             .and_then(|bank| self.match_category(bank));
+        row.note.clone_from(&row.payee);
+        row.category.clone_from(&row.matched_category);
+        // The first rule the description holds decides on its own.
+        let payee = row.payee.to_lowercase();
+        let rule = self
+            .rules
+            .iter()
+            .position(|rule| payee.contains(&rule.needle));
+        if let Some(found) = rule.map(|at| &self.rules[at]) {
+            row.description_rule = Some(found.index);
+            if let Some(note) = &found.note {
+                row.note.clone_from(note);
+            }
+            if let Some(category) = &found.category {
+                row.category = Some(category.clone());
+            }
+        }
 
-        let cells = Cells {
-            type_value: optional(self.columns.kind),
-            status: optional(self.columns.status),
-            currency: optional(self.columns.currency),
-            date: parse_date(field(self.columns.date), &self.mapping.date_format, self.tz),
-            amount: parse_amount(
-                field(self.columns.amount),
-                self.mapping.decimal_comma,
-                self.currency.minor_units(),
-            ),
-        };
-        let action = self.action(cells.type_value);
+        let type_value = optional(self.columns.kind);
+        let status = optional(self.columns.status);
+        let currency = optional(self.columns.currency);
+        let date = parse_date(field(self.columns.date), &self.mapping.date_format, self.tz);
+        let amount = parse_amount(
+            field(self.columns.amount),
+            self.mapping.decimal_comma,
+            self.currency.minor_units(),
+        );
+        let base = self.action(type_value);
+        let outflow = amount.as_ref().ok().map(|amount| self.outflow(amount));
 
-        row.occurred_at = cells.date.as_ref().ok().map(|date| date.at);
-        if let Ok(amount) = &cells.amount {
+        row.occurred_at = date.as_ref().ok().map(|date| date.at);
+        if let Ok(amount) = &amount {
             row.amount = amount.minor.abs();
             row.rounded = amount.rounded;
         }
-        row.kind = self
-            .outflow(&cells)
-            .and_then(|outflow| kind_of(action, outflow));
-        row.counter_wallet_id = counter_wallet(action);
+        row.outflow = outflow == Some(true);
         row.original = self.original(
             optional(self.columns.original_amount),
             optional(self.columns.original_currency),
-            cells.currency,
-            cells.amount.as_ref().ok(),
+            currency,
+            amount.as_ref().ok(),
         );
-        let key = match (&cells.date, &cells.amount) {
-            (Ok(date), Ok(amount)) => {
-                Some(self.key(&row, &date.stamp, cells.type_value, amount.minor))
-            }
+        // The kind the type rules and the default action give: the one the
+        // key holds, whatever a description rule or the user make of the row.
+        let base_kind = outflow.and_then(|outflow| kind_of(base, outflow));
+        let key = match (&date, &amount) {
+            (Ok(date), Ok(amount)) => Some(self.key(
+                &date.stamp,
+                type_value,
+                base_kind,
+                (&row.payee, row.account.as_deref()),
+                amount.minor,
+            )),
             _ => None,
         };
-        let outcome = self.outcome(&row, action, cells);
-        Draft { row, outcome, key }
-    }
-
-    /// Whether the row's money goes out; `None` when the amount is unreadable.
-    fn outflow(&self, cells: &Cells<'_>) -> Option<bool> {
-        let minor = cells.amount.as_ref().ok()?.minor;
-        Some(match self.mapping.amount_sign {
-            AmountSign::OutflowPositive => minor > 0,
-            AmountSign::OutflowNegative => minor < 0,
-        })
-    }
-
-    /// Why the row is not imported, in the order a user expects to read it:
-    /// what the mapping skips, then what cannot be read, then what is missing.
-    fn outcome(&self, row: &StatementRow, action: &StatementAction, cells: Cells<'_>) -> Outcome {
-        let outflow = self.outflow(&cells);
-        let type_value = cells.type_value;
-        if *action == StatementAction::Skip {
-            return Outcome::Skip("skipped_by_rule", skip_reason(type_value));
+        let skipped_status = status
+            .filter(|status| {
+                self.mapping
+                    .skip_statuses
+                    .iter()
+                    .any(|skipped| same_text(skipped, status))
+            })
+            .map(str::to_string);
+        Draft {
+            row,
+            key,
+            broken: None,
+            base,
+            rule,
+            type_value: type_value.map(str::to_string),
+            outflow,
+            skipped_status,
+            problem: self.problem(currency, date, amount),
         }
-        if let Some(status) = cells.status
-            && self
-                .mapping
-                .skip_statuses
-                .iter()
-                .any(|skipped| same_text(skipped, status))
+    }
+
+    fn outflow(&self, amount: &Amount) -> bool {
+        match self.mapping.amount_sign {
+            AmountSign::OutflowPositive => amount.minor > 0,
+            AmountSign::OutflowNegative => amount.minor < 0,
+        }
+    }
+
+    /// The first reason a row cannot be imported, whatever it is taken for:
+    /// an unreadable date, a day before `since`, another currency, an
+    /// unreadable amount, a zero amount. A row before the start is left out
+    /// whatever else is wrong with it, so only its date has to be read.
+    fn problem(
+        &self,
+        currency: Option<&str>,
+        date: std::result::Result<StatementDate, String>,
+        amount: std::result::Result<Amount, String>,
+    ) -> Option<StatementRowStatus> {
+        let date = match date {
+            Ok(date) => date,
+            Err(message) => return Some(invalid("invalid_date", message)),
+        };
+        if let Some(since) = self.since
+            && date.at.date_naive() < since
         {
-            return Outcome::Skip("skipped_status", format!("status {status} is skipped"));
+            let reason = format!("dated before {since}, the day the import starts");
+            return Some(skipped("before_start", reason));
         }
-        if let Some(currency) = cells.currency
+        if let Some(currency) = currency
             && !currency.eq_ignore_ascii_case(self.currency.code())
         {
-            return Outcome::Invalid(
-                "currency_mismatch",
-                format!(
-                    "the row is in {currency}, the vault in {}",
-                    self.currency.code()
-                ),
-            );
+            let vault = self.currency.code();
+            let message = format!("the row is in {currency}, the vault in {vault}");
+            return Some(invalid("currency_mismatch", message));
         }
-        let occurred_at = match cells.date {
-            Ok(date) => date.at,
-            Err(message) => return Outcome::Invalid("invalid_date", message),
-        };
-        let minor = match cells.amount {
-            Ok(amount) => amount.minor,
-            Err(message) => return Outcome::Invalid("invalid_amount", message),
-        };
-        if minor == 0 {
-            return Outcome::Skip("zero_amount", "the amount is zero".to_string());
+        match amount {
+            Err(message) => Some(invalid("invalid_amount", message)),
+            Ok(amount) if amount.minor == 0 => {
+                Some(skipped("zero_amount", "the amount is zero".to_string()))
+            }
+            Ok(_) => None,
         }
+    }
 
-        let note = compose_note(&row.payee, row.original.as_deref());
-        let transfer = |from_wallet_id, to_wallet_id| {
-            Outcome::Import(Command::TransferWallet {
-                amount: row.amount,
-                from_wallet_id,
-                to_wallet_id,
-                note: note.clone(),
-                occurred_at,
-            })
+    /// What becomes of a row not in the log yet, with the user's override.
+    /// A row the mapping reads as invalid stays as it reads it: the override
+    /// changes nothing.
+    fn decide(&self, draft: Draft<'a>, user: Option<&StatementRowOverride>) -> Planned {
+        let Draft {
+            mut row,
+            broken,
+            base,
+            rule,
+            type_value,
+            outflow,
+            skipped_status,
+            problem,
+            ..
+        } = draft;
+        if let Some(message) = broken {
+            row.status = invalid("invalid_row", message);
+            return Planned::new(row, None);
+        }
+        // The user's action, else the description rule's, else the type
+        // rule's or the default action.
+        let ruled = rule
+            .map(|at| &self.rules[at])
+            .and_then(|rule| rule.action.map(|action| (action, By::Rule(&rule.text))));
+        let mapped = ruled.as_ref().map_or(base, |(action, _)| *action);
+        let invalid = *mapped != StatementAction::Skip
+            && skipped_status.is_none()
+            && matches!(problem, Some(StatementRowStatus::Invalid { .. }));
+        let user = user.filter(|_| !invalid);
+        let (action, by) = match (user.and_then(|user| user.action.as_ref()), ruled) {
+            (Some(action), _) => (action, By::User),
+            (None, Some(ruled)) => ruled,
+            (None, None) => (base, By::Mapping(type_value.as_deref())),
+        };
+        row.base_action = Some(mapped.clone());
+        row.action = action.clone();
+        row.kind = outflow.and_then(|outflow| kind_of(action, outflow));
+        row.counter_wallet_id = counter_wallet(action);
+        let Some(wallet) = row.wallet_id else {
+            let account = row.account.as_deref().unwrap_or_default();
+            row.status = skipped("skipped_account", format!("account {account} is left out"));
+            return Planned::new(row, None);
+        };
+        // In the order a user expects to read it: what the mapping or the
+        // user skip, then what cannot be read, then what is missing.
+        let outcome = if *action == StatementAction::Skip {
+            Err(by.skip())
+        } else if let Some(status) = skipped_status {
+            Err(skipped(
+                "skipped_status",
+                format!("status {status} is skipped"),
+            ))
+        } else if let Some(problem) = problem {
+            Err(problem)
+        } else {
+            self.import(&row, wallet, action, &by, user)
+        };
+        match outcome {
+            Ok(command) => Planned::new(row, Some(command)),
+            Err(status) => Planned::new(StatementRow { status, ..row }, None),
+        }
+    }
+
+    /// The command of a row whose date and amount were read, going to
+    /// `wallet` as the action `by` whoever said it, or why it waits for a
+    /// wallet.
+    fn import(
+        &self,
+        row: &StatementRow,
+        wallet: Uuid,
+        action: &StatementAction,
+        by: &By<'_>,
+        user: Option<&StatementRowOverride>,
+    ) -> std::result::Result<Command, StatementRowStatus> {
+        // Read whenever no problem was found.
+        let Some(occurred_at) = row.occurred_at else {
+            return Err(invalid(
+                "invalid_date",
+                "the date cannot be read".to_string(),
+            ));
+        };
+        let text = user
+            .and_then(|user| user.note.as_deref())
+            .unwrap_or(&row.note);
+        let note = compose_note(text, row.original.as_deref());
+        let transfer = |from_wallet_id, to_wallet_id| Command::TransferWallet {
+            amount: row.amount,
+            from_wallet_id,
+            to_wallet_id,
+            note: note.clone(),
+            occurred_at,
         };
         let entry = || Entry {
             amount: row.amount,
-            wallet_id: Some(self.wallet_id),
-            flow_id: self.flow_id,
-            category: row.matched_category.clone(),
+            wallet_id: Some(wallet),
+            flow_id: self.flow(user),
+            category: match user.and_then(|user| user.category.as_deref()) {
+                Some(typed) => {
+                    let typed = typed.trim();
+                    (!typed.is_empty()).then(|| typed.to_string())
+                }
+                None => row.category.clone(),
+            },
             note: note.clone(),
             occurred_at,
             // A statement is the importer's own account.
@@ -493,36 +940,62 @@ impl<'a> Context<'a> {
         // A sign that contradicts the action (a refund written as money out)
         // keeps the action: the rule names what the row is, the amount is
         // taken as absolute.
-        match action {
-            StatementAction::TransferIn {
-                from_wallet_id: Some(from),
-            } => transfer(*from, self.wallet_id),
-            StatementAction::TransferIn {
-                from_wallet_id: None,
-            } => Outcome::Skip(
-                "needs_wallet",
-                "choose the wallet the money came from".to_string(),
+        Ok(match action {
+            StatementAction::TransferIn { from_wallet_id } => transfer(
+                self.other_wallet(*from_wallet_id, wallet, "came from")?,
+                wallet,
             ),
-            StatementAction::TransferOut {
-                to_wallet_id: Some(to),
-            } => transfer(self.wallet_id, *to),
-            StatementAction::TransferOut { to_wallet_id: None } => Outcome::Skip(
-                "needs_wallet",
-                "choose the wallet the money went to".to_string(),
+            StatementAction::TransferOut { to_wallet_id } => {
+                transfer(wallet, self.other_wallet(*to_wallet_id, wallet, "went to")?)
+            }
+            StatementAction::Skip => return Err(by.skip()),
+            StatementAction::BySign if row.outflow => Command::Expense(entry()),
+            StatementAction::BySign | StatementAction::Income => Command::Income(entry()),
+            StatementAction::Expense => Command::Expense(entry()),
+            StatementAction::Refund => Command::Refund(entry()),
+        })
+    }
+
+    /// The other wallet of a transfer, or why the row waits for one
+    /// (`needs_wallet`): none named, or one the money cannot move to or from
+    /// (the row's `own` wallet, one not in the vault, an archived one). `way`
+    /// is `came from` or `went to`.
+    fn other_wallet(
+        &self,
+        named: Option<Uuid>,
+        own: Uuid,
+        way: &str,
+    ) -> std::result::Result<Uuid, StatementRowStatus> {
+        let reason = match named {
+            None => format!("choose the wallet the money {way}"),
+            Some(id) if id == own => format!(
+                "the money cannot move between the imported wallet and itself: choose the wallet it {way}"
             ),
-            StatementAction::Skip => Outcome::Skip("skipped_by_rule", skip_reason(type_value)),
-            StatementAction::BySign if outflow == Some(true) => {
-                Outcome::Import(Command::Expense(entry()))
-            }
-            StatementAction::BySign | StatementAction::Income => {
-                Outcome::Import(Command::Income(entry()))
-            }
-            StatementAction::Expense => Outcome::Import(Command::Expense(entry())),
-            StatementAction::Refund => Outcome::Import(Command::Refund(entry())),
+            Some(id) => match self.wallets.get(&id) {
+                None => {
+                    format!("wallet {id} is not in the vault: choose the wallet the money {way}")
+                }
+                Some(true) => format!("the wallet the money {way} is archived: choose another"),
+                Some(false) => return Ok(id),
+            },
+        };
+        Err(skipped("needs_wallet", reason))
+    }
+
+    /// The envelope of an entry: the user's when it is an active envelope of
+    /// the vault (an archived or unknown one is ignored), else the options'.
+    /// The user's Unallocated is `None`, as the options name it.
+    fn flow(&self, user: Option<&StatementRowOverride>) -> Option<Uuid> {
+        match user
+            .and_then(|user| user.flow_id)
+            .filter(|id| self.active_flows.contains(id))
+        {
+            Some(id) if id == self.unallocated => None,
+            Some(id) => Some(id),
+            None => self.flow_id,
         }
     }
 
-    /// The rule for the type value, else the default action.
     fn action(&self, type_value: Option<&str>) -> &'a StatementAction {
         type_value
             .and_then(|value| {
@@ -537,25 +1010,38 @@ impl<'a> Context<'a> {
     /// `v1|vault|wallet|date|type|signed minor units|payee`: what the row
     /// is, never what the mapping does with it. The date is the
     /// [`StatementDate::stamp`] (the UTC instant for a timestamp); the type
-    /// is the type column's value, or the kind when there is none; the amount
-    /// is signed as the file wrote it; the payee is lowercased. The status is
-    /// left out on purpose.
+    /// is the type column's value, or else `base_kind`, the kind the type
+    /// rules and the default action give the row (`skip` for none), never a
+    /// description rule's nor the user's; the amount is signed as the file
+    /// wrote it; the payee is lowercased. The status is left out on purpose.
+    /// With an account column, the wallet is `acct:` and the row's account
+    /// trimmed and lowercased instead, never the wallet the account goes to:
+    /// an account mapped to another wallet later finds its rows imported.
     fn key(
         &self,
-        row: &StatementRow,
         stamp: &str,
         type_value: Option<&str>,
+        base_kind: Option<TransactionKind>,
+        (payee, account): (&str, Option<&str>),
         signed: i64,
     ) -> String {
         let what = type_value.map_or_else(
-            || row.kind.map_or("skip", TransactionKind::as_str).to_string(),
+            || {
+                base_kind
+                    .map_or("skip", TransactionKind::as_str)
+                    .to_string()
+            },
             str::to_lowercase,
         );
+        let wallet = if self.columns.account.is_some() {
+            format!("acct:{}", account_key(account.unwrap_or_default()))
+        } else {
+            self.wallet_id.to_string()
+        };
         format!(
-            "{KEY_VERSION}|{}|{}|{stamp}|{what}|{signed}|{}",
+            "{KEY_VERSION}|{}|{wallet}|{stamp}|{what}|{signed}|{}",
             self.vault_id,
-            self.wallet_id,
-            row.payee.to_lowercase()
+            payee.to_lowercase()
         )
     }
 
@@ -639,20 +1125,12 @@ fn kind_of(action: &StatementAction, outflow: bool) -> Option<TransactionKind> {
     }
 }
 
-/// The other wallet a transfer action names.
 fn counter_wallet(action: &StatementAction) -> Option<Uuid> {
     match action {
         StatementAction::TransferIn { from_wallet_id } => *from_wallet_id,
         StatementAction::TransferOut { to_wallet_id } => *to_wallet_id,
         _ => None,
     }
-}
-
-fn skip_reason(type_value: Option<&str>) -> String {
-    type_value.map_or_else(
-        || "skipped by the mapping".to_string(),
-        |value| format!("type {value} is skipped"),
-    )
 }
 
 /// The parts, trimmed, joined with a space, with inner runs of spaces
@@ -691,42 +1169,61 @@ fn same_text(left: &str, right: &str) -> bool {
     left.trim().to_lowercase() == right.trim().to_lowercase()
 }
 
+/// An account as the options and the ids compare it: trimmed, lowercased.
+pub(super) fn account_key(account: &str) -> String {
+    account.trim().to_lowercase()
+}
+
+/// A transfer column's cell that says the row is one half of a move:
+/// `true`, `1`, `yes`, `y`, `si`, `sì` or `x`, whatever the case.
+fn truthy(cell: &str) -> bool {
+    matches!(
+        cell.trim().to_lowercase().as_str(),
+        "true" | "1" | "yes" | "y" | "si" | "sì" | "x"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn planned(line: u32) -> Planned {
-        Planned {
-            row: StatementRow {
+        Planned::new(
+            StatementRow {
                 line,
-                command_id: Uuid::nil(),
-                status: StatementRowStatus::New,
                 kind: Some(TransactionKind::Expense),
-                occurred_at: None,
                 amount: 120,
-                rounded: false,
                 payee: "BAR".to_string(),
-                bank_category: None,
-                matched_category: None,
-                counter_wallet_id: None,
-                original: None,
+                action: StatementAction::Expense,
+                outflow: true,
+                note: "BAR".to_string(),
+                base_action: Some(StatementAction::Expense),
+                wallet_id: Some(Uuid::nil()),
+                ..StatementRow::default()
             },
-            command: None,
+            None,
+        )
+    }
+
+    #[test]
+    fn a_transfer_cell_says_yes_in_many_ways() {
+        for yes in ["true", " TRUE ", "1", "yes", "Y", "si", "Sì", "x"] {
+            assert!(truthy(yes), "{yes}");
+        }
+        for no in ["false", "0", "no", "", "transfer"] {
+            assert!(!truthy(no), "{no}");
         }
     }
 
     #[test]
     fn an_override_skip_carries_its_own_code() {
         let mut rows = [planned(2), planned(3)];
-        apply_overrides(
-            &mut rows,
-            &[StatementRowOverride {
-                line: 3,
-                category: None,
-                note: None,
-                skip: true,
-            }],
-        );
+        let skip = StatementRowOverride {
+            line: 3,
+            skip: true,
+            ..Default::default()
+        };
+        leave_out(&mut rows, &HashMap::from([(3, &skip)]));
         assert_eq!(rows[0].row.status, StatementRowStatus::New);
         assert_eq!(
             rows[1].row.status,

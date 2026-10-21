@@ -1,8 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// One line of the Mastro's grid: a stored transaction, or a recurring period
-/// that fell due and waits for a decision.
+/// One line of the Mastro's grid: a stored transaction, or a due recurring period.
 enum LedgerLine: Identifiable, Hashable, Sendable {
     case row(TransactionRow)
     case pending(DuePeriod)
@@ -15,12 +14,7 @@ enum LedgerLine: Identifiable, Hashable, Sendable {
     }
 }
 
-/// The grid's lines in the order the eye reads a month: the due periods sit
-/// among the rows at the day they fell due, so "mutuo, 1 Oct" is next to the
-/// other rows of the first, not in a banner that has to be cross-checked.
-///
-/// Pure, so the placement is tested without a window
-/// (`SparagneTests/LedgerLinesTests.swift`).
+/// The grid's lines in reading order, each due period among the rows of its day.
 enum LedgerLines {
     /// `rows` as the store loaded them (ascending date), with the periods of
     /// `due` that belong on this sheet slotted in.
@@ -89,13 +83,7 @@ enum LedgerLines {
 }
 
 extension LedgerLines {
-    /// Everything the grid's lines are made of, and nothing else: what
-    /// `interleave` takes.
-    ///
-    /// The grid's body runs on every pointer move (the row under it is
-    /// tinted), every keystroke in a cell and every step of the completion
-    /// list, and none of those changes one of these. Comparing them is cheap
-    /// where `interleave` is not: it writes each row's day out as text.
+    /// What `interleave` takes and nothing else: cheap to compare where `interleave` is not.
     struct Input: Equatable {
         var rows: [TransactionRow]
         var due: [DuePeriod]
@@ -106,11 +94,7 @@ extension LedgerLines {
         var hasMoreRows: Bool
     }
 
-    /// The grid's lines and the # column's numbers, worked out again only
-    /// when their `Input` changed, and otherwise handed back as they were.
-    ///
-    /// A reference, held in the grid's `@State`, so a pass of the body can
-    /// keep what it computed without that being a change SwiftUI redraws for.
+    /// The lines and the # numbers, redone only when `Input` changes; a reference, so no redraw.
     final class Cache {
         private var input: Input?
         private let timeZone: TimeZone
@@ -154,11 +138,7 @@ extension LedgerDate {
     /// number in the DATA column, in the locale's own case and without the
     /// trailing dot some locales add, as `shortMonth` does.
     static func weekday(_ date: Date, calendar: Calendar = .current, locale: Locale = .autoupdatingCurrent) -> String {
-        var symbols = Calendar(identifier: .gregorian)
-        symbols.locale = locale
-        let names = symbols.shortStandaloneWeekdaySymbols
-        let index = calendar.component(.weekday, from: date) - 1
-        guard names.indices.contains(index) else { return "" }
-        return names[index].replacingOccurrences(of: ".", with: "")
+        weekdayName(calendar.component(.weekday, from: date), style: .shortStandalone, locale: locale)
+            .replacingOccurrences(of: ".", with: "")
     }
 }

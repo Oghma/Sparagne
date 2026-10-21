@@ -88,13 +88,13 @@ struct ChangePasswordSheet: View {
             do {
                 try await engine.changePassword(current: old, new: replacement)
                 done = true
-            } catch let error as ServerError {
+            } catch let error as ServerError where error.isUnauthorized {
                 // On this route a 401 is the current password, not the
                 // session.
-                failure = error.isUnauthorized ? String(localized: "The current password is not correct.") : error.summary
-                failureDetail = error.isUnauthorized ? nil : error.detail
+                failure = String(localized: "The current password is not correct.")
             } catch {
-                failure = error.localizedDescription
+                failure = ErrorMessages.headline(for: error)
+                failureDetail = ErrorMessages.detail(for: error)
             }
             busy = false
         }

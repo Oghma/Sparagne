@@ -1,12 +1,6 @@
 //! Category suggestions learned from the vault's own history: the category a
-//! note was filed under before.
-//!
-//! A note is compared by its key: the note normalized like a category name
-//! ([`normalize_category_key`]: no diacritics, lowercase, punctuation as one
-//! space) without the words made only of digits, so `"Pizza 2"` and
-//! `"pizza"` are the same note. A whole-key match wins; failing that, the first
-//! word of the note is matched against the first word of past notes, which
-//! needs more evidence before it says anything.
+//! note was filed under before. The rules are on [`Core::suggest_categories`];
+//! a note is compared by its key (`note_key`).
 
 use std::collections::{HashMap, hash_map};
 
@@ -168,8 +162,10 @@ fn best(tallies: &Tallies) -> Option<(Uuid, Tally)> {
         .map(|(category, tally)| (*category, *tally))
 }
 
-/// The key a note is compared by; `None` when nothing but digits and
-/// punctuation is left.
+/// The key a note is compared by: the note normalized like a category name
+/// ([`normalize_category_key`]: no diacritics, lowercase, punctuation as one
+/// space) without the words made only of digits, so `"Pizza 2"` and `"pizza"`
+/// are the same note; `None` when nothing else is left.
 fn note_key(note: &str) -> Option<String> {
     let key = normalize_category_key(note).ok()?;
     let words: Vec<&str> = key

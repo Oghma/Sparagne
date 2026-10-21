@@ -1,8 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// The fifth card of the month: what the recurring expenses commit every
-/// month, and the slice of the income that is.
+/// What the recurring expenses commit a month, and their slice of the income.
 struct FixedCosts: Hashable, Sendable {
     /// Minor units a month: the enabled expense templates at their monthly
     /// equivalent, as the Ricorrenze status line counts them

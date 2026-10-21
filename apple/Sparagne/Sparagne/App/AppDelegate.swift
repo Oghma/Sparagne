@@ -1,7 +1,6 @@
 import AppKit
 
-/// Application-level hooks SwiftUI's `App` does not offer. The store is
-/// handed over by `SparagneApp` once `ContentView` has opened it.
+/// Application hooks SwiftUI's `App` does not offer; `SparagneApp` hands it the store once opened.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `nil` until the database is open.
     var store: AppStore?

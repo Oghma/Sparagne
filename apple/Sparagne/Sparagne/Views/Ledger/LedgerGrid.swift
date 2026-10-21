@@ -66,7 +66,7 @@ struct LedgerGrid: View {
     /// grid, drawn over it rather than inside a row (`hangingCategoryList`).
     @State private var completion = CategoryCompletionModel()
     /// The list under the ENVELOPE cell being typed into, drawn the same way
-    /// (`envelopeList`).
+    /// (`hangingList`).
     @State private var envelopes = EnvelopeChoiceModel()
 
     /// The grid's own coordinates, which the click watcher measures in.
@@ -117,8 +117,14 @@ struct LedgerGrid: View {
         }
         // Three points in from the cell's edge, as the canvas hangs it (`.ac`).
         .hangingCategoryList(completion, inset: 3 - GridColumn.padding) { frames.categoryList = $0 }
-        .overlayPreferenceValue(EnvelopeChoiceAnchor.self) { anchor in
-            envelopeList(at: anchor)
+        .hangingList(
+            envelopes.list,
+            anchor: EnvelopeChoiceAnchor.self,
+            height: { EnvelopeChoiceList.height(for: $0.count) },
+            inset: 3 - GridColumn.padding,
+            placed: { frames.envelopeList = $0 }
+        ) {
+            EnvelopeChoiceList(choices: envelopes)
         }
         .background(Ink.sheet)
         .background {
@@ -233,8 +239,8 @@ struct LedgerGrid: View {
     /// that puts the caret back after it can come a moment after the next
     /// key: until the caret is there (`caretLanded`), a typed key is added to
     /// the editor's text here rather than given to the field to replace what
-    /// it has selected (`GridEventMechanicsTests`). Any other key, ← or ⌫,
-    /// is the field's, and from then on so is every key.
+    /// it has selected. Any other key, ← or ⌫, is the field's, and from then
+    /// on so is every key.
     private func fieldKey(_ press: KeyPress) -> KeyPress.Result {
         if let move = GridKey.move(for: press), move != .left, move != .right {
             editor.move(move)
@@ -489,7 +495,7 @@ struct LedgerGrid: View {
         // The next turn of the run loop: on the first appearance the lazy
         // stack has not laid its rows out yet, and the scroll would land
         // nowhere.
-        Task { @MainActor in
+        Task {
             proxy.scrollTo(target, anchor: .center)
             if store.revealedRow == id { store.revealedRow = nil }
         }
@@ -594,13 +600,7 @@ struct LedgerGrid: View {
             onDelete: trashAction(for: row, editing: isEditing)
         )
         .background(background(selected: isSelected, hovered: hovered == row.id))
-        .onHover { inside in
-            if inside {
-                hovered = row.id
-            } else if hovered == row.id {
-                hovered = nil
-            }
-        }
+        .hoverId($hovered, row.id)
         // VoiceOver reads a row as one sentence; while one of its cells is
         // typed into, as the cells, that one a field with its column's name.
         .accessibilityElement(children: isEditing ? .contain : .ignore)
@@ -707,34 +707,6 @@ struct LedgerGrid: View {
         )
     }
 
-    // MARK: - The envelope list
-
-    /// The ENVELOPE cell's list, hung from the bottom of its row, or from the
-    /// top when there is no room below (the empty line, a row at the bottom
-    /// of the window), as the CATEGORY cell's is (`hangingCategoryList`) and
-    /// for the same reasons: drawn over the whole grid, outside the scroll
-    /// view, so no later row covers it and the scroll view does not clip it.
-    @ViewBuilder
-    private func envelopeList(at anchor: Anchor<CGRect>?) -> some View {
-        if let anchor, envelopes.isOpen {
-            GeometryReader { proxy in
-                let cell = proxy[anchor]
-                let height = EnvelopeChoiceList.height(for: envelopes.choices.count)
-                let fitsBelow = cell.maxY + height <= proxy.size.height
-                let frame = CGRect(
-                    x: cell.minX - GridColumn.padding + 3,
-                    y: fitsBelow ? cell.maxY - 1 : cell.minY - height + 1,
-                    width: FloatingList.width,
-                    height: height
-                )
-                EnvelopeChoiceList(choices: envelopes)
-                    .offset(x: frame.minX, y: frame.minY)
-                    .onChange(of: frame, initial: true) { _, new in frames.envelopeList = new }
-                    .onDisappear { frames.envelopeList = nil }
-            }
-        }
-    }
-
     // MARK: - Actions
 
     /// The last row loaded has scrolled into view: a month longer than a
@@ -801,8 +773,6 @@ struct LedgerGrid: View {
         duplicate(last)
     }
 }
-
-// MARK: - A row as shown
 
 /// Hands `content` the row as the sheet shows it (`LedgerEditor.shown`). A
 /// view of its own, so that a save redraws the row it was saved into, and

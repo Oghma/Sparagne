@@ -8,16 +8,14 @@ import Testing
 /// afterwards, and what the core is left with. The sync side of the same
 /// commands is in `SyncEngineTests`.
 struct VaultLifecycleTests {
-    private static func store() throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.vault.\(UUID().uuidString)"))
-        return AppStore(core: try CoreActor.inMemory(author: "tester"), defaults: defaults, undoWindow: .seconds(60))
+    /// Vault `Main` with the wallet `Cash` opened at `opening`.
+    private static func main(opening: Int64) async throws -> AppStore {
+        try await TestStore.make(vault: "Main", wallet: "Cash", opening: opening, author: "tester", undoWindow: .seconds(60))
     }
 
     @Test("Renaming the vault renames it in the list, the selection and the snapshot")
     func rename() async throws {
-        let store = try Self.store()
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10_000)
+        let store = try await Self.main(opening: 10_000)
         let vault = try #require(store.currentVault)
 
         await store.renameVault(vault.id, name: " Casa ")
@@ -34,9 +32,7 @@ struct VaultLifecycleTests {
 
     @Test("A name another of my vaults already has is accepted: names are labels")
     func renameToATakenName() async throws {
-        let store = try Self.store()
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 0)
+        let store = try await Self.main(opening: 0)
         await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
         let casa = try #require(store.currentVault)
         #expect(casa.name == "Casa")
@@ -51,9 +47,7 @@ struct VaultLifecycleTests {
 
     @Test("Deleting the last vault empties the window and asks for onboarding again")
     func deleteTheLastVault() async throws {
-        let store = try Self.store()
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10_000)
+        let store = try await Self.main(opening: 10_000)
         await store.submit(quickAdd: "-12.50 pizza #food")
         let vault = try #require(store.currentVault)
 
@@ -81,9 +75,7 @@ struct VaultLifecycleTests {
 
     @Test("Deleting one vault of two moves the window to the other")
     func deleteOneOfTwo() async throws {
-        let store = try Self.store()
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 0)
+        let store = try await Self.main(opening: 0)
         let main = try #require(store.currentVault)
         await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
         let casa = try #require(store.currentVault)
@@ -100,9 +92,7 @@ struct VaultLifecycleTests {
 
     @Test("A row waiting on the undo toast dies with its vault, without an error")
     func pendingUndoIsDropped() async throws {
-        let store = try Self.store()
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10_000)
+        let store = try await Self.main(opening: 10_000)
         await store.submit(quickAdd: "-12.50 pizza #food")
         let row = try #require(store.rows.first { $0.note == "pizza" })
         await store.void(transactionId: row.id)
@@ -118,9 +108,7 @@ struct VaultLifecycleTests {
 
     @Test("Only the owner may delete; renaming is open to every writer")
     func onlyTheOwnerDeletes() async throws {
-        let store = try Self.store()
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 0)
+        let store = try await Self.main(opening: 0)
         let vault = try #require(store.currentVault)
         #expect(vault.owner == "tester")
 
@@ -141,9 +129,7 @@ struct VaultLifecycleTests {
 
     @Test("The actor refuses every write to a read-only vault, and only to that one")
     func readOnlyVaultRefusesWrites() async throws {
-        let store = try Self.store()
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10_000)
+        let store = try await Self.main(opening: 10_000)
         let vault = try #require(store.currentVault)
         let core = store.core
         await core.setReadOnlyVaults([vault.id])

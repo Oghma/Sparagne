@@ -267,33 +267,58 @@ struct FormMenu<Items: View>: View {
             }
             .contentShape(Rectangle())
         }
-        // As in `VaultSelector`: the plain style keeps the label as drawn.
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
+        .plainMenu()
         .accessibilityLabel(label)
         .accessibilityValue(value)
     }
 }
 
 /// One of `options`, as a `FormMenu` whose items carry the system's
-/// checkmark on the chosen one.
+/// checkmark on the chosen one. Not `boxed`, it is a table cell's: its
+/// `value` (the chosen item's title unless given) in `tint` with a small
+/// chevron after it, so it reads as the other cells and still says it opens.
 struct FormPicker<Option: Hashable>: View {
     let label: String
     @Binding var selection: Option
     let options: [Option]
     let title: (Option) -> String
+    var boxed = true
+    var value: String?
+    var tint: Color = Ink.text
 
     var body: some View {
-        FormMenu(label: label, value: title(selection)) {
-            Picker(label, selection: $selection) {
-                ForEach(options, id: \.self) { option in
-                    Text(title(option)).tag(option)
+        let shown = value ?? title(selection)
+        if boxed {
+            FormMenu(label: label, value: shown) { picker }
+        } else {
+            Menu {
+                picker
+            } label: {
+                HStack(spacing: 3) {
+                    Text(verbatim: shown)
+                        .foregroundStyle(tint)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 7, weight: .semibold))
+                        .foregroundStyle(Ink.text3)
+                    Spacer(minLength: 0)
                 }
+                .contentShape(Rectangle())
             }
-            .pickerStyle(.inline)
-            .labelsHidden()
+            .plainMenu()
+            .accessibilityLabel(label)
+            .accessibilityValue(shown)
         }
+    }
+
+    private var picker: some View {
+        Picker(label, selection: $selection) {
+            ForEach(options, id: \.self) { option in
+                Text(title(option)).tag(option)
+            }
+        }
+        .pickerStyle(.inline)
+        .labelsHidden()
     }
 }
 
@@ -313,7 +338,7 @@ struct FormSwitch: View {
             ZStack(alignment: isOn ? .trailing : .leading) {
                 Capsule().fill(isOn ? Ink.accent : Ink.line2)
                 Circle()
-                    .fill(isOn ? Color(hex: 0x140A00) : Ink.text3)
+                    .fill(isOn ? Ink.onAccent : Ink.text3)
                     .frame(width: 10, height: 10)
                     .padding(2)
             }

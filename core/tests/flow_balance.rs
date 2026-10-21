@@ -6,16 +6,11 @@
 
 mod common;
 
-use chrono::{DateTime, TimeZone, Utc};
 use common::*;
 use sparagne_core::{Command, FlowBalanceRange, FlowMode};
 use uuid::Uuid;
 
 const DAY: i64 = 86_400;
-
-fn utc(secs: i64) -> DateTime<Utc> {
-    Utc.timestamp_opt(secs, 0).unwrap()
-}
 
 fn range(fx: &Fx, flow: Uuid, from: i64) -> FlowBalanceRange {
     fx.core
@@ -27,17 +22,18 @@ fn range(fx: &Fx, flow: Uuid, from: i64) -> FlowBalanceRange {
 }
 
 fn transfer(fx: &mut Fx, amount: i64, from: Uuid, to: Uuid, secs: i64) {
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::TransferFlow {
-            amount,
-            from_flow_id: from,
-            to_flow_id: to,
-            note: None,
-            occurred_at: at(secs),
-        },
-    );
+    fx.run(Command::TransferFlow {
+        amount,
+        from_flow_id: from,
+        to_flow_id: to,
+        note: None,
+        occurred_at: at(secs),
+    });
+}
+
+fn spend(fx: &mut Fx, amount: i64, secs: i64) {
+    let spesa = entry(amount, None, None, Some("Spesa"), secs);
+    fx.run(Command::Expense(spesa));
 }
 
 /// Unallocated gets 1.000 on day 1, spends 800 on day 10 and gets 1.800 on
@@ -45,11 +41,7 @@ fn transfer(fx: &mut Fx, amount: i64, from: Uuid, to: Uuid, secs: i64) {
 fn ups_and_downs() -> Fx {
     let mut fx = setup();
     income_in(&mut fx, 1_000, T0 + DAY);
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(800, None, None, Some("Spesa"), T0 + 10 * DAY)),
-    );
+    spend(&mut fx, 800, T0 + 10 * DAY);
     income_in(&mut fx, 1_800, T0 + 20 * DAY);
     fx
 }
@@ -122,11 +114,7 @@ fn transfers_count_and_every_envelope_comes_back_unallocated_first() {
 fn a_voided_row_is_gone_and_one_instant_is_summed_before_it_counts() {
     let mut fx = ups_and_downs();
     // Spent and earned in the same second: no dip between the two.
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(500, None, None, Some("Spesa"), T0 + 30 * DAY)),
-    );
+    spend(&mut fx, 500, T0 + 30 * DAY);
     income_in(&mut fx, 500, T0 + 30 * DAY);
     let same_second = range(&fx, fx.unallocated, T0 + 25 * DAY);
     assert_eq!((same_second.low, same_second.low_at), (2_000, None));
@@ -140,13 +128,9 @@ fn a_voided_row_is_gone_and_one_instant_is_summed_before_it_counts() {
         .find(|t| t.amount == 800)
         .unwrap()
         .id;
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::VoidTransaction {
-            transaction_id: expense,
-        },
-    );
+    fx.run(Command::VoidTransaction {
+        transaction_id: expense,
+    });
     let voided = range(&fx, fx.unallocated, T0 + 5 * DAY);
     assert_eq!(
         (voided.balance, voided.low, voided.low_at, voided.high),

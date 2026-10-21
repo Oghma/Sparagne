@@ -1,11 +1,6 @@
 import SwiftUI
 
-/// The window's own top bar, in place of the system title bar and toolbar:
-/// the vault, the month, then on the trailing side the
-/// search, what is due, what the tab adds and the sync state. The scene hides
-/// the title bar (`.windowStyle(.hiddenTitleBar)`); the traffic lights sit at
-/// the bar's leading end, centred by `WindowChrome`, which also makes the
-/// bar's empty areas drag the window.
+/// The window's own top bar, in place of the system title bar and toolbar.
 struct TopBar: View {
     @Bindable var store: AppStore
     let engine: SyncEngine?
@@ -74,14 +69,29 @@ struct TopBar: View {
     /// template on the Ricorrenze, a one-off move on the Riparto; the Setup
     /// tab adds in its tables' own empty lines. Nothing for an account that
     /// only reads the vault, which could not save what it typed.
+    ///
+    /// Add opens the quick-add line (⌘K), as File ▸ Quick Add does; the
+    /// others are what the Vault menu and the palette ask for, with no key
+    /// cap since their menu items have no shortcut (and ⌘K adds a row, not a
+    /// template).
     @ViewBuilder
     private var addButton: some View {
         if store.canWrite {
             switch store.tab {
-            case .summary, .ledger: AddButton()
-            case .recurring: NewRecurringButton(store: store)
-            case .allocation: MoveBetweenEnvelopesButton()
-            case .setup: EmptyView()
+            case .summary, .ledger:
+                TabActionButton(symbol: "plus", title: String(localized: "Add"), keyCap: "\u{2318}K") {
+                    NotificationCenter.default.post(name: .focusQuickAdd, object: nil)
+                }
+            case .recurring:
+                TabActionButton(symbol: "plus", title: String(localized: "New recurring entry")) {
+                    store.requestNewRecurring()
+                }
+            case .allocation:
+                TabActionButton(symbol: "arrow.left.arrow.right", title: String(localized: "Move between envelopes\u{2026}")) {
+                    NotificationCenter.default.post(name: .moveBetweenEnvelopes, object: nil)
+                }
+            case .setup:
+                EmptyView()
             }
         }
     }
@@ -91,7 +101,7 @@ struct TopBar: View {
     private var background: some View {
         ZStack {
             Ink.bg
-            WindowChrome(barHeight: Metrics.topBar, buttonsLeading: 14) { full in
+            WindowChrome { full in
                 // Not during the view update that may have called this.
                 Task { isFullScreen = full }
             }
@@ -101,9 +111,7 @@ struct TopBar: View {
 
 // MARK: - The month
 
-/// ‹ month › in one bordered group, and Today when the month on screen is
-/// another. ⌥← and ⌥→ step it too, from the Ledger
-/// menu.
+/// ‹ month › in one bordered group, and Today when the month on screen is another.
 struct MonthStepper: View {
     let store: AppStore
 
@@ -157,11 +165,7 @@ struct MonthStepper: View {
 
 // MARK: - Search
 
-/// The search of the tabs that have one, in the bar so it stays put while
-/// the filters below change. On the Mastro it is
-/// bound to `store.searchText`, which the window debounces into a reload; on
-/// the Ricorrenze and the Setup, to `store.tabFilter`, which filters their
-/// tables as it is typed. esc clears it and gives the focus back.
+/// The tab's search, in the bar so it stays put while the filters below change; esc clears it.
 struct SearchField: View {
     @Binding var text: String
     let prompt: String
@@ -180,7 +184,7 @@ struct SearchField: View {
                 Text(prompt)
             }
             .textFieldStyle(.plain)
-            .font(Face.ui(12))
+            .font(Face.row)
             .foregroundStyle(Ink.text)
             .focused($focused)
             // esc clears and drops focus; ⌘F (the menu) focuses it again.
@@ -205,10 +209,7 @@ struct SearchField: View {
 
 // MARK: - Due and add
 
-/// "3 da confermare": the recurring periods waiting for a decision,
-/// the same count the Ricorrenze tab shows. Nothing
-/// when none is due, or when the account only reads the vault and could not
-/// confirm one anyway. Opens the Ricorrenze tab, where they are decided.
+/// "3 da confermare", for an account that may confirm them: it opens the Ricorrenze tab.
 struct DuePill: View {
     let store: AppStore
 
@@ -229,60 +230,25 @@ struct DuePill: View {
     }
 }
 
-/// Opens the quick-add line (⌘K), the same as File ▸ Quick Add.
-struct AddButton: View {
-    var body: some View {
-        Button {
-            NotificationCenter.default.post(name: .focusQuickAdd, object: nil)
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "plus")
-                    .font(.system(size: 10, weight: .semibold))
-                    .accessibilityHidden(true)
-                Text(String(localized: "Add"))
-                KeyCap(text: "\u{2318}K")
-                    .accessibilityHidden(true)
-            }
-        }
-        .buttonStyle(.chrome())
-    }
-}
-
-/// The Riparto tab's "Move between envelopes…": the one-off sheet, as the
-/// Vault menu and the palette open it. No key cap: the menu item has no
-/// shortcut.
-struct MoveBetweenEnvelopesButton: View {
-    var body: some View {
-        Button {
-            NotificationCenter.default.post(name: .moveBetweenEnvelopes, object: nil)
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.left.arrow.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .accessibilityHidden(true)
-                Text(String(localized: "Move between envelopes\u{2026}"))
-            }
-        }
-        .buttonStyle(.chrome())
-    }
-}
-
-/// The Ricorrenze tab's add button: the inspector on a new template, as the
-/// Vault menu and the palette ask for it (`AppStore.requestNewRecurring`).
-/// No key cap: the menu item has no shortcut, and ⌘K adds a row, not a
-/// template.
-struct NewRecurringButton: View {
-    let store: AppStore
+/// What the tab on screen adds, at the trailing end of the bar.
+private struct TabActionButton: View {
+    let symbol: String
+    let title: String
+    var keyCap: String?
+    let action: () -> Void
 
     var body: some View {
-        Button {
-            store.requestNewRecurring()
-        } label: {
+        Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: "plus")
+                Image(systemName: symbol)
                     .font(.system(size: 10, weight: .semibold))
                     .accessibilityHidden(true)
-                Text(String(localized: "New recurring entry"))
+                Text(title)
+                if let keyCap {
+                    // The menu item says the shortcut to VoiceOver already.
+                    KeyCap(text: keyCap)
+                        .accessibilityHidden(true)
+                }
             }
         }
         .buttonStyle(.chrome())

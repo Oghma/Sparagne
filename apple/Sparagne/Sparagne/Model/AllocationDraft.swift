@@ -1,9 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// `AllocationRule` as a flat choice, the segmented Fisso / % / Al tetto of
-/// an open row of the plan: the amount and the percentage are kept apart
-/// while the user tries the kinds, so switching back loses nothing.
+/// `AllocationRule` as a flat choice, the segmented Fisso / % / Al tetto.
 enum AllocationRuleKind: String, CaseIterable, Identifiable, Hashable {
     case fixed
     case percent
@@ -23,8 +21,8 @@ enum AllocationRuleKind: String, CaseIterable, Identifiable, Hashable {
     var takesValue: Bool { self != .fillToCap }
 }
 
-/// The cell of an open row that refused what was typed: the table puts the
-/// focus back there and reports `underlying`.
+/// The cell at fault in a refused line. The table reports `underlying` and
+/// puts the focus back on the line's value, whichever cell it was.
 enum AllocationField: Hashable {
     case envelope
     case value
@@ -35,16 +33,14 @@ struct AllocationDraftError: Error {
     let underlying: Error
 }
 
-/// The cells of the plan's line being edited, or of the empty line: an
-/// envelope, a kind and the text of its value. Everything stays a string
-/// until it commits, so a half-typed amount never has to be a number. A plain
-/// struct with no view in it, so the parsing and the list it commits into
-/// can be tested on their own.
+/// The cells of the plan's line being edited, or of the empty line.
 struct AllocationLineDraft: Equatable {
     /// `nil` on the empty line until an envelope is picked.
     var flowId: Uuid?
     var kind: AllocationRuleKind = .fixed
-    /// A fixed line's amount, as typed.
+    /// A fixed line's amount, as typed: a half-typed amount never has to be
+    /// a number. Kept apart from `percent` while the user tries the kinds,
+    /// so switching back loses nothing.
     var amount = ""
     /// A percent line's share, as typed: `"12,5"`.
     var percent = ""
@@ -137,6 +133,20 @@ struct AllocationLineDraft: Equatable {
         (try? line(currency: currency)) != nil
     }
 
+    /// What the Busta menu of the line that had envelope `key` offers, `nil`
+    /// for the empty line: the active envelopes but Unallocated, less those
+    /// another line already has.
+    static func offered(_ flows: [FlowView], lines: [AllocationLine], keeping key: Uuid?) -> [FlowView] {
+        let taken = Set(lines.map(\.flowId)).subtracting([key].compactMap { $0 })
+        return flows.filter { !$0.isUnallocated && !taken.contains($0.id) }
+    }
+
+    /// The cap of the envelope picked, which an Al tetto line fills up to;
+    /// `nil` with no envelope, or one without a cap.
+    func cap(in flows: [FlowView]) -> Int64? {
+        flowId.flatMap { id in flows.first { $0.id == id } }.flatMap { EnvelopeCapKind.cap(of: $0.mode) }
+    }
+
     /// `lines` with this draft written in: in place of the line of envelope
     /// `replacing`, or at the end for the empty line (`nil`). An envelope is
     /// in a plan once, as the core requires, so one that another line already
@@ -160,12 +170,13 @@ struct AllocationLineDraft: Equatable {
     }
 }
 
-/// Money as the plan's cells take it: the window writes `4.250,00`, with a
-/// dot between thousands that the core's `parseMoney` does not read, so the
-/// dots before a decimal comma are dropped first. Without a comma, dots that
-/// each start a group of exactly three digits (`1.400`, `12.500.000`) are
-/// thousands too; any other dot is the decimal point (`4250.5`).
+/// Money as the plan's cells take it.
 enum AllocationMoney {
+    /// The window writes `4.250,00`, with a dot between thousands that the
+    /// core's `parseMoney` does not read, so the dots before a decimal comma
+    /// are dropped first. Without a comma, dots that each start a group of
+    /// exactly three digits (`1.400`, `12.500.000`) are thousands too; any
+    /// other dot is the decimal point (`4250.5`).
     static func parse(_ text: String, currency: Currency) throws -> Int64 {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if let comma = trimmed.lastIndex(of: ","), trimmed[..<comma].contains(".") {
@@ -241,88 +252,10 @@ enum AllocationPercent {
     }
 }
 
-/// The plan's Quando in the inspector: Settimana / Mese / Anno, the
-/// interval, the day and the start. The fields of the other cadences are kept
-/// while the user tries them, as `RecurringDraft` does with the same
-/// `Cadence`. The end date has no field and goes through as it is.
-struct AllocationScheduleDraft: Equatable {
-    var cadence: RecurringDraft.Cadence = .monthly
-    var interval = 1
-    /// ISO: Monday = 1 ... Sunday = 7.
-    var weekday = 1
-    var monthDay = 1
-    var yearMonth = 1
-    var yearDay = 1
-    var startDate: NaiveDate
-    var endDate: NaiveDate?
+/// The plan's Quando in the inspector, the same draft as a template's.
+typealias AllocationScheduleDraft = ScheduleDraft
 
-    /// A new plan: monthly, on today's day, from today. Starting today makes
-    /// today the first period, and the incomes since then its total: a new
-    /// plan never opens with periods already behind it.
-    init(today: NaiveDate) {
-        startDate = today
-        if let parts = NaiveDay.components(today) {
-            weekday = parts.isoWeekday
-            monthDay = parts.day
-            yearMonth = parts.month
-            yearDay = parts.day
-        }
-    }
-
-    /// The fields of a saved schedule, as they are.
-    init(schedule: Schedule) {
-        self.init(today: schedule.startDate)
-        endDate = schedule.endDate
-        interval = Int(schedule.interval)
-        switch schedule.frequency {
-        case .daily:
-            cadence = .daily
-        case .weekly(let day):
-            cadence = .weekly
-            weekday = Int(day)
-        case .monthly(let day):
-            cadence = .monthly
-            monthDay = Int(day)
-        case .yearly(let month, let day):
-            cadence = .yearly
-            yearMonth = Int(month)
-            yearDay = Int(day)
-        }
-    }
-
-    var frequency: Frequency {
-        switch cadence {
-        case .daily: .daily
-        case .weekly: .weekly(weekday: UInt8(clamping: weekday))
-        case .monthly: .monthly(day: UInt8(clamping: monthDay))
-        case .yearly: .yearly(month: UInt8(clamping: yearMonth), day: UInt8(clamping: yearDay))
-        }
-    }
-
-    /// The schedule as typed. An interval of zero or a day 32 go through as
-    /// they are: `isValid` says no first.
-    var schedule: Schedule {
-        Schedule(
-            frequency: frequency,
-            interval: UInt32(clamping: max(interval, 0)),
-            startDate: startDate,
-            endDate: endDate
-        )
-    }
-
-    /// The rules of `Schedule::validate` in `core/src/recurring.rs`.
-    var isValid: Bool {
-        guard interval >= 1 else { return false }
-        switch cadence {
-        case .daily: break
-        case .weekly: guard (1...7).contains(weekday) else { return false }
-        case .monthly: guard (1...31).contains(monthDay) else { return false }
-        case .yearly: guard (1...12).contains(yearMonth), (1...31).contains(yearDay) else { return false }
-        }
-        if let endDate, endDate < startDate { return false }
-        return true
-    }
-
+extension ScheduleDraft {
     /// The schedule, when it is not `plan`'s; nothing otherwise.
     func patch(against plan: AllocationPlanView) -> AllocationPlanPatch {
         schedule == plan.schedule ? AllocationPlanPatch() : AllocationPlanPatch(schedule: schedule)

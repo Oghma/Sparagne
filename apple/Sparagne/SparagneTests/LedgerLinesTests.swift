@@ -17,27 +17,9 @@ struct LedgerLinesTests {
     }
 
     /// An expense on `day` of October 2026 at `hour`, Rome time.
-    private static func row(day: Int, hour: Int = 12, kind: TransactionKind = .expense, note: String) -> TransactionRow {
+    private static func row(day: Int, hour: Int = 12, note: String) -> TransactionRow {
         let date = calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour)) ?? Date()
-        let view = TransactionView(
-            id: "row-\(note)",
-            kind: kind,
-            occurredAt: CoreDate.offset(date),
-            amount: 1_000,
-            categoryId: "cat",
-            category: "Spesa",
-            categoryIsSystem: false,
-            note: note,
-            person: "matteo",
-            createdBy: "matteo",
-            voided: false,
-            walletId: "wallet",
-            flowId: "flow",
-            fromId: nil,
-            toId: nil,
-            legs: []
-        )
-        return TransactionRow(view: view, names: NameBook(snapshot: nil))
+        return TestRow.make("row-\(note)", note: note, occurredAt: date)
     }
 
     private static func due(
@@ -47,18 +29,8 @@ struct LedgerLinesTests {
         category: String? = "Casa",
         owner: String = "matteo"
     ) -> DuePeriod {
-        let template = RecurringView(
-            id: "tpl-\(note)",
-            kind: kind,
-            amount: 78_000,
-            walletId: nil,
-            flowId: nil,
-            category: category,
-            note: note,
-            schedule: Schedule(frequency: .monthly(day: 1), interval: 1, startDate: "2026-01-01", endDate: nil),
-            enabled: true,
-            archived: false,
-            owner: owner
+        let template = RecurringFixture.template(
+            "tpl-\(note)", kind: kind, amount: 78_000, category: category, note: note, owner: owner
         )
         return DuePeriod(template: template, date: date)
     }

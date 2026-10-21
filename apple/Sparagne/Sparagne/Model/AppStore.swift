@@ -2,15 +2,7 @@ import Foundation
 import Observation
 import SparagneCore
 
-/// A domain error on its way to an alert. `code` is the stable snake_case
-/// code from `ErrorCodes.swift`, so tests and call sites can match on it.
-///
-/// Also thrown as it is, by a check the app makes before the core is asked
-/// (the PERSONA cell's name): it reaches the alert with its own headline.
-///
-/// A `LocalizedError` whose description is `summary`: the window's
-/// `.alert(error:)` takes it as the title, and a sheet that shows a caught
-/// error's `localizedDescription` gets the headline too.
+/// An error on its way to the alert, titled by `summary`, with the core's stable `code`.
 struct AppError: Identifiable, Equatable, Sendable, LocalizedError {
     let id = UUID()
     let code: String
@@ -77,23 +69,13 @@ struct AppError: Identifiable, Equatable, Sendable, LocalizedError {
     }
 }
 
-/// A void that has been hidden from the table but not yet applied.
-///
-/// The rows disappear immediately and a toast counts down; `undo()` cancels,
-/// and the window elapsing (or another destructive action, or quitting)
-/// commits one `VoidTransaction` per row.
-struct PendingUndo: Identifiable, Equatable, Sendable {
-    /// The toast's own identity: a new void is a new toast, even for a row
-    /// that was voided, undone and voided again.
-    let id = UUID()
-    /// The transactions being voided: one for a row, several for a selection.
-    let ids: [Uuid]
-    /// The vault the rows live in. Not necessarily the one on screen by the
-    /// time the window elapses: the user can switch, and a pull can delete it.
-    let vaultId: Uuid
-    let startedAt: Date
-    let duration: Duration
+/// The window an undo toast counts down.
+protocol UndoCountdown {
+    var startedAt: Date { get }
+    var duration: Duration { get }
+}
 
+extension UndoCountdown {
     var seconds: Double {
         let components = duration.components
         return Double(components.seconds) + Double(components.attoseconds) * 1e-18
@@ -108,19 +90,22 @@ struct PendingUndo: Identifiable, Equatable, Sendable {
     }
 }
 
-/// One recurring period waiting for a decision: a template and the day it
-/// fell due.
-struct DuePeriod: Identifiable, Hashable, Sendable {
-    let template: RecurringView
-    let date: NaiveDate
-
-    var id: String { "\(template.id)/\(date)" }
+/// A void hidden from the table and not yet sent: the toast takes it back, its window elapsing sends it.
+struct PendingUndo: Identifiable, Equatable, Sendable, UndoCountdown {
+    /// The toast's own identity: a new void is a new toast, even for a row
+    /// that was voided, undone and voided again.
+    let id = UUID()
+    /// The transactions being voided: one for a row, several for a selection.
+    let ids: [Uuid]
+    /// The vault the rows live in. Not necessarily the one on screen by the
+    /// time the window elapses: the user can switch, and a pull can delete it.
+    let vaultId: Uuid
+    let startedAt: Date
+    let duration: Duration
 }
 
-/// One recurring period still ahead: a template and a day it will fall due,
-/// from `scheduleOccurrences`. What the Ricorrenze tab's agenda lists; never
-/// executed from there, since a period only becomes actionable once due.
-struct UpcomingPeriod: Identifiable, Hashable, Sendable {
+/// One recurring period: a template and the day it fell due.
+struct DuePeriod: Identifiable, Hashable, Sendable {
     let template: RecurringView
     let date: NaiveDate
 
@@ -139,19 +124,12 @@ extension RecurringPatch {
     var isEmpty: Bool { self == RecurringPatch() }
 }
 
-/// Everything the window shows and everything it can do.
-///
-/// The store holds no domain state of its own: `snapshot`, `categories` and
-/// `transactions` are query results, refreshed by `reload()` after every
-/// command.
-///
-/// The state lives on the main actor and is written there; the core lives on
-/// `CoreActor` and is reached only by awaiting it, so a long query costs a
-/// suspension and not a frozen window. Every entry
-/// point that touches the core is therefore `async`: views call them from a
-/// `Task`, tests await them.
+/// Everything the window shows and everything it can do; the domain state is query results.
 @Observable
 final class AppStore {
+    // The core is reached only by awaiting `CoreActor`, so a long query costs a suspension,
+    // not a frozen window: every entry point that touches it is `async`.
+
     /// A month of a personal ledger fits in one page in practice. A month that
     /// does not goes on page by page as the grid scrolls to its end
     /// (`loadMore`), and the export reads every page first (`loadAll`).
@@ -274,14 +252,10 @@ final class AppStore {
     /// back to `nil` itself, and so does another vault.
     var revealedRow: Uuid?
 
-    // MARK: Category management (the SETUP tab)
-
     /// Active and archived categories, for the Categories table;
     /// `categories` above stays active-only, for pickers.
     private(set) var windowCategories: [CategoryView] = []
     private(set) var categoryAliases: [AliasView] = []
-
-    // MARK: Category completion
 
     /// The categories used in the last 90 days, most recent first: the tier
     /// the CATEGORY cells' list puts first (`CategoryCompletion`).
@@ -297,13 +271,12 @@ final class AppStore {
     /// Ricorrenze tab and the Mastro's pending rows stay current without a
     /// separate poll.
     private(set) var pendingRecurringItems: [PendingRecurring] = []
-    /// Every template, active and archived; loaded on demand when the
-    /// Recurring panel opens.
+    /// Every template, active and archived, refreshed on every `reload()`.
     private(set) var recurringTemplates: [RecurringView] = []
     /// The periods of the next days, soonest first, for the Ricorrenze tab's
     /// agenda. Written only by that tab's loader (`AppStore+Recurring.swift`),
     /// hence not `private(set)`: an extension in another file has to set it.
-    var upcomingRecurring: [UpcomingPeriod] = []
+    var upcomingRecurring: [DuePeriod] = []
 
     // MARK: Allocation
 
@@ -324,8 +297,6 @@ final class AppStore {
     var allocationReopening = false
     /// The history is asking before a reopen; the toast steps aside meanwhile.
     var allocationConfirmingReopen = false
-
-    // MARK: Setup
 
     /// Rows per category id over the last 12 months, voided excluded: the
     /// usage column of the SETUP categories. Written only by its loader
@@ -450,8 +421,6 @@ final class AppStore {
     var searchText = "" { didSet { if searchText != oldValue { selection.clear() } } }
     var quickAddText = ""
 
-    // MARK: Selection
-
     /// The rows picked for a bulk action, with the gestures and the actions
     /// in `AppStore+Selection.swift` (which is why the setter is not private).
     /// It names rows of one list, so the month, the vault and every filter
@@ -473,10 +442,7 @@ final class AppStore {
     private(set) var lastWalletId: Uuid?
     private(set) var lastFlowId: Uuid?
 
-    /// The queued reload, if any, and a counter that says whether a new one
-    /// was queued while the last was running (`settle`).
-    @ObservationIgnored private var queuedLoad: Task<Void, Never>?
-    @ObservationIgnored private var queuedGeneration = 0
+    @ObservationIgnored private let loads = SerialQueue()
     /// Which reload may write the state: a slower one that started earlier
     /// must not overwrite a newer month with what it found. Readable, with
     /// the one whose rows are on screen, so the Mastro's editor can tell a
@@ -584,12 +550,7 @@ final class AppStore {
     /// Not private: `reveal` queues one when only the search changed, which
     /// reloads nothing by itself (the window debounces it).
     func scheduleReload() {
-        queuedGeneration += 1
-        let previous = queuedLoad
-        queuedLoad = Task { [weak self] in
-            await previous?.value
-            await self?.reload()
-        }
+        loads.enqueue { [weak self] in await self?.reload() }
     }
 
     /// Waits until every queued reload has finished, including any a reload
@@ -600,14 +561,7 @@ final class AppStore {
     func settle() async {
         await ledgerEditor.settle()
         await history.settle()
-        while queuedLoad != nil {
-            let generation = queuedGeneration
-            await queuedLoad?.value
-            if generation == queuedGeneration {
-                queuedLoad = nil
-                return
-            }
-        }
+        await loads.settle()
     }
 
     // MARK: - Lifecycle
@@ -677,8 +631,8 @@ final class AppStore {
         defaults.set(vault.id, forKey: Self.lastVaultKey)
         lastWalletId = nil
         lastFlowId = nil
-        // Stale until whichever view needs them reloads: the SETUP tab and
-        // the Recurring panel load on appear, not eagerly.
+        // The vault being left's: the tabs load their own lists again, and
+        // the templates come with the reload below.
         windowCategories = []
         categoryAliases = []
         recentCategoryIds = []
@@ -723,6 +677,7 @@ final class AppStore {
             yearCategoryTotals = []
             topExpenses = []
             pendingRecurringItems = []
+            recurringTemplates = []
             allocationPlan = nil
             pendingAllocation = nil
             allocationBase = AllocationBase(total: 0, incomes: [])
@@ -831,26 +786,16 @@ final class AppStore {
         person: String?,
         today: MonthKey
     ) -> YearSummary {
-        let rows = loaded.year.map {
-            YearRow(
-                bucket: Int($0.bucket),
-                person: $0.person,
-                income: $0.income,
-                opening: $0.opening,
-                cashExpense: $0.cashExpense,
-                fundExpense: $0.fundExpense
-            )
-        }
-        return YearSummary.build(
+        YearSummary.build(
             year: month.year,
             upTo: month,
-            rows: rows,
+            rows: loaded.year,
             flows: flows,
             vaultPeople: loaded.people,
             person: person,
             today: today,
             wallets: loaded.snapshot.wallets,
-            walletBalances: loaded.walletBalances.map(Self.delta)
+            walletBalances: loaded.walletBalances
         )
     }
 
@@ -859,20 +804,7 @@ final class AppStore {
     /// which the strip of things to do counts.
     private func loadYearExtras(from loaded: VaultLoad, year: YearSummary) {
         yearCategories = SummaryCategories.rows(loaded.yearCategories)
-        categoryHeat = CategoryHeat.build(
-            buckets: loaded.categoryBuckets.map {
-                CategoryBucket(
-                    bucket: Int($0.bucket),
-                    categoryId: $0.categoryId,
-                    name: $0.name,
-                    isSystem: $0.isSystem,
-                    netExpense: $0.netExpense,
-                    count: Int($0.count)
-                )
-            },
-            shares: yearCategories,
-            upTo: month
-        )
+        categoryHeat = CategoryHeat.build(buckets: loaded.categoryBuckets, shares: yearCategories, upTo: month)
         // The envelopes are the family's whatever PERSONA says, like the
         // funds: their figures come from the unfiltered matrix, and so do
         // their columns, every person of the vault's rows in the core's
@@ -880,7 +812,7 @@ final class AppStore {
         envelopeYear = EnvelopeYear.build(
             flows: flows,
             flowPerson: loaded.yearFlowPerson,
-            balances: loaded.flowBalances.map(Self.delta),
+            balances: loaded.flowBalances,
             upTo: month,
             people: loaded.people
         )
@@ -901,10 +833,6 @@ final class AppStore {
             pendingAllocation: isReadOnly ? nil : pendingAllocation,
             yearCategories: yearCategoryTotals
         )
-    }
-
-    private static func delta(_ row: BucketTargetTotals) -> BalanceDelta {
-        BalanceDelta(bucket: Int(row.bucket), targetId: row.targetId, delta: row.delta)
     }
 
     /// The row `reveal` asked for, selected alone once its month is on
@@ -974,8 +902,6 @@ final class AppStore {
             kinds: kinds,
             includeVoided: showVoided,
             includeTransfers: showTransfers,
-            walletId: nil,
-            flowId: nil,
             text: text.isEmpty ? nil : text,
             person: person,
             ascending: true
@@ -1038,10 +964,7 @@ final class AppStore {
     /// palette. The name is a label, so two vaults may share it, and the
     /// currency never changes.
     func renameVault(_ vaultId: Uuid, name: String) async {
-        await guarded {
-            try await core.execute(vaultId: vaultId, .renameVault(name: name))
-            try await adoptVaultList()
-        }
+        await write(.renameVault(name: name), in: vaultId) { try await adoptVaultList() }
     }
 
     /// Deletes a vault with everything in it, for every member and on every
@@ -1059,42 +982,23 @@ final class AppStore {
             ledgerEditor.reset()
             await ledgerEditor.settle()
         }
-        await guarded {
-            try await core.execute(vaultId: vaultId, .deleteVault)
-            try await adoptVaultList()
-        }
+        await write(.deleteVault, in: vaultId) { try await adoptVaultList() }
     }
 
     func createWallet(name: String, openingBalance: Int64) async {
-        guard let vault = currentVault, !refusedAsReadOnly() else { return }
-        await guarded {
-            try await core.execute(
-                vaultId: vault.id,
-                .createWallet(
-                    name: name,
-                    openingBalance: openingBalance,
-                    occurredAt: CoreDate.offset(Date())
-                )
-            )
-            await reload()
-        }
+        await command(.createWallet(name: name, openingBalance: openingBalance, occurredAt: CoreDate.offset(Date())))
     }
 
     func createEnvelope(name: String, mode: FlowMode, allowNegative: Bool, openingAllocation: Int64) async {
-        guard let vault = currentVault, !refusedAsReadOnly() else { return }
-        await guarded {
-            try await core.execute(
-                vaultId: vault.id,
-                .createFlow(
-                    name: name,
-                    mode: mode,
-                    allowNegative: allowNegative,
-                    openingAllocation: openingAllocation,
-                    occurredAt: CoreDate.offset(Date())
-                )
+        await command(
+            .createFlow(
+                name: name,
+                mode: mode,
+                allowNegative: allowNegative,
+                openingAllocation: openingAllocation,
+                occurredAt: CoreDate.offset(Date())
             )
-            await reload()
-        }
+        )
     }
 
     // MARK: - Wallet and envelope management
@@ -1103,8 +1007,8 @@ final class AppStore {
         await command(.renameWallet(walletId: walletId, name: name))
     }
 
-    /// Requires a zero balance in the core; the error surfaces as-is
-    /// (docs task 2: no client-side pre-validation).
+    /// Requires a zero balance in the core; the error surfaces as-is, with no
+    /// check of the app's own before it.
     func archiveWallet(_ walletId: Uuid) async {
         await command(.archiveWallet(walletId: walletId))
     }
@@ -1133,20 +1037,32 @@ final class AppStore {
         await command(.restoreFlow(flowId: flowId))
     }
 
-    /// One command against the current vault, then the reload that shows what
-    /// it did. The shape every management action has.
-    private func command(_ command: Command) async {
-        guard let vault = currentVault, !refusedAsReadOnly() else { return }
+    /// One command against the vault on screen, then the reload that shows
+    /// what it did. `nil` when nothing was written.
+    @discardableResult
+    private func command(_ command: Command) async -> Receipt? {
+        guard let vault = currentVault, !refusedAsReadOnly() else { return nil }
+        return await write(command, in: vault.id) { await reload() }
+    }
+
+    /// `command` written to `vaultId`, then `show`: every write of one
+    /// command goes through here, so every one that goes through moves
+    /// "saved at". `nil` when the core refused it, with the alert up.
+    @discardableResult
+    private func write(_ command: Command, in vaultId: Uuid, then show: () async throws -> Void) async -> Receipt? {
+        var receipt: Receipt?
         await guarded {
-            try await core.execute(vaultId: vault.id, command)
-            await reload()
+            receipt = try await core.execute(vaultId: vaultId, command)
+            savedAt = Date()
+            try await show()
         }
+        return receipt
     }
 
     // MARK: - Category management (the SETUP tab)
 
     /// Loads both the management list (archived included) and the aliases;
-    /// called when the SETUP tab appears (docs task 3).
+    /// called when the SETUP tab appears.
     func loadCategoryManagement() async {
         guard let vault = currentVault else {
             windowCategories = []
@@ -1248,35 +1164,16 @@ final class AppStore {
     /// repoints them: the loaded
     /// transactions page can be stale, not just the category lists.
     private func categoryCommand(_ command: Command) async {
-        guard let vault = currentVault, !refusedAsReadOnly() else { return }
-        await guarded {
-            try await core.execute(vaultId: vault.id, command)
-            await reload()
-            if let management = try? await core.categoryManagement(vaultId: vault.id) {
-                windowCategories = management.categories
-                categoryAliases = management.aliases
-            }
-        }
+        // A failed refetch leaves the lists as they were until the tab
+        // loads them again: the write itself went through.
+        guard let vault = currentVault, await self.command(command) != nil,
+              let management = try? await core.categoryManagement(vaultId: vault.id)
+        else { return }
+        windowCategories = management.categories
+        categoryAliases = management.aliases
     }
 
     // MARK: - Recurring
-
-    /// Every template, active and archived; called when the Recurring panel
-    /// opens (`pendingRecurringItems` itself is kept current by `reload()`).
-    func loadRecurringTemplates() async {
-        guard let vault = currentVault else {
-            recurringTemplates = []
-            return
-        }
-        await guarded {
-            let templates = try await core.listRecurring(vaultId: vault.id, includeArchived: true)
-            // Another vault opened while the list was on its way: it belongs
-            // to the vault that is gone, and would sit under the new one's
-            // name until the next load.
-            guard currentVault?.id == vault.id else { return }
-            recurringTemplates = templates
-        }
-    }
 
     /// Returns the new template's id, from the core's receipt, or `nil` when
     /// it was refused: the inspector selects what it created by that id, not
@@ -1293,45 +1190,35 @@ final class AppStore {
         schedule: Schedule,
         owner: String? = nil
     ) async -> Uuid? {
-        guard let vault = currentVault, !refusedAsReadOnly() else { return nil }
-        var created: Uuid?
-        // `recurringCommand`'s steps, keeping the receipt it drops.
-        await guarded {
-            let receipt = try await core.execute(
-                vaultId: vault.id,
-                .createRecurring(
-                    transactionKind: kind,
-                    amount: amount,
-                    walletId: walletId,
-                    flowId: flowId,
-                    category: category,
-                    note: note,
-                    schedule: schedule,
-                    // The author is the core's default owner: said by
-                    // leaving it out, like a row's person.
-                    owner: explicitPerson(owner)
-                )
+        await command(
+            .createRecurring(
+                transactionKind: kind,
+                amount: amount,
+                walletId: walletId,
+                flowId: flowId,
+                category: category,
+                note: note,
+                schedule: schedule,
+                // The author is the core's default owner: said by leaving it
+                // out, like a row's person.
+                owner: explicitPerson(owner)
             )
-            created = receipt.resultId
-            await loadRecurringTemplates()
-            await reload()
-        }
-        return created
+        )?.resultId
     }
 
     func updateRecurring(_ recurringId: Uuid, patch: RecurringPatch) async {
         guard !patch.isEmpty else { return }
-        await recurringCommand(.updateRecurring(recurringId: recurringId, patch: patch))
+        await command(.updateRecurring(recurringId: recurringId, patch: patch))
     }
 
     func archiveRecurring(_ recurringId: Uuid) async {
-        await recurringCommand(.archiveRecurring(recurringId: recurringId))
+        await command(.archiveRecurring(recurringId: recurringId))
     }
 
     /// Puts an archived template back on the schedule; the periods it missed
     /// while archived come back as due.
     func restoreRecurring(_ recurringId: Uuid) async {
-        await recurringCommand(.restoreRecurring(recurringId: recurringId))
+        await command(.restoreRecurring(recurringId: recurringId))
     }
 
     /// Every period waiting for a decision, oldest first: what the due sheet
@@ -1343,9 +1230,9 @@ final class AppStore {
     }
 
     /// Materializes `periodDate` as a transaction; `occurredAt` is the due
-    /// date at the current time of day, in the system offset (team-lead
-    /// task 4). The row is for the template's owner, whoever presses
-    /// Registra: the mortgage stays Matteo's when Elisa records it.
+    /// date at the current time of day, in the system offset. The row is for
+    /// the template's owner, whoever presses Registra: the mortgage stays
+    /// Matteo's when Elisa records it.
     ///
     /// An owner who left the vault is refused here, before the core: the
     /// buttons are off for such a template (`ownerHasLeft`), and a period
@@ -1360,11 +1247,11 @@ final class AppStore {
             )
             return
         }
-        await recurringCommand(execution(recurringId, owner: owner, periodDate: periodDate, now: Date()))
+        await command(execution(recurringId, owner: owner, periodDate: periodDate, now: Date()))
     }
 
     func skipRecurring(_ recurringId: Uuid, periodDate: NaiveDate) async {
-        await recurringCommand(.skipRecurring(recurringId: recurringId, periodDate: periodDate))
+        await command(.skipRecurring(recurringId: recurringId, periodDate: periodDate))
     }
 
     /// Executes every period on the due list as one batch: all of them are
@@ -1403,8 +1290,8 @@ final class AppStore {
         )
     }
 
-    /// The owner of a template, from the due list `reload()` keeps fresh, or
-    /// from the templates the Ricorrenze tab loaded.
+    /// The owner of a template, from the due list or the templates, both of
+    /// which `reload()` keeps fresh.
     func owner(ofTemplate id: Uuid) -> String? {
         pendingRecurringItems.first { $0.template.id == id }?.template.owner
             ?? recurringTemplates.first { $0.id == id }?.owner
@@ -1418,24 +1305,14 @@ final class AppStore {
         .executeRecurring(
             recurringId: recurringId,
             periodDate: periodDate,
-            occurredAt: Self.combine(day: periodDate, timeOf: now),
+            occurredAt: Self.stamp(day: CoreDate.localDay(periodDate) ?? now, likeTimeOf: now),
             person: explicitPerson(owner)
         )
     }
 
-    /// A recurring command, then the template list and the ledger together:
-    /// executing a period writes a transaction as well as a run.
-    private func recurringCommand(_ command: Command) async {
-        guard let vault = currentVault, !refusedAsReadOnly() else { return }
-        await guarded {
-            try await core.execute(vaultId: vault.id, command)
-            await loadRecurringTemplates()
-            await reload()
-        }
-    }
-
     /// The calendar day of `day` with the clock time of `reference`: moving a
-    /// row to another day must not silently move it to midnight.
+    /// row to another day must not silently move it to midnight, and a
+    /// recorded period lands on its day at the time it was recorded.
     static func stamp(day: Date, likeTimeOf reference: Date, calendar: Calendar = .current) -> OffsetDateTime {
         let time = calendar.dateComponents([.hour, .minute, .second], from: reference)
         let combined = calendar.date(
@@ -1445,16 +1322,6 @@ final class AppStore {
             of: day
         )
         return CoreDate.offset(combined ?? day)
-    }
-
-    /// `periodDate` (a bare day) at today's time of day, in the system
-    /// offset: what `executeRecurring` sends as `occurredAt`.
-    private static func combine(day: NaiveDate, timeOf now: Date) -> OffsetDateTime {
-        guard let dayDate = CoreDate.localDay(day) else { return CoreDate.offset(now) }
-        let calendar = Calendar.current
-        let time = calendar.dateComponents([.hour, .minute, .second], from: now)
-        let combined = calendar.date(bySettingHour: time.hour ?? 0, minute: time.minute ?? 0, second: time.second ?? 0, of: dayDate)
-        return CoreDate.offset(combined ?? now)
     }
 
     // MARK: - Ledger writes
@@ -1523,7 +1390,7 @@ final class AppStore {
             flowId: envelope,
             category: category?.trimmingCharacters(in: .whitespacesAndNewlines),
             note: trimmedNote.isEmpty ? nil : trimmedNote,
-            occurredAt: Self.combine(day: CoreDate.day(day), timeOf: Date()),
+            occurredAt: Self.stamp(day: day, likeTimeOf: Date()),
             person: explicitPerson(person)
         )
         let command: Command
@@ -1589,26 +1456,33 @@ final class AppStore {
     func resolveWallet(named text: String) throws -> Uuid? {
         let needle = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !needle.isEmpty else { return nil }
-        let candidates = wallets.map { (id: $0.id, name: $0.name.lowercased()) }
-        if let exact = candidates.first(where: { $0.name == needle }) { return exact.id }
-        for matches in [
-            candidates.filter { $0.name.hasPrefix(needle) },
-            candidates.filter { $0.name.contains(needle) },
-        ] {
-            if matches.count == 1 { return matches[0].id }
-            if matches.count > 1 {
-                throw DomainError.InvalidCommand(
-                    message: String(localized: "More than one wallet matches \u{201C}\(text)\u{201D}")
-                )
-            }
+        if let exact = wallets.first(where: { $0.name.lowercased() == needle }) { return exact.id }
+        let match = try Self.uniqueMatch(needle, in: wallets, by: { $0.name.lowercased() }) {
+            DomainError.InvalidCommand(message: String(localized: "More than one wallet matches \u{201C}\(text)\u{201D}"))
         }
-        throw DomainError.NotFound(message: String(localized: "No wallet named \u{201C}\(text)\u{201D}"))
+        guard let match else {
+            throw DomainError.NotFound(message: String(localized: "No wallet named \u{201C}\(text)\u{201D}"))
+        }
+        return match.id
     }
 
-    /// Surfaces a validation failure from the grid through the same alert the
-    /// core's errors use, so a bad cell reads like a refused command.
-    func report(_ error: Error) {
-        present(error)
+    /// The one candidate whose `name` starts with `needle`, else the one
+    /// that contains it; `nil` when none does, `ambiguous()` thrown when
+    /// several tie. The quick-add resolver's precedence past an exact match.
+    static func uniqueMatch<Candidate>(
+        _ needle: String,
+        in candidates: [Candidate],
+        by name: (Candidate) -> String,
+        ambiguous: () -> Error
+    ) throws -> Candidate? {
+        for matches in [
+            candidates.filter { name($0).hasPrefix(needle) },
+            candidates.filter { name($0).contains(needle) },
+        ] {
+            if matches.count == 1 { return matches[0] }
+            if matches.count > 1 { throw ambiguous() }
+        }
+        return nil
     }
 
     // MARK: - Quick add
@@ -1787,11 +1661,7 @@ final class AppStore {
     /// gets its turn after that month's rows have replaced its own.
     func update(transactionId: Uuid, patch: TransactionPatch, inverse: TransactionPatch?) async {
         guard let vault = currentVault, !patch.isEmpty, !refusedAsReadOnly() else { return }
-        await guarded {
-            try await core.execute(
-                vaultId: vault.id,
-                .updateTransaction(transactionId: transactionId, patch: patch)
-            )
+        await write(.updateTransaction(transactionId: transactionId, patch: patch), in: vault.id) {
             if let inverse {
                 recordPatches(
                     [RowPatch(id: transactionId, patch: patch)],
@@ -1800,7 +1670,6 @@ final class AppStore {
                     name: String(localized: "Edit Row")
                 )
             }
-            savedAt = Date()
             await reload()
         }
     }
@@ -1861,11 +1730,13 @@ final class AppStore {
         do {
             try await work()
         } catch {
-            present(error)
+            report(error)
         }
     }
 
-    private func present(_ error: Error) {
+    /// Puts `error` on the alert: what the core refused, and what a cell or
+    /// a sheet found wrong itself, so a bad cell reads like a refused command.
+    func report(_ error: Error) {
         switch error {
         case let error as AppError: presentedError = error
         case let error as DomainError: presentedError = AppError(error)

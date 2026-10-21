@@ -1,14 +1,9 @@
 //! `sparagne-server user …`: accounts from the command line, for a server
-//! whose registration is closed (`docs/DEPLOY.md` §3).
-//!
-//! It opens only `server.sqlite` in the data directory; WAL and the busy
-//! timeout make that safe while the server runs, and a revoked token stops
-//! working on the server's next request. A password is the first line of
-//! stdin, never an argument, so it stays out of the shell history and `ps`:
-//!
-//! ```sh
-//! printf '%s\n' "$PW" | docker compose exec -T sparagne sparagne-server user add alice
-//! ```
+//! whose registration is closed (`docs/DEPLOY.md` §3.1). It opens only
+//! `server.sqlite`, which WAL and the busy timeout make safe while the server
+//! runs; a revoked token stops working on the server's next request. A
+//! password is the first line of stdin, never an argument, so it stays out of
+//! the shell history and `ps`.
 
 use std::{
     io::{BufRead, Write},

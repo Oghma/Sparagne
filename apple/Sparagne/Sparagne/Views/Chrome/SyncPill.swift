@@ -95,11 +95,9 @@ private struct SyncPopover: View {
         .frame(width: 300, alignment: .leading)
         // The popover draws the rounded card and its border; this is the
         // ground inside it, a step above the bars.
-        .background(Self.ground)
-        .presentationBackground(Self.ground)
+        .background(Ink.float)
+        .presentationBackground(Ink.float)
     }
-
-    private static let ground = Color(hex: 0x17171B)
 
     private func account(_ engine: SyncEngine) -> some View {
         Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {

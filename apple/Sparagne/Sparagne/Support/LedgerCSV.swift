@@ -1,14 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// The ledger's CSV export (⌘E): a pure rendering over
-/// the rows already on screen, so the window only has to hand it what
-/// `AppStore.rows` already filtered (month, direction, person, search, and
-/// voided/transfers only when the View menu is showing them). Its `person`
-/// is the PERSONA column: who each row is for.
-///
-/// RFC 4180: comma-separated, CRLF line endings, a field quoted when it
-/// carries a comma, a quote or a newline, with inner quotes doubled.
+/// The ledger's CSV export (⌘E) of the rows on screen, quoted as RFC 4180 says, with CRLF lines.
 nonisolated enum LedgerCSV {
     static let header = "date,kind,envelope,category,description,person,amount,voided"
     /// With the optional WALLET column on, the file carries it in the same
@@ -122,14 +115,11 @@ nonisolated enum LedgerCSV {
         }
     }
 
-    /// Signed major units with a `.` decimal point, from integer minor units
-    /// only, never through `Double` (the same pattern as
-    /// `LedgerMoney.editable`). Expenses export negative; income, refunds and
-    /// transfers positive, the same sign convention the ledger's totals use
-    /// (`SheetStats`).
+    /// Signed major units with a `.` decimal point (`LedgerMoney.editable`).
+    /// Expenses export negative; income, refunds and transfers positive, the
+    /// same sign convention the ledger's totals use (`SheetStats`).
     private static func amountText(_ row: TransactionRow) -> String {
-        let magnitude = row.absoluteAmount.magnitude
-        let text = String(format: "%llu.%02llu", magnitude / 100, magnitude % 100)
+        let text = LedgerMoney.editable(row.absoluteAmount)
         return row.kind == .expense ? "-\(text)" : text
     }
 

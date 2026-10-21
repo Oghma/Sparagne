@@ -7,13 +7,6 @@ import Testing
 /// The usage column and the envelope bars of the setup tab:
 /// both are plain functions, tested without a view.
 struct CategoryUsageTests {
-    private static func totals(_ id: String, count: UInt32) -> CategoryTotals {
-        CategoryTotals(
-            categoryId: id, name: id, isSystem: false,
-            income: 0, expense: 0, refund: 0, netExpense: 0, count: count
-        )
-    }
-
     @Test("The window is the 12 months up to now")
     func windowBounds() throws {
         var calendar = Calendar(identifier: .gregorian)
@@ -35,7 +28,10 @@ struct CategoryUsageTests {
 
     @Test("Counts map to the category ids; a category the core omits has none")
     func mapping() {
-        let counts = CategoryUsage.counts(from: [Self.totals("a", count: 38), Self.totals("b", count: 1)])
+        let counts = CategoryUsage.counts(from: [
+            SummaryCategoriesTests.totals("a", netExpense: 0, count: 38),
+            SummaryCategoriesTests.totals("b", netExpense: 0, count: 1),
+        ])
         #expect(counts == ["a": 38, "b": 1])
         #expect(counts["c"] == nil)
         #expect(CategoryUsage.counts(from: []).isEmpty)

@@ -10,19 +10,8 @@ import Testing
 struct LedgerHistoryTests {
     /// Vault `Casa` with a wallet, and an undo manager attached after the
     /// setup, so the stack starts empty.
-    private static func ledger(
-        undoWindow: Duration = .seconds(60),
-        sleeper: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
-    ) async throws -> (store: AppStore, manager: UndoManager) {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.history.\(UUID().uuidString)"))
-        let store = AppStore(
-            core: try CoreActor.inMemory(author: "matteo"),
-            defaults: defaults,
-            undoWindow: undoWindow,
-            sleeper: sleeper
-        )
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+    private static func ledger() async throws -> (store: AppStore, manager: UndoManager) {
+        let store = try await TestStore.make(undoWindow: .seconds(60))
         return (store, try Self.attachManager(to: store))
     }
 

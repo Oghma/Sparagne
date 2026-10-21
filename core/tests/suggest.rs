@@ -4,8 +4,7 @@
 
 mod common;
 
-use chrono::{DateTime, Utc};
-use common::{Fx, T0, at, run, setup};
+use common::{Fx, T0, at, category_id, setup, utc};
 use sparagne_core::{CategorySuggestion, Command, Entry};
 use uuid::Uuid;
 
@@ -30,32 +29,18 @@ fn file_as(
         occurred_at: at(secs),
         person: None,
     });
-    run(&mut fx.core, fx.vault, command).result_id.unwrap()
-}
-
-fn since(secs: i64) -> DateTime<Utc> {
-    DateTime::from_timestamp(secs, 0).unwrap()
+    fx.id(command)
 }
 
 fn suggest(fx: &Fx, notes: &[&str]) -> Vec<Option<CategorySuggestion>> {
     let notes: Vec<String> = notes.iter().map(|n| (*n).to_string()).collect();
     fx.core
-        .suggest_categories(fx.vault, &notes, since(0))
+        .suggest_categories(fx.vault, &notes, utc(0))
         .unwrap()
 }
 
 fn one(fx: &Fx, note: &str) -> Option<CategorySuggestion> {
     suggest(fx, &[note]).pop().unwrap()
-}
-
-fn category_id(fx: &Fx, name: &str) -> Uuid {
-    fx.core
-        .categories(fx.vault, true)
-        .unwrap()
-        .into_iter()
-        .find(|c| c.name == name)
-        .unwrap()
-        .id
 }
 
 /// `(name, uses, exact)` of a suggestion, for compact asserts.
@@ -164,13 +149,9 @@ fn archived_and_system_categories_are_left_out() {
     file(&mut fx, "regalo", "Svago", T0 + 1);
     file(&mut fx, "regalo", "Regali", T0 + 2);
     let regali = category_id(&fx, "Regali");
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::ArchiveCategory {
-            category_id: regali,
-        },
-    );
+    fx.run(Command::ArchiveCategory {
+        category_id: regali,
+    });
     assert_eq!(
         shape(one(&fx, "regalo")),
         Some(("Svago".to_string(), 1, true))
@@ -187,13 +168,9 @@ fn voided_and_old_transactions_are_left_out() {
     let mut fx = setup();
     let voided = file(&mut fx, "cinema", "Svago", T0);
     file(&mut fx, "cinema", "Uscite", T0 - 1_000);
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::VoidTransaction {
-            transaction_id: voided,
-        },
-    );
+    fx.run(Command::VoidTransaction {
+        transaction_id: voided,
+    });
     assert_eq!(
         shape(one(&fx, "cinema")),
         Some(("Uscite".to_string(), 1, true))
@@ -203,7 +180,7 @@ fn voided_and_old_transactions_are_left_out() {
     let notes = vec!["cinema".to_string()];
     assert_eq!(
         fx.core
-            .suggest_categories(fx.vault, &notes, since(T0 - 999))
+            .suggest_categories(fx.vault, &notes, utc(T0 - 999))
             .unwrap(),
         vec![None]
     );
@@ -262,7 +239,7 @@ fn an_unknown_vault_suggests_nothing() {
     let notes = vec!["pizza".to_string()];
     assert_eq!(
         fx.core
-            .suggest_categories(Uuid::now_v7(), &notes, since(0))
+            .suggest_categories(Uuid::now_v7(), &notes, utc(0))
             .unwrap(),
         vec![None]
     );

@@ -1,24 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// One person's movement in one bucket of the core's `year_breakdown`.
-/// Bucket 0 is everything before January; 1...12 are
-/// the months of the year.
-struct YearRow: Hashable, Sendable {
-    let bucket: Int
-    let person: String
-    /// Income other than opening balances.
-    let income: Int64
-    /// Opening balances of wallets (the system category `Opening`), signed.
-    let opening: Int64
-    /// `net_expense` on envelopes without a cap.
-    let cashExpense: Int64
-    /// `net_expense` on envelopes with a cap: the "fondi".
-    let fundExpense: Int64
-}
-
-/// A capped envelope as the RIEPILOGO's fund cards show it: how full it is
-/// against its cap.
+/// A capped envelope as the fund cards show it: how full it is against its cap.
 struct FundGauge: Identifiable, Hashable, Sendable {
     let id: Uuid
     let name: String
@@ -28,19 +11,21 @@ struct FundGauge: Identifiable, Hashable, Sendable {
     /// What the cap is measured on, named in the card's tag.
     let kind: Kind
 
+    /// `FlowMode` without its amount, for the modes that have a cap.
     enum Kind: Hashable, Sendable {
         /// The cap is on the balance: spending frees room.
         case balance
         /// The cap is on the cumulative income: spending does not.
         case income
-    }
 
-    init(id: Uuid, name: String, cap: Int64, filled: Int64, kind: Kind = .balance) {
-        self.id = id
-        self.name = name
-        self.cap = cap
-        self.filled = filled
-        self.kind = kind
+        /// `nil` for an envelope without a cap.
+        init?(_ mode: FlowMode) {
+            switch mode {
+            case .unlimited: return nil
+            case .netCapped: self = .balance
+            case .incomeCapped: self = .income
+            }
+        }
     }
 
     /// 0...1.
@@ -50,17 +35,19 @@ struct FundGauge: Identifiable, Hashable, Sendable {
     }
 }
 
-/// What one wallet or envelope gained or lost in one bucket of the core's
-/// `balance_breakdown`: the signed sum of its legs, transfers included.
-/// Bucket 0 is everything before January, 1...12 the months.
-struct BalanceDelta: Hashable, Sendable {
-    let bucket: Int
-    let targetId: Uuid
-    let delta: Int64
+extension FundGauge {
+    /// An envelope's gauge, `nil` without a cap. Spending does not free room
+    /// on an income cap, so what fills that bar is the cumulative income.
+    init?(id: Uuid, name: String, mode: FlowMode, balance: Int64, incomeTotal: Int64?) {
+        switch mode {
+        case .unlimited: return nil
+        case .netCapped(let cap): self.init(id: id, name: name, cap: cap, filled: balance, kind: .balance)
+        case .incomeCapped(let cap): self.init(id: id, name: name, cap: cap, filled: incomeTotal ?? balance, kind: .income)
+        }
+    }
 }
 
-/// One person's share of one month, the four figures the table and the
-/// per-person card read.
+/// One person's share of one month.
 struct PersonMonth: Hashable, Sendable {
     /// Income other than opening balances.
     let income: Int64
@@ -74,8 +61,7 @@ struct PersonMonth: Hashable, Sendable {
     var savings: Int64 { income - cashExpense }
 }
 
-/// One line of the RIEPILOGO's month table, everybody
-/// together, plus the running total of each person.
+/// One month of the RIEPILOGO's table, everybody together, with each person's figures.
 struct YearMonth: Hashable, Sendable {
     let month: MonthKey
     /// After the month on screen, in the year on screen: drawn blank.
@@ -109,8 +95,7 @@ struct YearMonth: Hashable, Sendable {
     }
 }
 
-/// Where the year would end at the pace of its finished months: only for
-/// the month of today, since a month gone by is a fact, not a forecast.
+/// Where the year would end at the pace of its finished months, for the month of today only.
 struct Projection: Hashable, Sendable {
     /// The finished months the pace is read from.
     let finishedMonths: Int
@@ -141,8 +126,7 @@ struct PersonYear: Hashable, Sendable {
     var rate: Double? { income > 0 ? Double(savings) / Double(income) : nil }
 }
 
-/// One wallet's column of the month table: its balance at the end of every
-/// month. Drawn only when the vault has two or more wallets in the year.
+/// One wallet's month-end balances, a column drawn only with two or more wallets in the year.
 struct WalletYearColumn: Identifiable, Hashable, Sendable {
     let id: Uuid
     let name: String
@@ -154,9 +138,7 @@ struct WalletYearColumn: Identifiable, Hashable, Sendable {
     let balances: [Int64]
 }
 
-/// One line of the RIEPILOGO's table. A `nil` figure is an empty cell: the
-/// opening row has only TOTALE, the sum has no FONDO CASSA, a future month
-/// has nothing at all.
+/// One line of the RIEPILOGO's table; a `nil` figure is an empty cell.
 struct YearTableRow: Hashable, Sendable {
     enum Kind: Hashable, Sendable {
         /// "Inizio anno": the fund the year starts with.
@@ -189,13 +171,7 @@ struct YearTableRow: Hashable, Sendable {
     let totalByPerson: [Int64]
 }
 
-/// The four numbers of the month on screen, with the
-/// month before and the year so far for their sub-lines. Plain figures, so
-/// the deltas the cards print are checked without a window.
-///
-/// They come from the same `YearMonth`s as the table under them, so a card
-/// and its row never disagree: expenses are USCITE (envelopes without a cap),
-/// not the Mastro's net expense on every envelope.
+/// The month's cards and their sub-lines, from the table's own months so a card and its row agree.
 struct MonthKPIs: Hashable, Sendable {
     let income: Int64
     let expenses: Int64
@@ -409,7 +385,9 @@ struct YearSummary: Sendable {
     }
 
     /// Pure arithmetic over the query's rows and the vault's envelopes, so it
-    /// can be tested without a database.
+    /// can be tested without a database. In `rows`, the core's
+    /// `year_breakdown`, bucket 0 is everything before January and 1...12
+    /// the months.
     ///
     /// `vaultPeople` are the persons of every live row of the vault
     /// (`AppStore.peopleInRows`): each gets a column in every year, so a year
@@ -424,21 +402,21 @@ struct YearSummary: Sendable {
     static func build(
         year: Int,
         upTo: MonthKey,
-        rows: [YearRow],
+        rows: [BucketPersonTotals],
         flows: [FlowView],
         vaultPeople: [String] = [],
         person: String? = nil,
         today: MonthKey? = nil,
         wallets: [WalletView] = [],
-        walletBalances: [BalanceDelta] = []
+        walletBalances: [BucketTargetTotals] = []
     ) -> YearSummary {
         // Under PERSONA everybody else's rows go before anything is summed,
         // so TOTALE and FONDO CASSA are that person's share; the one column
         // is theirs even in a year with no row of theirs.
         let rows = person.map { name in rows.filter { $0.person == name } } ?? rows
         let people = person.map { [$0] } ?? Self.people(in: rows, vaultPeople: vaultPeople)
-        var byBucket: [Int: [YearRow]] = [:]
-        for row in rows { byBucket[row.bucket, default: []].append(row) }
+        var byBucket: [Int: [BucketPersonTotals]] = [:]
+        for row in rows { byBucket[Int(row.bucket), default: []].append(row) }
 
         // Bucket 0 is everything before January: it opens the recurrence.
         let initialByPerson = people.map { name in
@@ -450,44 +428,23 @@ struct YearSummary: Sendable {
         var runningByPerson = initialByPerson
         for month in 1...12 {
             let monthRows = byBucket[month, default: []]
-            let income = monthRows.reduce(0) { $0 + $1.income }
-            let cashExpense = monthRows.reduce(0) { $0 + $1.cashExpense }
-            let fundExpense = monthRows.reduce(0) { $0 + $1.fundExpense }
-            // FONDO CASSA: last month's TOTALE plus the wallets opened now.
-            let carried = runningTotal + monthRows.reduce(0) { $0 + $1.opening }
-            let total = (income - cashExpense) + carried - fundExpense
-
-            var byPerson: [PersonMonth] = []
-            byPerson.reserveCapacity(people.count)
-            for (index, name) in people.enumerated() {
-                let personRows = monthRows.filter { $0.person == name }
-                let personIncome = personRows.reduce(0) { $0 + $1.income }
-                let personCash = personRows.reduce(0) { $0 + $1.cashExpense }
-                let personFunds = personRows.reduce(0) { $0 + $1.fundExpense }
-                let personCarried = runningByPerson[index] + personRows.reduce(0) { $0 + $1.opening }
-                byPerson.append(
-                    PersonMonth(
-                        income: personIncome,
-                        cashExpense: personCash,
-                        fundExpense: personFunds,
-                        total: (personIncome - personCash) + personCarried - personFunds
-                    )
-                )
+            let all = Self.month(of: monthRows, after: runningTotal)
+            let byPerson = people.enumerated().map { index, name in
+                Self.month(of: monthRows.filter { $0.person == name }, after: runningByPerson[index]).figures
             }
-
             months.append(
                 YearMonth(
                     month: MonthKey(year: year, month: month),
                     isFuture: Self.isFuture(year: year, month: month, upTo: upTo),
-                    income: income,
-                    cashExpense: cashExpense,
-                    fundExpense: fundExpense,
-                    carried: carried,
-                    total: total,
+                    income: all.figures.income,
+                    cashExpense: all.figures.cashExpense,
+                    fundExpense: all.figures.fundExpense,
+                    carried: all.carried,
+                    total: all.figures.total,
                     byPerson: byPerson
                 )
             )
-            runningTotal = total
+            runningTotal = all.figures.total
             runningByPerson = byPerson.map(\.total)
         }
 
@@ -525,16 +482,17 @@ struct YearSummary: Sendable {
     /// and would be a column of zeros.
     private static func walletColumns(
         wallets: [WalletView],
-        deltas: [BalanceDelta],
+        deltas: [BucketTargetTotals],
         through: Int
     ) -> [WalletYearColumn] {
         var buckets: [Uuid: [Int64]] = [:]
         var inYear = Set<Uuid>()
-        for delta in deltas where (0...12).contains(delta.bucket) {
-            buckets[delta.targetId, default: Array(repeating: 0, count: 13)][delta.bucket] += delta.delta
+        for delta in deltas where delta.bucket <= 12 {
+            let bucket = Int(delta.bucket)
+            buckets[delta.targetId, default: Array(repeating: 0, count: 13)][bucket] += delta.delta
             // A wallet closed before the year comes back with legs that net
             // to nothing: it has no column.
-            if delta.delta != 0, delta.bucket <= through { inYear.insert(delta.targetId) }
+            if delta.delta != 0, bucket <= through { inYear.insert(delta.targetId) }
         }
         let shown = wallets.filter { inYear.contains($0.id) }
         guard shown.count >= 2 else { return [] }
@@ -552,7 +510,7 @@ struct YearSummary: Sendable {
     /// One column per person, de-duplicated in the core's order and then
     /// sorted case-insensitively, so two runs of the same vault always put
     /// the columns in the same place.
-    private static func people(in rows: [YearRow], vaultPeople: [String]) -> [String] {
+    private static func people(in rows: [BucketPersonTotals], vaultPeople: [String]) -> [String] {
         var seen = Set<String>()
         var people: [String] = []
         for person in vaultPeople + rows.map(\.person) where seen.insert(person).inserted {
@@ -561,9 +519,24 @@ struct YearSummary: Sendable {
         return people.sorted { $0.lowercased() < $1.lowercased() }
     }
 
+    /// One month of `rows`, everybody's or one person's, on from `previous`,
+    /// the TOTALE of the month before. FONDO CASSA is that TOTALE plus the
+    /// wallets opened in the month.
+    private static func month(
+        of rows: [BucketPersonTotals],
+        after previous: Int64
+    ) -> (figures: PersonMonth, carried: Int64) {
+        let income = rows.reduce(0) { $0 + $1.income }
+        let cashExpense = rows.reduce(0) { $0 + $1.cashExpense }
+        let fundExpense = rows.reduce(0) { $0 + $1.fundExpense }
+        let carried = previous + rows.reduce(0) { $0 + $1.opening }
+        let total = (income - cashExpense) + carried - fundExpense
+        return (PersonMonth(income: income, cashExpense: cashExpense, fundExpense: fundExpense, total: total), carried)
+    }
+
     /// What a bucket leaves behind: everything that came in, less everything
     /// that went out, on both kinds of envelope.
-    private static func closing(_ rows: [YearRow]) -> Int64 {
+    private static func closing(_ rows: [BucketPersonTotals]) -> Int64 {
         rows.reduce(0) { $0 + $1.income + $1.opening - $1.cashExpense - $1.fundExpense }
     }
 
@@ -577,19 +550,9 @@ struct YearSummary: Sendable {
     /// fact of the vault rather than a name.
     private static func funds(in flows: [FlowView]) -> [FundGauge] {
         flows.compactMap { flow in
-            guard !flow.archived else { return nil }
-            switch flow.mode {
-            case .unlimited:
-                return nil
-            case .netCapped(let cap):
-                return FundGauge(id: flow.id, name: flow.name, cap: cap, filled: flow.balance, kind: .balance)
-            case .incomeCapped(let cap):
-                // Spending does not free room on an income cap, so what fills
-                // the bar is the cumulative income.
-                return FundGauge(
-                    id: flow.id, name: flow.name, cap: cap, filled: flow.incomeTotal ?? flow.balance, kind: .income
-                )
-            }
+            flow.archived
+                ? nil
+                : FundGauge(id: flow.id, name: flow.name, mode: flow.mode, balance: flow.balance, incomeTotal: flow.incomeTotal)
         }
     }
 }

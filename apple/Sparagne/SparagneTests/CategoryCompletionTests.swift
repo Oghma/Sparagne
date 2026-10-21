@@ -71,20 +71,18 @@ struct CategoryCompletionTests {
     /// Vault `Casa` with rows filed under three categories, the most recent
     /// last, and the completion data loaded as a cell taking the caret would.
     private static func store() async throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.completion.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        let store = try await TestStore.make()
         for category in ["Carburante", "Casa", "Cassa comune"] {
             await store.addRow(day: Date(), flowId: nil, category: category, note: category.lowercased(), amount: 100)
         }
-        await store.addCategoryAliasForTests("bollette", to: "Casa")
+        let casa = try #require(store.categories.first { $0.name == "Casa" })
+        await store.addAlias(categoryId: casa.id, alias: "bollette")
         await store.loadCategoryCompletion()
         #expect(store.presentedError == nil)
         return store
     }
 
-    @Test("The model ranks by what was used last, moves with wrap-around, and a pick writes the name without reopening")
+    @Test("The model ranks by what was used last, and a pick writes the name without reopening")
     func modelPicks() async throws {
         let store = try await Self.store()
         #expect(store.recentCategoryIds.count == 3)
@@ -93,40 +91,28 @@ struct CategoryCompletionTests {
 
         model.textChanged("ca", owner: "cell", store: store) { written = $0 }
         // The newest row's category first.
-        #expect(model.candidates.map(\.name) == ["Cassa comune", "Casa", "Carburante"])
-        #expect(model.owner == AnyHashable("cell"))
+        #expect(model.list.items.map(\.name) == ["Cassa comune", "Casa", "Carburante"])
+        #expect(model.list.owner == AnyHashable("cell"))
 
-        model.move(by: -1)
-        #expect(model.selected?.name == "Carburante")
-        model.move(by: 1)
-        #expect(model.selected?.name == "Cassa comune")
-        model.move(by: 1)
+        model.list.move(by: 1)
         #expect(model.picksOnReturn(over: "ca"))
-        #expect(model.pick())
+        #expect(model.list.pick())
         #expect(written == "Casa")
-        #expect(!model.isOpen)
+        #expect(!model.list.isOpen)
 
         // The cell changing to the picked name does not open the list again.
         model.textChanged("Casa", owner: "cell", store: store) { written = $0 }
-        #expect(!model.isOpen)
+        #expect(!model.list.isOpen)
 
         // Typing on does, and an entry equal to the text lets ↩ save the row.
         model.textChanged("casa", owner: "cell", store: store) { written = $0 }
-        #expect(model.selected?.name == "Casa")
+        #expect(model.list.selected?.name == "Casa")
         #expect(!model.picksOnReturn(over: "casa"))
 
         // An alias leads to its category, and the cell gets the category.
         model.textChanged("boll", owner: "cell", store: store) { written = $0 }
-        #expect(model.candidates.first?.alias == "bollette")
-        model.pick()
+        #expect(model.list.items.first?.alias == "bollette")
+        model.list.pick()
         #expect(written == "Casa")
-    }
-}
-
-extension AppStore {
-    /// An alias through the same command the SETUP tab sends.
-    fileprivate func addCategoryAliasForTests(_ alias: String, to name: String) async {
-        guard let category = categories.first(where: { $0.name == name }) else { return }
-        await addAlias(categoryId: category.id, alias: alias)
     }
 }

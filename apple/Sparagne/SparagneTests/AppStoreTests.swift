@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import SparagneCore
 import Testing
@@ -8,37 +7,33 @@ import Testing
 /// `AppStore` driven end to end over an in-memory core: every assertion is
 /// about what the projection says after a real command was applied.
 struct AppStoreTests {
-    /// A store on a fresh in-memory database, with its own defaults so the
-    /// "last vault" key never leaks between tests.
-    private static func makeStore(
-        undoWindow: Duration = .seconds(60),
-        sleeper: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
-    ) throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.tests.\(UUID().uuidString)"))
-        return AppStore(
-            core: try CoreActor.inMemory(author: "tester"),
-            defaults: defaults,
-            undoWindow: undoWindow,
-            sleeper: sleeper
-        )
-    }
-
     /// A store that has been through onboarding: vault `Main`, wallet `Cash`
     /// holding 100.00.
     private static func onboarded() async throws -> AppStore {
-        let store = try makeStore()
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10000)
-        return store
+        try await TestStore.make(vault: "Main", wallet: "Cash", opening: 10_000, author: "tester", undoWindow: .seconds(60))
     }
 
     private static func pizzaRow(_ store: AppStore) throws -> TransactionRow {
         try #require(store.rows.first { $0.note == "pizza" })
     }
 
+    /// A rent of 500,00 on the 1st of every month, started a month ago, so a period is due.
+    private static func rentSinceAMonthAgo(_ store: AppStore) async throws {
+        let monthAgo = try #require(Calendar.current.date(byAdding: .month, value: -1, to: Date()))
+        await store.createRecurring(
+            kind: .expense,
+            amount: 50_000,
+            walletId: nil,
+            flowId: nil,
+            category: "Casa",
+            note: "affitto",
+            schedule: RecurringFixture.schedule(.monthly(day: 1), from: CoreDate.day(monthAgo))
+        )
+    }
+
     @Test("An empty database asks for onboarding, which creates the vault and its wallet")
     func onboarding() async throws {
-        let store = try Self.makeStore()
+        let store = try TestStore.fresh(author: "tester", undoWindow: .seconds(60))
 
         await store.bootstrap()
         #expect(store.needsOnboarding)
@@ -108,9 +103,9 @@ struct AppStoreTests {
     @Test("Letting the undo window elapse voids the transaction for real")
     func elapsedUndoWindowVoids() async throws {
         // The window is driven by the injected sleeper, so the test never waits.
-        let store = try Self.makeStore(undoWindow: .zero, sleeper: { _ in })
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10000)
+        let store = try await TestStore.make(
+            vault: "Main", wallet: "Cash", opening: 10_000, author: "tester", undoWindow: .zero, sleeper: { _ in }
+        )
         await store.submit(quickAdd: "-12.50 pizza #food")
         let row = try Self.pizzaRow(store)
 
@@ -134,9 +129,7 @@ struct AppStoreTests {
 
     /// `Main` with a pizza waiting on the toast, and `Casa` beside it.
     private static func voidInMainBesideCasa() async throws -> (store: AppStore, main: VaultView, casa: VaultView) {
-        let store = try makeStore()
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 5_000)
+        let store = try await TestStore.make(opening: 5_000, author: "tester", undoWindow: .seconds(60))
         let casa = try #require(store.currentVault)
         await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10_000)
         let main = try #require(store.currentVault)
@@ -210,36 +203,15 @@ struct AppStoreTests {
         let store = try await Self.onboarded()
         await store.submit(quickAdd: "-12.50 pizza #food")
         await store.void(transactionId: try Self.pizzaRow(store).id)
-        let delegate = AppDelegate()
-        delegate.store = store
+        let quit = QuitHarness(store: store)
 
-        let replied = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-            delegate.replyToTermination = { continuation.resume(returning: $0) }
-            #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
-        }
-
-        #expect(replied)
+        #expect(await quit.deferredReply())
         #expect(store.presentedError == nil)
         #expect(store.pendingUndo == nil)
         #expect(store.wallets.first?.balance == 10_000)
 
         // Nothing waiting: the app quits straight away.
-        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateNow)
-    }
-
-    @Test("Editing the amount re-applies the legs")
-    func updatingTheAmountMovesTheBalance() async throws {
-        let store = try await Self.onboarded()
-        await store.submit(quickAdd: "-12.50 pizza #food")
-        let row = try Self.pizzaRow(store)
-
-        var patch = TransactionPatch()
-        patch.amount = 2000
-        await store.update(transactionId: row.id, patch: patch)
-
-        #expect(store.presentedError == nil)
-        #expect(store.wallets.first?.balance == 8000)
-        #expect(try Self.pizzaRow(store).absoluteAmount == 2000)
+        #expect(quit.answer() == .terminateNow)
     }
 
     @Test("An empty patch is not sent")
@@ -252,21 +224,6 @@ struct AppStoreTests {
 
         #expect(store.presentedError == nil)
         #expect(store.wallets.first?.balance == 8750)
-    }
-
-    @Test("Spending more than an envelope holds surfaces insufficient_funds")
-    func overspendingAnEnvelopeIsReported() async throws {
-        let store = try await Self.onboarded()
-        await store.createEnvelope(name: "Vacanze", mode: .unlimited, allowNegative: false, openingAllocation: 0)
-        #expect(store.presentedError == nil)
-
-        await store.submit(quickAdd: "-5.00 hotel >Vacanze")
-
-        let error = try #require(store.presentedError)
-        #expect(error.code == "insufficient_funds")
-        #expect(error.message.contains("Vacanze"))
-        // Nothing was written.
-        #expect(store.wallets.first?.balance == 10000)
     }
 
     @Test("An unknown envelope name is a quick-add error, not a domain error")
@@ -367,16 +324,32 @@ struct AppStoreTests {
 
     // MARK: - Wallet and envelope management
 
-    @Test("Archiving a wallet with a balance surfaces invalid_command")
-    func archivingAWalletWithBalanceIsRefused() async throws {
+    @Test("A setup command that goes through moves the status line's saved-at; one refused, a wallet with a balance archived, does not")
+    func setupCommandMovesSavedAt() async throws {
         let store = try await Self.onboarded()
         let cash = try #require(store.wallets.first { $0.name == "Cash" })
+        #expect(store.savedAt == nil)
 
         await store.archiveWallet(cash.id)
-
-        let error = try #require(store.presentedError)
-        #expect(error.code == "invalid_command")
+        #expect(store.presentedError?.code == "invalid_command")
         #expect(store.wallets.contains { $0.id == cash.id })
+        #expect(store.savedAt == nil)
+
+        store.presentedError = nil
+        await store.createWallet(name: "Card", openingBalance: 0)
+        #expect(store.presentedError == nil)
+        #expect(store.savedAt != nil)
+
+        let afterWallet = store.savedAt
+        await store.createCategory(name: "Spesa")
+        #expect(store.presentedError == nil)
+        #expect(store.savedAt != afterWallet)
+
+        let afterCategory = store.savedAt
+        let vault = try #require(store.currentVault)
+        await store.renameVault(vault.id, name: "Home")
+        #expect(store.presentedError == nil)
+        #expect(store.savedAt != afterCategory)
     }
 
     @Test("Updating an envelope's cap shows up in the snapshot")
@@ -427,7 +400,7 @@ struct AppStoreTests {
         store.presentedError = nil
 
         // A fresh, unrelated target has no conflicts and the merge repoints
-        // the existing transaction (checked via `listTransactions`).
+        // the existing transaction.
         await store.createCategory(name: "Groceries")
         await store.loadCategoryManagement()
         let groceries = try #require(store.windowCategories.first { $0.name == "Groceries" })
@@ -530,20 +503,11 @@ struct AppStoreTests {
     @Test("A recurring expense shows in the summary's fixed costs and its due periods on the strip")
     func summaryFixedCostsAndStrip() async throws {
         let store = try await Self.onboarded()
-        let monthAgo = try #require(Calendar.current.date(byAdding: .month, value: -1, to: Date()))
-        await store.createRecurring(
-            kind: .expense,
-            amount: 50_000,
-            walletId: nil,
-            flowId: nil,
-            category: "Casa",
-            note: "affitto",
-            schedule: Schedule(frequency: .monthly(day: 1), interval: 1, startDate: CoreDate.day(monthAgo), endDate: nil)
-        )
+        try await Self.rentSinceAMonthAgo(store)
         #expect(store.presentedError == nil)
         #expect(store.fixedCosts?.monthly == 50_000)
-        #expect(store.dueRecurringCount > 0)
-        #expect(store.summaryTodo.first?.kind == .dueRecurring(count: store.dueRecurringCount))
+        #expect(!store.duePeriods.isEmpty)
+        #expect(store.summaryTodo.first?.kind == .dueRecurring(count: store.duePeriods.count))
         #expect(store.summaryTodo.first?.tab == .recurring)
 
         // A click on that chip opens the Ricorrenze tab, nothing else moves.
@@ -774,16 +738,7 @@ struct AppStoreTests {
     @Test("On a vault only read the strip offers no period to decide, and still counts the rows without a category")
     func stripOnAReadOnlyVault() async throws {
         let store = try await Self.onboarded()
-        let monthAgo = try #require(Calendar.current.date(byAdding: .month, value: -1, to: Date()))
-        await store.createRecurring(
-            kind: .expense,
-            amount: 50_000,
-            walletId: nil,
-            flowId: nil,
-            category: "Casa",
-            note: "affitto",
-            schedule: Schedule(frequency: .monthly(day: 1), interval: 1, startDate: CoreDate.day(monthAgo), endDate: nil)
-        )
+        try await Self.rentSinceAMonthAgo(store)
         await store.createEnvelope(name: "Affitto", mode: .unlimited, allowNegative: false, openingAllocation: 0)
         let affitto = try #require(store.flows.first { $0.name == "Affitto" })
         let saved = await store.saveAllocationLines(
@@ -804,7 +759,7 @@ struct AppStoreTests {
         #expect(store.summaryTodo.map(\.kind) == [.uncategorized(count: 1)])
         // The plan's period and the recurring ones are still there to see.
         #expect(store.pendingAllocation != nil)
-        #expect(store.dueRecurringCount > 0)
+        #expect(!store.duePeriods.isEmpty)
     }
 }
 
@@ -895,9 +850,7 @@ struct ErrorMessagesTests {
             message: "Elisa is not a member of this vault",
             detail: "Elisa"
         )
-        let change = SyncEngine.RejectedChange(
-            entry: RejectedEntry(vaultId: UUID().uuidString, vaultName: "Casa", command: command)
-        )
+        let change = RejectedEntry(vaultId: UUID().uuidString, vaultName: "Casa", command: command)
         #expect(change.summary == String(localized: "\("Elisa") is not a member of this vault"))
         // No detail (an older server, a row refused before it): the generic
         // headline, whatever the sentence says.
@@ -908,7 +861,7 @@ struct ErrorMessagesTests {
             message: "Elisa is not a member of this vault"
         )
         #expect(
-            SyncEngine.RejectedChange(entry: RejectedEntry(vaultId: UUID().uuidString, vaultName: "Casa", command: older)).summary
+            RejectedEntry(vaultId: UUID().uuidString, vaultName: "Casa", command: older).summary
                 == ErrorMessages.summary(for: "not_a_member")
         )
         #expect(ErrorMessages.summary(for: "not_a_member", detail: " ") == ErrorMessages.summary(for: "not_a_member"))

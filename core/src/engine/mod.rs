@@ -1,24 +1,25 @@
-//! Applying commands to the projection and appending them to the log.
-//!
-//! Every command runs inside one SQLite transaction: validation, state
-//! changes and the log row commit together or not at all.
+//! Applying commands to the projection and appending them to the log. Every
+//! command runs inside one SQLite transaction: validation, state changes and
+//! the log row commit together or not at all.
 
 mod allocation;
-mod batch;
 pub(crate) mod entities;
 mod recurring;
 mod update;
 
-use chrono::{DateTime, FixedOffset, Utc};
-use rusqlite::{OptionalExtension, Transaction, params};
+use chrono::{DateTime, FixedOffset, NaiveDate, Utc};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use uuid::Uuid;
+
+use update::Leg;
 
 use crate::{
     Command, CommandEnvelope, Core, DomainError, Entry, Flow, FlowMode, Receipt, Result,
-    TransactionKind,
+    TargetKind, TransactionKind,
     category::{OPENING_KEY, UNCATEGORIZED_KEY, normalize_category_key, validate_category_name},
     command::explicit_person,
     flow::UNALLOCATED_NAME,
+    recurring::Schedule,
 };
 
 impl Core {
@@ -26,20 +27,8 @@ impl Core {
     /// returns the original receipt (idempotency).
     pub fn execute(&mut self, env: CommandEnvelope) -> Result<Receipt> {
         let tx = self.conn.transaction()?;
-        let existing = tx
-            .query_row(
-                "SELECT seq, result_id FROM commands WHERE id = ?1",
-                params![env.id],
-                |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<Uuid>>(1)?)),
-            )
-            .optional()?;
-        if let Some((seq, result_id)) = existing {
-            return Ok(Receipt {
-                command_id: env.id,
-                seq,
-                result_id,
-                deduplicated: true,
-            });
+        if let Some(receipt) = existing_receipt(&tx, env.id)? {
+            return Ok(receipt);
         }
 
         let now = Utc::now().timestamp();
@@ -53,6 +42,99 @@ impl Core {
             deduplicated: false,
         })
     }
+
+    /// Applies `envelopes` in order, all of them or none: the first domain
+    /// error rolls the batch back and is returned unchanged. Every envelope
+    /// must target the same vault (`InvalidCommand` otherwise); an id already
+    /// in the log, or repeated in the batch, is deduplicated like in
+    /// [`Core::execute`]; an empty batch writes nothing.
+    ///
+    /// Atomic on this device only: every command keeps its own seq and log
+    /// row, so the outbox pushes them one by one and the server (or a later
+    /// rebase) accepts or refuses each on its own.
+    pub fn execute_batch(&mut self, envelopes: Vec<CommandEnvelope>) -> Result<Vec<Receipt>> {
+        let Some(first) = envelopes.first() else {
+            return Ok(Vec::new());
+        };
+        let vault_id = first.vault_id;
+        if let Some(stray) = envelopes.iter().find(|env| env.vault_id != vault_id) {
+            return Err(DomainError::InvalidCommand(format!(
+                "batch: command {} belongs to vault {}, not {vault_id}",
+                stray.id, stray.vault_id
+            )));
+        }
+
+        let tx = self.conn.transaction()?;
+        let now = Utc::now().timestamp();
+        let mut receipts = Vec::with_capacity(envelopes.len());
+        for env in &envelopes {
+            if let Some(receipt) = existing_receipt(&tx, env.id)? {
+                receipts.push(receipt);
+                continue;
+            }
+            let seq = next_seq(&tx, vault_id)?;
+            let result_id = apply_envelope(&tx, env, seq, None, now)?;
+            receipts.push(Receipt {
+                command_id: env.id,
+                seq,
+                result_id,
+                deduplicated: false,
+            });
+        }
+        tx.commit()?;
+        Ok(receipts)
+    }
+}
+
+/// The receipt of a command already in the log (`deduplicated`), `None` for
+/// one the log does not hold.
+pub(crate) fn existing_receipt(conn: &Connection, command_id: Uuid) -> Result<Option<Receipt>> {
+    let row = conn
+        .query_row(
+            "SELECT seq, result_id FROM commands WHERE id = ?1",
+            params![command_id],
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<Uuid>>(1)?)),
+        )
+        .optional()?;
+    Ok(row.map(|(seq, result_id)| Receipt {
+        command_id,
+        seq,
+        result_id,
+        deduplicated: true,
+    }))
+}
+
+pub(crate) fn check_amount(amount: i64) -> Result<()> {
+    if amount > 0 {
+        Ok(())
+    } else {
+        Err(DomainError::InvalidAmount("amount must be > 0".to_string()))
+    }
+}
+
+pub(crate) fn require_active_flow(
+    tx: &Transaction<'_>,
+    vault_id: Uuid,
+    flow_id: Uuid,
+) -> Result<()> {
+    if load_flow(tx, vault_id, flow_id)?.archived {
+        return Err(invalid("flow is archived"));
+    }
+    Ok(())
+}
+
+fn encode_schedule(schedule: &Schedule) -> Result<String> {
+    Ok(serde_json::to_string(schedule)?)
+}
+
+fn parse_date(value: &str) -> Result<NaiveDate> {
+    value
+        .parse()
+        .map_err(|_| DomainError::Storage(format!("invalid period date '{value}'")))
+}
+
+fn invalid(message: &str) -> DomainError {
+    DomainError::InvalidCommand(message.to_string())
 }
 
 /// Next free local position in a vault's log. Rejected rows count: seq is a
@@ -104,15 +186,13 @@ pub(crate) fn try_apply_envelope(
     }
 }
 
-/// What a log row records: a command that went through, or one the server (or
-/// a rebase) refused, kept for the UI.
+/// A command that went through, or one the server or a rebase refused, kept for the UI.
 pub(crate) enum LogRow {
     Applied(Option<Uuid>),
     /// `<code>: <message>`.
     Rejected(String),
 }
 
-/// Writes one row of the log.
 pub(crate) fn log_row(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
@@ -312,7 +392,7 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
             *recurring_id,
             *period_date,
             *occurred_at,
-            person_or_author(person.as_deref(), env),
+            person.as_deref(),
             now,
         )
         .map(Some),
@@ -358,10 +438,6 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
     }
 }
 
-// ---------------------------------------------------------------------------
-// Vault, wallet, flow, category
-// ---------------------------------------------------------------------------
-
 /// The name is a label: any non-blank one will do, even one the author
 /// already gave another vault. Nothing here may depend on the other vaults in
 /// the database, because a rebase replays this command next to whatever
@@ -374,9 +450,7 @@ fn create_vault(
     now: i64,
 ) -> Result<Uuid> {
     if env.vault_id != env.id {
-        return Err(DomainError::InvalidCommand(
-            "create_vault: vault_id must equal the command id".to_string(),
-        ));
+        return Err(invalid("create_vault: vault_id must equal the command id"));
     }
     let name = normalize_name(name, "vault")?;
     tx.execute(
@@ -388,19 +462,21 @@ fn create_vault(
          VALUES (?1, ?2, ?3, 'unallocated', 0, NULL, NULL, 1, 0, ?4)",
         params![derived_id(env.id, "unallocated"), env.id, UNALLOCATED_NAME, now],
     )?;
-    insert_system_category(
+    insert_category(
         tx,
         env.id,
         derived_id(env.id, "uncategorized"),
         "Uncategorized",
         UNCATEGORIZED_KEY,
+        true,
     )?;
-    insert_system_category(
+    insert_category(
         tx,
         env.id,
         derived_id(env.id, "opening"),
         "Opening",
         OPENING_KEY,
+        true,
     )?;
     Ok(env.id)
 }
@@ -444,7 +520,7 @@ fn create_wallet(
 ) -> Result<Uuid> {
     require_vault(tx, env.vault_id)?;
     let name = normalize_name(name, "wallet")?;
-    if name_taken(tx, "wallets", env.vault_id, &name)? {
+    if name_taken(tx, "wallets", env.vault_id, &name, None)? {
         return Err(DomainError::AlreadyExists(name));
     }
     tx.execute(
@@ -457,14 +533,12 @@ fn create_wallet(
         } else {
             TransactionKind::Expense
         };
-        post_entry(
+        post(
             tx,
             env,
             derived_id(env.id, "opening"),
             kind,
-            opening_balance,
-            env.id,
-            unallocated_id(tx, env.vault_id)?,
+            Leg::entry(env.id, unallocated_id(tx, env.vault_id)?, opening_balance),
             system_category_id(tx, env.vault_id, OPENING_KEY)?,
             Some(format!("opening balance for wallet '{name}'")),
             occurred_at,
@@ -492,7 +566,7 @@ fn create_flow(
             "flow name is reserved".to_string(),
         ));
     }
-    if name_taken(tx, "flows", env.vault_id, &name)? {
+    if name_taken(tx, "flows", env.vault_id, &name, None)? {
         return Err(DomainError::AlreadyExists(name));
     }
     mode.validate()?;
@@ -530,19 +604,12 @@ fn create_flow(
 fn create_category(tx: &Transaction<'_>, env: &CommandEnvelope, name: &str) -> Result<Uuid> {
     require_vault(tx, env.vault_id)?;
     let (display, key) = validate_category_name(name)?;
-    if category_key_taken(tx, env.vault_id, &key)? {
+    if category_key_taken(tx, env.vault_id, &key, None)? {
         return Err(DomainError::AlreadyExists(display));
     }
-    tx.execute(
-        "INSERT INTO categories (id, vault_id, name, name_norm, is_system, archived) VALUES (?1, ?2, ?3, ?4, 0, 0)",
-        params![env.id, env.vault_id, display, key],
-    )?;
+    insert_category(tx, env.vault_id, env.id, &display, &key, false)?;
     Ok(env.id)
 }
-
-// ---------------------------------------------------------------------------
-// Transactions
-// ---------------------------------------------------------------------------
 
 fn entry(
     tx: &Transaction<'_>,
@@ -551,17 +618,12 @@ fn entry(
     e: &Entry,
 ) -> Result<Uuid> {
     require_vault(tx, env.vault_id)?;
-    if e.amount <= 0 {
-        return Err(DomainError::InvalidAmount("amount must be > 0".to_string()));
-    }
+    check_amount(e.amount)?;
     let wallet_id = resolve_wallet(tx, env.vault_id, e.wallet_id)?;
     let flow_id = match e.flow_id {
         None => unallocated_id(tx, env.vault_id)?,
         Some(id) => {
-            let flow = load_flow(tx, env.vault_id, id)?;
-            if flow.archived {
-                return Err(DomainError::InvalidCommand("flow is archived".to_string()));
-            }
+            require_active_flow(tx, env.vault_id, id)?;
             id
         }
     };
@@ -570,14 +632,12 @@ fn entry(
         TransactionKind::Expense => -e.amount,
         _ => e.amount,
     };
-    post_entry(
+    post(
         tx,
         env,
         env.id,
         kind,
-        signed,
-        wallet_id,
-        flow_id,
+        Leg::entry(wallet_id, flow_id, signed),
         category_id,
         normalize_note(e.note.as_deref()),
         e.occurred_at,
@@ -586,42 +646,23 @@ fn entry(
     Ok(env.id)
 }
 
-/// Write a two-leg entry (wallet + flow, same signed amount) and apply it.
-#[allow(clippy::too_many_arguments)]
-fn post_entry(
+/// The checks both transfers start with; their order decides which error a
+/// bad transfer gets.
+fn check_transfer(
     tx: &Transaction<'_>,
-    env: &CommandEnvelope,
-    tx_id: Uuid,
-    kind: TransactionKind,
-    signed: i64,
-    wallet_id: Uuid,
-    flow_id: Uuid,
-    category_id: Uuid,
-    note: Option<String>,
-    occurred_at: DateTime<FixedOffset>,
-    person: &str,
+    vault_id: Uuid,
+    amount: i64,
+    from: Uuid,
+    to: Uuid,
 ) -> Result<()> {
-    let mut flow = load_flow(tx, env.vault_id, flow_id)?;
-    flow.apply_leg_change(0, signed)?;
-    save_flow(tx, &flow)?;
-    adjust_wallet(tx, wallet_id, signed)?;
-    insert_transaction(
-        tx,
-        env,
-        tx_id,
-        kind,
-        signed.abs(),
-        category_id,
-        note,
-        occurred_at,
-        person,
-    )?;
-    insert_leg(tx, tx_id, 0, "wallet", wallet_id, signed)?;
-    insert_leg(tx, tx_id, 1, "flow", flow_id, signed)?;
+    require_vault(tx, vault_id)?;
+    check_amount(amount)?;
+    if from == to {
+        return Err(invalid("from and to must differ"));
+    }
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn transfer_wallet(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
@@ -631,33 +672,21 @@ fn transfer_wallet(
     note: Option<&str>,
     occurred_at: DateTime<FixedOffset>,
 ) -> Result<Uuid> {
-    require_vault(tx, env.vault_id)?;
-    if amount <= 0 {
-        return Err(DomainError::InvalidAmount("amount must be > 0".to_string()));
-    }
-    if from == to {
-        return Err(DomainError::InvalidCommand(
-            "from and to must differ".to_string(),
-        ));
-    }
+    check_transfer(tx, env.vault_id, amount, from, to)?;
     resolve_wallet(tx, env.vault_id, Some(from))?;
     resolve_wallet(tx, env.vault_id, Some(to))?;
-    adjust_wallet(tx, from, -amount)?;
-    adjust_wallet(tx, to, amount)?;
     let category = system_category_id(tx, env.vault_id, UNCATEGORIZED_KEY)?;
-    insert_transaction(
+    post(
         tx,
         env,
         env.id,
         TransactionKind::TransferWallet,
-        amount,
+        Leg::transfer(TargetKind::Wallet, from, to, amount),
         category,
         normalize_note(note),
         occurred_at,
         &env.author,
     )?;
-    insert_leg(tx, env.id, 0, "wallet", from, -amount)?;
-    insert_leg(tx, env.id, 1, "wallet", to, amount)?;
     Ok(env.id)
 }
 
@@ -673,38 +702,65 @@ fn post_transfer_flow(
     note: Option<String>,
     occurred_at: DateTime<FixedOffset>,
 ) -> Result<Uuid> {
-    require_vault(tx, env.vault_id)?;
-    if amount <= 0 {
-        return Err(DomainError::InvalidAmount("amount must be > 0".to_string()));
-    }
-    if from == to {
-        return Err(DomainError::InvalidCommand(
-            "from and to must differ".to_string(),
-        ));
-    }
-    let mut source = load_flow(tx, env.vault_id, from)?;
-    let mut target = load_flow(tx, env.vault_id, to)?;
-    if source.archived || target.archived {
-        return Err(DomainError::InvalidCommand("flow is archived".to_string()));
-    }
-    source.apply_leg_change(0, -amount)?;
-    target.apply_leg_change(0, amount)?;
-    save_flow(tx, &source)?;
-    save_flow(tx, &target)?;
-    insert_transaction(
+    check_transfer(tx, env.vault_id, amount, from, to)?;
+    // Both flows must exist before either is refused as archived.
+    load_flow(tx, env.vault_id, to)?;
+    require_active_flow(tx, env.vault_id, from)?;
+    require_active_flow(tx, env.vault_id, to)?;
+    post(
         tx,
         env,
         tx_id,
         TransactionKind::TransferFlow,
-        amount,
+        Leg::transfer(TargetKind::Flow, from, to, amount),
         category_id,
         note,
         occurred_at,
         &env.author,
     )?;
-    insert_leg(tx, tx_id, 0, "flow", from, -amount)?;
-    insert_leg(tx, tx_id, 1, "flow", to, amount)?;
     Ok(tx_id)
+}
+
+/// Writes a transaction with its legs and moves every balance they touch.
+/// The checks whose order decides which error a bad command gets are the
+/// caller's; what is left here is a flow refusing its leg.
+///
+/// `created_by` is always the author of the command; `person` is whoever the
+/// row is for, which only an entry or an execution may set apart from it.
+#[allow(clippy::too_many_arguments)]
+fn post(
+    tx: &Transaction<'_>,
+    env: &CommandEnvelope,
+    id: Uuid,
+    kind: TransactionKind,
+    legs: [Leg; 2],
+    category_id: Uuid,
+    note: Option<String>,
+    occurred_at: DateTime<FixedOffset>,
+    person: &str,
+) -> Result<()> {
+    for leg in &legs {
+        move_leg(tx, env.vault_id, leg.kind, leg.id, 0, leg.amount)?;
+    }
+    tx.execute(
+        "INSERT INTO transactions
+            (id, vault_id, kind, occurred_at, occurred_offset, amount, category_id, note, created_by, command_id, person)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        params![
+            id,
+            env.vault_id,
+            kind.as_str(),
+            occurred_at.timestamp(),
+            occurred_at.offset().local_minus_utc(),
+            legs[1].amount.abs(),
+            category_id,
+            note,
+            env.author,
+            env.id,
+            person,
+        ],
+    )?;
+    insert_legs(tx, id, &legs)
 }
 
 fn void_transaction(
@@ -722,9 +778,7 @@ fn void_transaction(
         .optional()?
         .ok_or_else(|| DomainError::NotFound("transaction".to_string()))?;
     if voided_at.is_some() {
-        return Err(DomainError::InvalidCommand(
-            "transaction already voided".to_string(),
-        ));
+        return Err(invalid("transaction already voided"));
     }
     void_live_transaction(tx, env, transaction_id, now)
 }
@@ -739,27 +793,13 @@ fn void_live_transaction(
     transaction_id: Uuid,
     now: i64,
 ) -> Result<()> {
-    let legs: Vec<(String, Uuid, i64)> = {
-        let mut stmt = tx.prepare(
-            "SELECT target_kind, target_id, amount FROM legs WHERE transaction_id = ?1 ORDER BY ordinal",
-        )?;
-        let rows = stmt.query_map(params![transaction_id], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-        })?;
-        rows.collect::<std::result::Result<_, _>>()?
-    };
-    for (kind, target, amount) in legs {
-        match kind.as_str() {
-            "wallet" => adjust_wallet(tx, target, -amount)?,
-            "flow" => {
-                let mut flow = load_flow(tx, env.vault_id, target)?;
-                flow.apply_leg_change_unchecked(amount, 0);
+    for leg in update::load_legs(tx, transaction_id)? {
+        match leg.kind {
+            TargetKind::Wallet => adjust_wallet(tx, leg.id, -leg.amount)?,
+            TargetKind::Flow => {
+                let mut flow = load_flow(tx, env.vault_id, leg.id)?;
+                flow.apply_leg_change_unchecked(leg.amount, 0);
                 save_flow(tx, &flow)?;
-            }
-            other => {
-                return Err(DomainError::Storage(format!(
-                    "unknown leg target '{other}'"
-                )));
             }
         }
     }
@@ -769,10 +809,6 @@ fn void_live_transaction(
     )?;
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Resolution helpers
-// ---------------------------------------------------------------------------
 
 /// Ids of entities created inside a command are derived from the command id,
 /// so replaying the log yields the same ids.
@@ -828,32 +864,47 @@ fn vault_owner(tx: &Transaction<'_>, vault_id: Uuid) -> Result<String> {
     .ok_or_else(|| DomainError::NotFound("vault".to_string()))
 }
 
-fn name_taken(tx: &Transaction<'_>, table: &str, vault_id: Uuid, name: &str) -> Result<bool> {
+fn name_taken(
+    tx: &Transaction<'_>,
+    table: &str,
+    vault_id: Uuid,
+    name: &str,
+    except: Option<Uuid>,
+) -> Result<bool> {
     let sql = format!(
-        "SELECT EXISTS(SELECT 1 FROM {table} WHERE vault_id = ?1 AND lower(name) = lower(?2))"
+        "SELECT EXISTS(SELECT 1 FROM {table}
+         WHERE vault_id = ?1 AND lower(name) = lower(?2) AND id IS NOT ?3)"
     );
-    Ok(tx.query_row(&sql, params![vault_id, name], |r| r.get(0))?)
+    Ok(tx.query_row(&sql, params![vault_id, name, except], |r| r.get(0))?)
 }
 
-fn category_key_taken(tx: &Transaction<'_>, vault_id: Uuid, key: &str) -> Result<bool> {
+fn category_key_taken(
+    tx: &Transaction<'_>,
+    vault_id: Uuid,
+    key: &str,
+    except: Option<Uuid>,
+) -> Result<bool> {
     Ok(tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM categories WHERE vault_id = ?1 AND name_norm = ?2)
-             OR EXISTS(SELECT 1 FROM category_aliases WHERE vault_id = ?1 AND alias_norm = ?2)",
-        params![vault_id, key],
+        "SELECT EXISTS(SELECT 1 FROM categories
+                       WHERE vault_id = ?1 AND name_norm = ?2 AND id IS NOT ?3)
+             OR EXISTS(SELECT 1 FROM category_aliases
+                       WHERE vault_id = ?1 AND alias_norm = ?2 AND category_id IS NOT ?3)",
+        params![vault_id, key, except],
         |r| r.get(0),
     )?)
 }
 
-fn insert_system_category(
+fn insert_category(
     tx: &Transaction<'_>,
     vault_id: Uuid,
     id: Uuid,
     name: &str,
     key: &str,
+    is_system: bool,
 ) -> Result<()> {
     tx.execute(
-        "INSERT INTO categories (id, vault_id, name, name_norm, is_system, archived) VALUES (?1, ?2, ?3, ?4, 1, 0)",
-        params![id, vault_id, name, key],
+        "INSERT INTO categories (id, vault_id, name, name_norm, is_system, archived) VALUES (?1, ?2, ?3, ?4, ?5, 0)",
+        params![id, vault_id, name, key, is_system],
     )?;
     Ok(())
 }
@@ -868,8 +919,8 @@ fn system_category_id(tx: &Transaction<'_>, vault_id: Uuid, key: &str) -> Result
     .ok_or_else(|| DomainError::NotFound(format!("system category '{key}'")))
 }
 
-fn unallocated_id(tx: &Transaction<'_>, vault_id: Uuid) -> Result<Uuid> {
-    tx.query_row(
+fn unallocated_id(conn: &Connection, vault_id: Uuid) -> Result<Uuid> {
+    conn.query_row(
         "SELECT id FROM flows WHERE vault_id = ?1 AND system_kind = 'unallocated'",
         params![vault_id],
         |r| r.get(0),
@@ -890,9 +941,7 @@ fn resolve_wallet(tx: &Transaction<'_>, vault_id: Uuid, wallet_id: Option<Uuid>)
                 .optional()?
                 .ok_or_else(|| DomainError::NotFound("wallet".to_string()))?;
             if archived {
-                return Err(DomainError::InvalidCommand(
-                    "wallet is archived".to_string(),
-                ));
+                return Err(invalid("wallet is archived"));
             }
             Ok(id)
         }
@@ -905,8 +954,8 @@ fn resolve_wallet(tx: &Transaction<'_>, vault_id: Uuid, wallet_id: Option<Uuid>)
             match ids.as_slice() {
                 [only] => Ok(*only),
                 [] => Err(DomainError::NotFound("wallet".to_string())),
-                _ => Err(DomainError::InvalidCommand(
-                    "wallet_id is required when more than one wallet exists".to_string(),
+                _ => Err(invalid(
+                    "wallet_id is required when more than one wallet exists",
                 )),
             }
         }
@@ -955,36 +1004,33 @@ fn resolve_category(
     }
     let (display, key) = validate_category_name(raw)?;
     let id = derived_id(env.id, "category");
-    tx.execute(
-        "INSERT INTO categories (id, vault_id, name, name_norm, is_system, archived) VALUES (?1, ?2, ?3, ?4, 0, 0)",
-        params![id, vault_id, display, key],
-    )?;
+    insert_category(tx, vault_id, id, &display, &key, false)?;
     Ok(id)
 }
 
-// ---------------------------------------------------------------------------
-// Row-level helpers
-// ---------------------------------------------------------------------------
+/// Columns of `flows` that [`flow_row`] reads, in its order.
+pub(crate) const FLOW_COLUMNS: &str =
+    "id, name, system_kind, balance, cap, income_total, allow_negative, archived";
+
+pub(crate) fn flow_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Flow> {
+    Ok(Flow {
+        id: r.get(0)?,
+        name: r.get(1)?,
+        is_unallocated: r.get::<_, Option<String>>(2)?.as_deref() == Some("unallocated"),
+        balance: r.get(3)?,
+        cap: r.get(4)?,
+        income_total: r.get(5)?,
+        allow_negative: r.get(6)?,
+        archived: r.get(7)?,
+    })
+}
 
 pub(crate) fn load_flow(tx: &Transaction<'_>, vault_id: Uuid, flow_id: Uuid) -> Result<Flow> {
     let flow = tx
         .query_row(
-            "SELECT id, name, system_kind, balance, cap, income_total, allow_negative, archived
-             FROM flows WHERE id = ?1 AND vault_id = ?2",
+            &format!("SELECT {FLOW_COLUMNS} FROM flows WHERE id = ?1 AND vault_id = ?2"),
             params![flow_id, vault_id],
-            |r| {
-                Ok(Flow {
-                    id: r.get(0)?,
-                    name: r.get(1)?,
-                    is_unallocated: r.get::<_, Option<String>>(2)?.as_deref()
-                        == Some("unallocated"),
-                    balance: r.get(3)?,
-                    cap: r.get(4)?,
-                    income_total: r.get(5)?,
-                    allow_negative: r.get(6)?,
-                    archived: r.get(7)?,
-                })
-            },
+            flow_row,
         )
         .optional()?
         .ok_or_else(|| DomainError::NotFound("flow".to_string()))?;
@@ -1012,52 +1058,32 @@ fn adjust_wallet(tx: &Transaction<'_>, wallet_id: Uuid, delta: i64) -> Result<()
     }
 }
 
-/// `created_by` is always the author of the command; `person` is whoever the
-/// row is for, which only an entry or an execution may set apart from it.
-#[allow(clippy::too_many_arguments)]
-fn insert_transaction(
+/// Moves a wallet or a flow from its leg of `old` to one of `new`; a flow
+/// checks its cap and its floor.
+fn move_leg(
     tx: &Transaction<'_>,
-    env: &CommandEnvelope,
+    vault_id: Uuid,
+    kind: TargetKind,
     id: Uuid,
-    kind: TransactionKind,
-    amount_abs: i64,
-    category_id: Uuid,
-    note: Option<String>,
-    occurred_at: DateTime<FixedOffset>,
-    person: &str,
+    old: i64,
+    new: i64,
 ) -> Result<()> {
-    tx.execute(
-        "INSERT INTO transactions
-            (id, vault_id, kind, occurred_at, occurred_offset, amount, category_id, note, created_by, command_id, person)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-        params![
-            id,
-            env.vault_id,
-            kind.as_str(),
-            occurred_at.timestamp(),
-            occurred_at.offset().local_minus_utc(),
-            amount_abs,
-            category_id,
-            note,
-            env.author,
-            env.id,
-            person,
-        ],
-    )?;
-    Ok(())
+    match kind {
+        TargetKind::Wallet => adjust_wallet(tx, id, new - old),
+        TargetKind::Flow => {
+            let mut flow = load_flow(tx, vault_id, id)?;
+            flow.apply_leg_change(old, new)?;
+            save_flow(tx, &flow)
+        }
+    }
 }
 
-fn insert_leg(
-    tx: &Transaction<'_>,
-    transaction_id: Uuid,
-    ordinal: i64,
-    target_kind: &str,
-    target_id: Uuid,
-    amount: i64,
-) -> Result<()> {
-    tx.execute(
-        "INSERT INTO legs (transaction_id, ordinal, target_kind, target_id, amount) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![transaction_id, ordinal, target_kind, target_id, amount],
-    )?;
+fn insert_legs(tx: &Transaction<'_>, transaction_id: Uuid, legs: &[Leg]) -> Result<()> {
+    for (ordinal, leg) in (0_i64..).zip(legs) {
+        tx.execute(
+            "INSERT INTO legs (transaction_id, ordinal, target_kind, target_id, amount) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![transaction_id, ordinal, leg.kind.as_str(), leg.id, leg.amount],
+        )?;
+    }
     Ok(())
 }

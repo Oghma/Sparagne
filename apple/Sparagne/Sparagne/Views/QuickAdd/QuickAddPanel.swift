@@ -23,8 +23,6 @@ struct QuickAddOverlay: View {
     @State private var hint: NoteSuggestion?
 
     static let width: CGFloat = 600
-    /// `#17171B`: a step above the cards, so the panel floats over the sheet.
-    private static let ground = Color(hex: 0x17171B)
 
     /// An account that only reads the vault cannot add a row, so for it the
     /// panel is the palette and nothing else: the list shows from the start,
@@ -58,7 +56,7 @@ struct QuickAddOverlay: View {
             footer
         }
         .frame(width: Self.width, alignment: .leading)
-        .background(Self.ground)
+        .background(Ink.float)
         .clipShape(shape)
         .overlay(shape.strokeBorder(Ink.line2, lineWidth: 1))
         .shadow(color: .black.opacity(0.65), radius: 30, y: 24)
@@ -115,12 +113,12 @@ struct QuickAddOverlay: View {
             // caret gets them back as soon as the `>` is gone.
             .onKeyPress(.upArrow) {
                 guard isCommand else { return .ignored }
-                palette.move(by: -1)
+                palette.list.move(by: -1)
                 return .handled
             }
             .onKeyPress(.downArrow) {
                 guard isCommand else { return .ignored }
-                palette.move(by: 1)
+                palette.list.move(by: 1)
                 return .handled
             }
             // ⇥ takes the hint into the line, where the chips show it; without
@@ -172,7 +170,7 @@ struct QuickAddOverlay: View {
         switch store.preview(quickAdd: trimmed) {
         case .success(let line):
             let tokens = QuickAddTokens.make(line, currency: store.currency, person: resolvedPerson(line))
-            TokenFlow(spacing: 6) {
+            FlowLayout(spacing: 6) {
                 ForEach(tokens) { token in
                     TokenChip(token: token)
                 }
@@ -183,7 +181,7 @@ struct QuickAddOverlay: View {
             .accessibilityElement(children: .combine)
         case .failure(let error):
             Text(error.message)
-                .font(Face.ui(12))
+                .font(Face.row)
                 .foregroundStyle(Ink.negative)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -265,8 +263,6 @@ struct QuickAddOverlay: View {
     }
 }
 
-// MARK: - Closing on a save
-
 /// The store's last save and the panel's line, watched together: the panel
 /// closes when a save took its line, and on no other save.
 ///
@@ -299,7 +295,7 @@ private struct TokenChip: View {
             }
             Text(token.value).foregroundStyle(token.isDefault ? Ink.text3 : Ink.text)
         }
-        .font(Face.ui(12))
+        .font(Face.row)
         .lineLimit(1)
         .padding(.horizontal, 9)
         .frame(height: 24)
@@ -317,7 +313,7 @@ private struct HintChip: View {
             KeyCap(text: "\u{21E5}")
             Text(category).foregroundStyle(Ink.accent)
         }
-        .font(Face.ui(12))
+        .font(Face.row)
         .lineLimit(1)
         .padding(.leading, 4)
         .padding(.trailing, 9)
@@ -328,52 +324,3 @@ private struct HintChip: View {
     }
 }
 
-/// Lays its children out left to right and wraps onto a new line when the
-/// width runs out, as the chips of a long line need.
-private struct TokenFlow: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = arrange(subviews, width: proposal.width ?? .infinity)
-        let width = rows.map(\.width).max() ?? 0
-        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
-        return CGSize(width: proposal.width ?? width, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var y = bounds.minY
-        for row in arrange(subviews, width: bounds.width) {
-            var x = bounds.minX
-            for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
-                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-                x += size.width + spacing
-            }
-            y += row.height + spacing
-        }
-    }
-
-    private struct Row {
-        var indices: [Int] = []
-        var width: CGFloat = 0
-        var height: CGFloat = 0
-    }
-
-    private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
-        var rows: [Row] = []
-        var current = Row()
-        for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
-            let needed = current.indices.isEmpty ? size.width : current.width + spacing + size.width
-            if needed > width, !current.indices.isEmpty {
-                rows.append(current)
-                current = Row()
-            }
-            current.width = current.indices.isEmpty ? size.width : current.width + spacing + size.width
-            current.height = max(current.height, size.height)
-            current.indices.append(index)
-        }
-        if !current.indices.isEmpty { rows.append(current) }
-        return rows
-    }
-}

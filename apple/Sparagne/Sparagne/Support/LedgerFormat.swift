@@ -1,12 +1,6 @@
 import Foundation
 
-/// Money as the ledger writes it: the symbol in front,
-/// `.` between thousands and `,` before the cents.
-///
-/// Unlike `MoneyFormatter`, which follows the user's locale, this one is fixed:
-/// the mockups are a designed surface where the column widths and the decimal
-/// alignment are part of the layout. Amounts are still `Int64` minor units and
-/// still go through `Decimal`; no float ever appears.
+/// Money as the ledger writes it (`€2.448,53`), fixed whatever the locale: the layout depends on it.
 enum LedgerMoney {
     private static let formatter: NumberFormatter = {
         let formatter = NumberFormatter()
@@ -56,32 +50,16 @@ enum LedgerMoney {
         return percent(savings, of: income, decimals: 0)
     }
 
-    /// A month-over-month delta as the cards show it: `"+4,2%"`, or `nil` when
-    /// the previous period was zero (the delta divides by `|previous|`,
-    /// which is undefined there).
-    static func delta(current: Int64, previous: Int64) -> String? {
-        guard previous != 0 else { return nil }
-        let ratio = (Decimal(current - previous) / Decimal(abs(previous)) * 100) as NSDecimalNumber
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.decimalSeparator = ","
-        formatter.positivePrefix = "+"
-        formatter.minimumFractionDigits = 1
-        formatter.maximumFractionDigits = 1
-        return formatter.string(from: ratio).map { "\($0)%" }
-    }
-
     /// `"12.50"`: the plain text `parseMoney` accepts, for a grid cell being
-    /// edited. No symbol, no grouping.
-    static func editable(_ minorUnits: Int64) -> String {
+    /// edited, and the figure of an exported CSV. No sign, no symbol, no
+    /// grouping, never through `Double`.
+    nonisolated static func editable(_ minorUnits: Int64) -> String {
         let absolute = minorUnits.magnitude
         return String(format: "%llu.%02llu", absolute / 100, absolute % 100)
     }
 }
 
-/// Dates as the ledger writes them: `01 ago` in the DATA column, `AGOSTO 2026`
-/// in the header. Month names come from the user's locale, so the Italian of
-/// the mockups and an English run both read naturally.
+/// Dates as the ledger writes them (`01 ago`, `AGOSTO 2026`), in the user's locale.
 enum LedgerDate {
     /// `"01 ago"`.
     static func day(_ date: Date, calendar: Calendar = .current, locale: Locale = .autoupdatingCurrent) -> String {
@@ -93,22 +71,53 @@ enum LedgerDate {
 
     /// `"ago"`, lowercased and stripped of the trailing dot some locales add.
     static func shortMonth(_ month: Int, locale: Locale = .autoupdatingCurrent) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = locale
-        let symbols = calendar.shortStandaloneMonthSymbols
-        let index = month - 1
-        guard symbols.indices.contains(index) else { return "\(month)" }
-        return symbols[index].replacingOccurrences(of: ".", with: "").lowercased()
+        monthName(month, style: .shortStandalone, locale: locale)
+            .replacingOccurrences(of: ".", with: "")
+            .lowercased()
     }
 
     /// `"AGOSTO"`.
     static func fullMonth(_ month: Int, locale: Locale = .autoupdatingCurrent) -> String {
+        monthName(month, style: .standalone, locale: locale).uppercased()
+    }
+
+    /// A name in a date (`.format`), on its own (`.standalone`), or abbreviated on its own.
+    enum NameStyle {
+        case format, standalone, shortStandalone
+    }
+
+    /// The locale's name of a 1-based `month`, in the locale's own case; the
+    /// number itself when it is out of range.
+    static func monthName(_ month: Int, style: NameStyle, locale: Locale = .autoupdatingCurrent) -> String {
+        let calendar = gregorian(locale)
+        let symbols = switch style {
+        case .format: calendar.monthSymbols
+        case .standalone: calendar.standaloneMonthSymbols
+        case .shortStandalone: calendar.shortStandaloneMonthSymbols
+        }
+        let index = month - 1
+        return symbols.indices.contains(index) ? symbols[index] : "\(month)"
+    }
+
+    /// The locale's name of a `weekday` numbered as `Calendar` numbers them,
+    /// Sunday = 1 … Saturday = 7, in the locale's own case; the number
+    /// itself when it is out of range. An ISO weekday (Monday = 1 … Sunday
+    /// = 7) is `iso % 7 + 1`.
+    static func weekdayName(_ weekday: Int, style: NameStyle, locale: Locale = .autoupdatingCurrent) -> String {
+        let calendar = gregorian(locale)
+        let symbols = switch style {
+        case .format: calendar.weekdaySymbols
+        case .standalone: calendar.standaloneWeekdaySymbols
+        case .shortStandalone: calendar.shortStandaloneWeekdaySymbols
+        }
+        let index = weekday - 1
+        return symbols.indices.contains(index) ? symbols[index] : "\(weekday)"
+    }
+
+    private static func gregorian(_ locale: Locale) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = locale
-        let symbols = calendar.standaloneMonthSymbols
-        let index = month - 1
-        guard symbols.indices.contains(index) else { return "\(month)" }
-        return symbols[index].uppercased()
+        return calendar
     }
 
     /// `"A"`: the single letter under a bar in the twelve-month strip.

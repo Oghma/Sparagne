@@ -3,7 +3,7 @@
 //! is `400 invalid_request`.
 
 use axum::{
-    extract::{FromRequest, FromRequestParts, Request, rejection::JsonRejection},
+    extract::{FromRequest, FromRequestParts, Request},
     http::request::Parts,
     response::{IntoResponse, Response},
 };
@@ -11,8 +11,6 @@ use serde::{Serialize, de::DeserializeOwned};
 
 use crate::error::ApiError;
 
-/// JSON body.
-#[derive(Clone, Copy, Debug, Default)]
 pub struct Json<T>(pub T);
 
 impl<T, S> FromRequest<S> for Json<T>
@@ -25,7 +23,7 @@ where
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
         match axum::Json::<T>::from_request(req, state).await {
             Ok(axum::Json(value)) => Ok(Self(value)),
-            Err(rejection) => Err(invalid(&rejection)),
+            Err(rejection) => Err(ApiError::invalid_request(rejection.body_text())),
         }
     }
 }
@@ -36,12 +34,6 @@ impl<T: Serialize> IntoResponse for Json<T> {
     }
 }
 
-fn invalid(rejection: &JsonRejection) -> ApiError {
-    ApiError::invalid_request(rejection.body_text())
-}
-
-/// Path parameters.
-#[derive(Clone, Copy, Debug, Default)]
 pub struct Path<T>(pub T);
 
 impl<T, S> FromRequestParts<S> for Path<T>
@@ -59,8 +51,6 @@ where
     }
 }
 
-/// Query string.
-#[derive(Clone, Copy, Debug, Default)]
 pub struct Query<T>(pub T);
 
 impl<T, S> FromRequestParts<S> for Query<T>

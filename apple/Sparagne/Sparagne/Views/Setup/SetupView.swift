@@ -1,10 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The SETUP view: the vault's card, its wallets and
-/// its envelopes in the left column, its categories in the right one, as
-/// cards on the sheet. Two columns of half the width each: the window's
-/// minimum width always has room for both.
+/// The Setup tab: the vault, its wallets and envelopes on the left, its categories on the right.
 struct SetupView: View {
     let store: AppStore
     /// `nil` before the database is open and in a demo database: the vault's

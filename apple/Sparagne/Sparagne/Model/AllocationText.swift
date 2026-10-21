@@ -1,12 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// The words of the Riparto tab: a line's rule and its status, a decided
-/// period, the warnings. Amounts are the window's fixed `4.250,00`
-/// (`LedgerMoney`), percentages `12,5%` (`AllocationPercent`).
-///
-/// `bundle` is the catalog to read the plural keys from, as `CountText`
-/// takes it.
+/// The words of the Riparto tab: a line's rule and status, a decided period, the warnings.
 enum AllocationText {
     // MARK: - Rules
 

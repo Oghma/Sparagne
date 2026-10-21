@@ -1,8 +1,6 @@
 import Foundation
 
-/// The server's rules for an account (registration), checked
-/// in the form before anything is sent, so a refusal reads as a hint under
-/// the field instead of the server's English after a round trip.
+/// The server's account rules, checked in the form so a refusal is a hint under the field.
 nonisolated enum AccountRules {
     static let usernameLength = 3...32
     static let minimumPasswordLength = 8

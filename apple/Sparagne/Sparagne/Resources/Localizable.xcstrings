@@ -817,6 +817,126 @@
         }
       }
     },
+    "%lld rows": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld row"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rows"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld riga"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld righe"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld rows also look like entries in": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld row also looks like an entry in"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rows also look like entries in"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld riga somiglia anche a una voce in"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld righe somigliano anche a voci in"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld rows looked like a transaction already in the vault and were not imported.": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld row looked like a transaction already in the vault and was not imported."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rows looked like a transaction already in the vault and were not imported."
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld riga somigliava a una transazione già nel vault e non è stata importata."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld righe somigliavano a transazioni già nel vault e non sono state importate."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld rows selected": {
       "localizations": {
         "en": {
@@ -1017,6 +1137,86 @@
         }
       }
     },
+    "%lld transactions entered by hand were moved into the statement’s wallet.": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transaction entered by hand was moved into the statement’s wallet."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transactions entered by hand were moved into the statement’s wallet."
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transazione inserita a mano è stata spostata nel wallet dell’estratto conto."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transazioni inserite a mano sono state spostate nel wallet dell’estratto conto."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld transactions were deleted and replaced by the transfers they stood for.": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transaction was deleted and replaced by the transfer it stood for."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transactions were deleted and replaced by the transfers they stood for."
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transazione è stata eliminata e sostituita dal trasferimento che rappresentava."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transazioni sono state eliminate e sostituite dai trasferimenti che rappresentavano."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld transfers": {
       "localizations": {
         "en": {
@@ -1050,6 +1250,46 @@
                 "stringUnit": {
                   "state": "translated",
                   "value": "%lld trasferimenti"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld transfers were already there from the other wallet’s side and were not imported again.": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transfer was already there from the other wallet’s side and was not imported again."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transfers were already there from the other wallet’s side and were not imported again."
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld trasferimento era già presente dal lato dell’altro wallet e non è stato importato di nuovo."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld trasferimenti erano già presenti dal lato dell’altro wallet e non sono stati importati di nuovo."
                 }
               }
             }
@@ -1121,6 +1361,22 @@
         }
       }
     },
+    "A row entered by hand in one of these wallets that looks like a statement row is moved into the statement’s wallet instead of being imported twice. Chosen anew for every file.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A row entered by hand in one of these wallets that looks like a statement row is moved into the statement’s wallet instead of being imported twice. Chosen anew for every file."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una riga inserita a mano in uno di questi wallet che somiglia a una riga dell’estratto conto viene spostata nel wallet dell’estratto conto invece di essere importata due volte. Si sceglie di nuovo per ogni file."
+          }
+        }
+      }
+    },
     "A row may be for %@": {
       "localizations": {
         "en": {
@@ -1133,6 +1389,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Una riga può essere per %@"
+          }
+        }
+      }
+    },
+    "A rule finds the rows whose description holds its text, case aside, and says what they are, their category and a cleaner note, before the types do. The first rule that matches decides.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A rule finds the rows whose description holds its text, case aside, and says what they are, their category and a cleaner note, before the types do. The first rule that matches decides."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una regola trova le righe la cui descrizione contiene il suo testo, maiuscole o minuscole che siano, e ne decide il tipo, la categoria e una nota più pulita, prima dei tipi. Decide la prima regola che corrisponde."
           }
         }
       }
@@ -1245,6 +1517,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Account e server…"
+          }
+        }
+      }
+    },
+    "Account left out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account left out"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conto escluso"
           }
         }
       }
@@ -1501,6 +1789,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Già importate"
+          }
+        }
+      }
+    },
+    "Already in the vault: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Already in the vault: %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Già nel vault: %@"
+          }
+        }
+      }
+    },
+    "Also look for duplicates in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also look for duplicates in"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerca doppioni anche in"
           }
         }
       }
@@ -1901,6 +2221,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Categoria della banca"
+          }
+        }
+      }
+    },
+    "Before the start day": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before the start day"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prima della data di inizio"
           }
         }
       }
@@ -2377,6 +2713,46 @@
         }
       }
     },
+    "Confirm %lld matches": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Confirm %lld match"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Confirm %lld matches"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Conferma %lld corrispondenza"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Conferma %lld corrispondenze"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Confirm new password": {
       "localizations": {
         "en": {
@@ -2405,6 +2781,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Collega un server…"
+          }
+        }
+      }
+    },
+    "Contains": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contains"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contiene"
           }
         }
       }
@@ -2993,6 +3385,22 @@
         }
       }
     },
+    "Description rules": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Description rules"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Regole sulla descrizione"
+          }
+        }
+      }
+    },
     "Deselect": {
       "localizations": {
         "en": {
@@ -3165,6 +3573,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Duplica ultima riga"
+          }
+        }
+      }
+    },
+    "Duplicates also in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplicates also in"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Doppioni anche in"
           }
         }
       }
@@ -3897,6 +4321,22 @@
         }
       }
     },
+    "File’s wallet (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File’s wallet (%@)"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallet del file (%@)"
+          }
+        }
+      }
+    },
     "Find…": {
       "localizations": {
         "en": {
@@ -4069,6 +4509,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Formato"
+          }
+        }
+      }
+    },
+    "Found anywhere in the bank’s description, case aside": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Found anywhere in the bank’s description, case aside"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cercato ovunque nella descrizione della banca, maiuscole o minuscole che siano"
           }
         }
       }
@@ -4353,6 +4809,22 @@
         }
       }
     },
+    "Import anyway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import anyway"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importa comunque"
+          }
+        }
+      }
+    },
     "Import finished": {
       "localizations": {
         "en": {
@@ -4397,6 +4869,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Già importata"
+          }
+        }
+      }
+    },
+    "In an export holding several accounts, the column saying whose each row is.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In an export holding several accounts, the column saying whose each row is."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In un export con più conti, la colonna che dice di quale conto è ogni riga."
           }
         }
       }
@@ -4641,6 +5129,38 @@
         }
       }
     },
+    "Keep the one already there": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep the one already there"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tieni quella già presente"
+          }
+        }
+      }
+    },
+    "Keep the type": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep the type"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mantieni il tipo"
+          }
+        }
+      }
+    },
     "Kind": {
       "localizations": {
         "en": {
@@ -4749,6 +5269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Esci dal vault…"
+          }
+        }
+      }
+    },
+    "Leave out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave out"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escludi"
           }
         }
       }
@@ -4977,6 +5513,22 @@
         }
       }
     },
+    "Make a Rule from This Row…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make a Rule from This Row…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea una regola da questa riga…"
+          }
+        }
+      }
+    },
     "Malformed row": {
       "localizations": {
         "en": {
@@ -5021,6 +5573,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mappatura"
+          }
+        }
+      }
+    },
+    "Matching transaction": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Matching transaction"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transazione corrispondente"
+          }
+        }
+      }
+    },
+    "Maybe another row’s; imported unless you choose Keep": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maybe another row’s; imported unless you choose Keep"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forse è di un’altra riga: si importa, salvo «Tieni»"
+          }
+        }
+      }
+    },
+    "Maybe its other side: if so, choose Replace": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maybe its other side: if so, choose Replace"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forse è l’altro lato del trasferimento: in tal caso scegli «Sostituiscila»"
           }
         }
       }
@@ -5233,6 +5833,46 @@
         }
       }
     },
+    "Move %lld rows": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Move %lld row"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Move %lld rows"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Sposta %lld riga"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Sposta %lld righe"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Move Between Envelopes…": {
       "localizations": {
         "en": {
@@ -5309,6 +5949,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sposta tra buste…"
+          }
+        }
+      }
+    },
+    "Move it here": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move it here"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spostala qui"
+          }
+        }
+      }
+    },
+    "Moved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moved"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spostate"
           }
         }
       }
@@ -5681,6 +6353,22 @@
         }
       }
     },
+    "No account in this column.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No account in this column."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun conto in questa colonna."
+          }
+        }
+      }
+    },
     "No activity this month": {
       "localizations": {
         "en": {
@@ -5905,6 +6593,22 @@
         }
       }
     },
+    "No other wallet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No other wallet"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun altro wallet"
+          }
+        }
+      }
+    },
     "No period decided yet": {
       "localizations": {
         "en": {
@@ -6077,6 +6781,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Non importata"
+          }
+        }
+      }
+    },
+    "Not synced first: rows imported on another device may not show as imported yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not synced first: rows imported on another device may not show as imported yet."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sincronizzazione non riuscita: le righe importate da un altro dispositivo potrebbero non risultare ancora importate."
           }
         }
       }
@@ -6385,6 +7105,22 @@
         }
       }
     },
+    "Only wallets kept by hand, such as Cash while you move to statements; never one you import a statement into.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only wallets kept by hand, such as Cash while you move to statements; never one you import a statement into."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo wallet tenuti a mano, come Cash mentre passi agli estratti; mai uno in cui importi un estratto."
+          }
+        }
+      }
+    },
     "Opening": {
       "localizations": {
         "en": {
@@ -6477,6 +7213,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Altro valore"
+          }
+        }
+      }
+    },
+    "Other half of a transfer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other half of a transfer"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Altra metà di un trasferimento"
+          }
+        }
+      }
+    },
+    "Other half of line %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other half of line %lld"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Altra metà della riga %lld"
           }
         }
       }
@@ -6669,6 +7437,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scegli la busta della riga"
+          }
+        }
+      }
+    },
+    "Possible duplicate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Possible duplicate"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Possibile doppione"
+          }
+        }
+      }
+    },
+    "Possible duplicates": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Possible duplicates"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Possibili doppioni"
           }
         }
       }
@@ -6961,6 +7761,22 @@
         }
       }
     },
+    "Remove Rule": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Rule"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimuovi regola"
+          }
+        }
+      }
+    },
     "Remove alias": {
       "localizations": {
         "en": {
@@ -7181,6 +7997,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ripeti"
+          }
+        }
+      }
+    },
+    "Replace it with the transfer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace it with the transfer"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sostituiscila con il trasferimento"
+          }
+        }
+      }
+    },
+    "Replaced": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replaced"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sostituite"
+          }
+        }
+      }
+    },
+    "Replaces the bank’s text as the note; empty keeps it": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replaces the bank’s text as the note; empty keeps it"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sostituisce come nota il testo della banca; vuota lo lascia"
           }
         }
       }
@@ -7425,6 +8289,38 @@
         }
       }
     },
+    "Rows dated before this day are not imported.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rows dated before this day are not imported."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le righe con data precedente a questo giorno non vengono importate."
+          }
+        }
+      }
+    },
+    "Rows of this file the rule decides": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rows of this file the rule decides"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Righe di questo file decise dalla regola"
+          }
+        }
+      }
+    },
     "Rule": {
       "localizations": {
         "en": {
@@ -7437,6 +8333,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Regola"
+          }
+        }
+      }
+    },
+    "Rule for rows like this one": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rule for rows like this one"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Regola per le righe come questa"
           }
         }
       }
@@ -8177,6 +9089,22 @@
         }
       }
     },
+    "Something changed after syncing: check the rows marked and import again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Something changed after syncing: check the rows marked and import again."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualcosa è cambiato dopo la sincronizzazione: controlla le righe segnate e importa di nuovo."
+          }
+        }
+      }
+    },
     "Something went wrong": {
       "localizations": {
         "en": {
@@ -8321,6 +9249,22 @@
         }
       }
     },
+    "Start day": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start day"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Data di inizio"
+          }
+        }
+      }
+    },
     "Start of year": {
       "localizations": {
         "en": {
@@ -8349,6 +9293,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Estratto conto"
+          }
+        }
+      }
+    },
+    "Statement account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conto"
+          }
+        }
+      }
+    },
+    "Statement accounts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accounts"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conti"
           }
         }
       }
@@ -8721,6 +9697,22 @@
         }
       }
     },
+    "The column marking the two halves of a move between two of your accounts.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The column marking the two halves of a move between two of your accounts."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La colonna che segna le due metà di un movimento tra due tuoi conti."
+          }
+        }
+      }
+    },
     "The current password is not correct.": {
       "localizations": {
         "en": {
@@ -8897,6 +9889,22 @@
         }
       }
     },
+    "The preview was not up to date: nothing was written. Check it and import again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The preview was not up to date: nothing was written. Check it and import again."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’anteprima non era aggiornata: non è stato scritto nulla. Controllala e importa di nuovo."
+          }
+        }
+      }
+    },
     "The server answered something unexpected": {
       "localizations": {
         "en": {
@@ -9005,6 +10013,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Il server ha rifiutato la richiesta"
+          }
+        }
+      }
+    },
+    "The transaction already in the vault stands for this row from now on, and this row is not imported.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The transaction already in the vault stands for this row from now on, and this row is not imported."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La transazione già nel vault vale d’ora in poi per questa riga, che non viene importata."
+          }
+        }
+      }
+    },
+    "The transaction entered by hand moves into this statement’s wallet, and this row is not imported.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The transaction entered by hand moves into this statement’s wallet, and this row is not imported."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La transazione inserita a mano passa nel wallet di questo estratto conto, e questa riga non viene importata."
           }
         }
       }
@@ -9121,6 +10161,38 @@
         }
       }
     },
+    "This row is imported as the transfer it is, and the income or expense that stood for it is deleted.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This row is imported as the transfer it is, and the income or expense that stood for it is deleted."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questa riga viene importata come il trasferimento che è, e l’entrata o l’uscita che lo rappresentava viene eliminata."
+          }
+        }
+      }
+    },
+    "This row is imported as well, beside the transaction already in the vault.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This row is imported as well, beside the transaction already in the vault."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anche questa riga viene importata, accanto alla transazione già nel vault."
+          }
+        }
+      }
+    },
     "This server is not accepting new accounts": {
       "localizations": {
         "en": {
@@ -9197,6 +10269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quelle modifiche appartengono a un altro account"
+          }
+        }
+      }
+    },
+    "Tick %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tick %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spunta %@"
           }
         }
       }
@@ -9293,6 +10381,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Da importare"
+          }
+        }
+      }
+    },
+    "To move": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To move"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Da spostare"
+          }
+        }
+      }
+    },
+    "To replace": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To replace"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Da sostituire"
           }
         }
       }
@@ -9481,6 +10601,22 @@
         }
       }
     },
+    "Transfer already there": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer already there"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trasferimento già presente"
+          }
+        }
+      }
+    },
     "Transfer between envelopes": {
       "localizations": {
         "en": {
@@ -9545,6 +10681,38 @@
         }
       }
     },
+    "Transfer with no other half in this file": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer with no other half in this file"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trasferimento senza l’altra metà nel file"
+          }
+        }
+      }
+    },
+    "Transfer within one wallet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer within one wallet"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trasferimento nello stesso wallet"
+          }
+        }
+      }
+    },
     "Transfers": {
       "localizations": {
         "en": {
@@ -9557,6 +10725,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trasferimenti"
+          }
+        }
+      }
+    },
+    "Transfers already there": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfers already there"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trasferimenti già presenti"
           }
         }
       }
@@ -9637,6 +10821,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scrivi qualcosa prima"
+          }
+        }
+      }
+    },
+    "Typed before the start date": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Typed before the start date"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scritta prima della data di inizio"
           }
         }
       }
@@ -9993,6 +11193,22 @@
         }
       }
     },
+    "Wallet (BudgetBakers)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallet (BudgetBakers)"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App Wallet (BudgetBakers)"
+          }
+        }
+      }
+    },
     "Wallet column": {
       "localizations": {
         "en": {
@@ -10181,6 +11397,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quale persona intendevi?"
+          }
+        }
+      }
+    },
+    "Whole file": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Whole file"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tutto il file"
           }
         }
       }
@@ -10865,6 +12097,22 @@
         }
       }
     },
+    "contains…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "contains…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "contiene…"
+          }
+        }
+      }
+    },
     "current": {
       "localizations": {
         "en": {
@@ -11105,6 +12353,22 @@
         }
       }
     },
+    "from %@ to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "from %@ to %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "da %@ a %@"
+          }
+        }
+      }
+    },
     "from %@, envelope %@": {
       "localizations": {
         "en": {
@@ -11165,6 +12429,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "non ha un tetto, quindi la sua riga non riceve nulla."
+          }
+        }
+      }
+    },
+    "in %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %@"
           }
         }
       }
@@ -11373,6 +12653,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "non è un importo"
+          }
+        }
+      }
+    },
+    "note…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "note…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nota…"
           }
         }
       }
@@ -11697,6 +12993,22 @@
         }
       }
     },
+    "skip": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "skip"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "salta"
+          }
+        }
+      }
+    },
     "start": {
       "localizations": {
         "en": {
@@ -11793,6 +13105,22 @@
         }
       }
     },
+    "tick it under Duplicates also in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tick it under Duplicates also in"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "spuntalo in Doppioni anche in"
+          }
+        }
+      }
+    },
     "to confirm": {
       "localizations": {
         "en": {
@@ -11869,6 +13197,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "trasferimento %@"
+          }
+        }
+      }
+    },
+    "transfer from": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "transfer from"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "trasferimento da"
+          }
+        }
+      }
+    },
+    "transfer to": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "transfer to"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "trasferimento verso"
           }
         }
       }

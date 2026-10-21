@@ -1,10 +1,8 @@
 //! Shared state: the two databases, the configuration, the hasher and the
-//! rate limiter.
-//!
-//! SQLite has a single writer, so both handles sit behind a `Mutex` and every
-//! piece of work that touches them runs on a blocking task through
-//! [`AppState::run`]. When both locks are needed the core one is always taken
-//! first.
+//! rate limiter. SQLite has a single writer, so both handles sit behind a
+//! `Mutex` and every piece of work that touches them runs on a blocking task
+//! through [`AppState::run`]. When both locks are needed the core one is
+//! always taken first.
 
 use std::{
     path::Path,
@@ -18,7 +16,7 @@ use crate::{
     config::Config,
     db::ServerDb,
     error::{ApiError, ApiResult},
-    ratelimit::{Limits, RateLimiter},
+    ratelimit::RateLimiter,
 };
 
 const VAULTS_DB: &str = "vaults.sqlite";
@@ -40,14 +38,6 @@ struct Inner {
 #[derive(Clone)]
 pub struct AppState {
     inner: Arc<Inner>,
-}
-
-impl std::fmt::Debug for AppState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AppState")
-            .field("config", &self.inner.config)
-            .finish_non_exhaustive()
-    }
 }
 
 impl AppState {
@@ -85,7 +75,7 @@ impl AppState {
                 config,
                 argon,
                 dummy_hash,
-                limiter: RateLimiter::new(Limits::from(&config)),
+                limiter: RateLimiter::new(config),
             }),
         })
     }

@@ -50,34 +50,26 @@ struct LedgerColumnsTests {
 
     // MARK: - Over a store
 
-    private static func store(defaults: UserDefaults) async throws -> AppStore {
-        let store = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
-        await store.createEnvelope(name: "Fondo emergenza per la macchina", mode: .unlimited, allowNegative: true, openingAllocation: 0)
-        return store
-    }
-
     @Test("The widths are kept for the next launch, and Reset Column Widths puts them all back")
     func persistence() async throws {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.columns.\(UUID().uuidString)"))
-        let store = try await Self.store(defaults: defaults)
+        let defaults = try TestStore.defaults()
+        let store = try await TestStore.make(defaults: defaults)
         store.ledgerColumns[.category] = 200
         store.saveLedgerColumns()
 
-        let relaunched = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
+        let relaunched = try TestStore.fresh(defaults: defaults)
         #expect(relaunched.ledgerColumns[.category] == 200)
 
         relaunched.resetLedgerColumns()
         #expect(relaunched.ledgerColumns.isStandard)
-        let again = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
+        let again = try TestStore.fresh(defaults: defaults)
         #expect(again.ledgerColumns.isStandard)
     }
 
     @Test("A double click fits the column to the widest thing in it, its heading included")
     func fitting() async throws {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.columns.\(UUID().uuidString)"))
-        let store = try await Self.store(defaults: defaults)
+        let store = try await TestStore.make()
+        await store.createEnvelope(name: "Fondo emergenza per la macchina", mode: .unlimited, allowNegative: true, openingAllocation: 0)
         let long = try #require(store.flows.first { $0.name.hasPrefix("Fondo") })
         await store.addRow(day: Date(), flowId: long.id, category: "Bar", note: "caffè", amount: 150)
         await store.addRow(day: Date(), flowId: long.id, category: "Bar", note: "rimborso", amount: 1_234_567, kind: .refund)

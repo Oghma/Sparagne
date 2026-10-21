@@ -28,31 +28,27 @@ struct PaletteAction: Identifiable {
 }
 
 /// The state behind the palette: the actions, the text typed after `>`, and
-/// which row the arrows are on.
-///
-/// Deliberately free of SwiftUI, so the filtering and the selection can be
-/// tested without a window (`SparagneTests/CommandPaletteTests.swift`).
+/// the entries it matches, the arrows on one of them.
 @Observable
 final class CommandPaletteModel {
     /// Rebuilt every time the palette opens: the vault list and the state of
     /// the two toggles change what the entries say.
     var actions: [PaletteAction] {
-        didSet { selection = 0 }
+        didSet { list.show(results) }
     }
 
     /// What was typed after the `>`, already stripped of the marker.
     var query: String = "" {
-        didSet { if query != oldValue { selection = 0 } }
+        didSet { if query != oldValue { list.show(results) } }
     }
 
-    /// Index into `results`, not into `actions`.
-    private(set) var selection = 0
+    /// `results`, the highlight back on the first whenever they change.
+    let list = FloatingListModel<PaletteAction>()
 
     init(actions: [PaletteAction] = []) {
         self.actions = actions
+        list.show(results)
     }
-
-    // MARK: - The `>` marker
 
     /// The field is a palette when its first character is `>`. Quick-add uses
     /// `>` as its envelope marker, but never in first position: a line that
@@ -65,19 +61,11 @@ final class CommandPaletteModel {
         return String(text.dropFirst()).trimmingCharacters(in: .whitespaces)
     }
 
-    // MARK: - Filtering
-
-    /// Case- and accent-insensitive: `citta` finds "Città", `MESE` finds
-    /// "mese".
-    static func fold(_ text: String) -> String {
-        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
-    }
-
-    /// The entries `query` matches, best first. Ties keep the order the
-    /// actions were registered in, so an empty field always lists the same
-    /// commands in the same places.
+    /// The entries `query` matches, best first, case and accents aside. Ties
+    /// keep the order the actions were registered in, so an empty field
+    /// always lists the same commands in the same places.
     static func filter(_ actions: [PaletteAction], query: String) -> [PaletteAction] {
-        let needle = fold(query.trimmingCharacters(in: .whitespaces))
+        let needle = FloatingList.fold(query.trimmingCharacters(in: .whitespaces))
         guard !needle.isEmpty else { return actions }
         return actions.enumerated()
             .compactMap { index, action in
@@ -90,48 +78,24 @@ final class CommandPaletteModel {
     /// Lower is better: the title from its start, then from the start of one
     /// of its words, then anywhere in it, then the hidden keywords.
     private static func rank(_ action: PaletteAction, _ needle: String) -> Int? {
-        let title = fold(action.title)
+        let title = FloatingList.fold(action.title)
         if title.hasPrefix(needle) { return 0 }
         if title.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains(where: { $0.hasPrefix(needle) }) {
             return 1
         }
         if title.contains(needle) { return 2 }
-        if action.keywords.contains(where: { fold($0).hasPrefix(needle) }) { return 3 }
-        if action.keywords.contains(where: { fold($0).contains(needle) }) { return 4 }
+        if action.keywords.contains(where: { FloatingList.fold($0).hasPrefix(needle) }) { return 3 }
+        if action.keywords.contains(where: { FloatingList.fold($0).contains(needle) }) { return 4 }
         return nil
     }
 
     var results: [PaletteAction] { Self.filter(actions, query: query) }
 
-    // MARK: - Selection
-
-    var selected: PaletteAction? {
-        let list = results
-        return list.indices.contains(selection) ? list[selection] : nil
-    }
-
-    /// ↓ is `move(by: 1)`, ↑ is `move(by: -1)`; both wrap, so holding one
-    /// arrow walks the list round instead of sticking at an end.
-    func move(by delta: Int) {
-        let count = results.count
-        guard count > 0 else {
-            selection = 0
-            return
-        }
-        selection = ((selection + delta) % count + count) % count
-    }
-
-    /// The pointer picking a row.
-    func select(_ index: Int) {
-        guard results.indices.contains(index) else { return }
-        selection = index
-    }
-
     /// ↩: runs the highlighted entry. `false` when nothing matches, so the
     /// field can stay open instead of closing over a typo.
     @discardableResult
     func run() async -> Bool {
-        guard let action = selected else { return false }
+        guard let action = list.selected else { return false }
         await action.run()
         return true
     }
@@ -143,10 +107,17 @@ extension CommandPaletteModel {
     /// Everything the palette can do, in the order it lists them.
     ///
     /// The entries that have a menu item post that item's notification, so
-    /// the two ways in share one implementation; the rest write the same
-    /// state the top bar and the tab bar write. The three view toggles write
-    /// the store, which the window mirrors back into the menu's preference.
+    /// the two ways in share one implementation (`MainWindow` seeds the
+    /// sheets); the rest write the same state the top bar and the tab bar
+    /// write. The three view toggles write the store, which the window
+    /// mirrors back into the menu's preference.
     static func ledgerActions(store: AppStore, engine: SyncEngine?) -> [PaletteAction] {
+        func post(_ name: Notification.Name, _ id: String, _ title: String, _ keywords: [String]) -> PaletteAction {
+            PaletteAction(id: id, title: title, keywords: keywords) {
+                NotificationCenter.default.post(name: name, object: nil)
+            }
+        }
+
         var actions: [PaletteAction] = [
             PaletteAction(
                 id: "month.previous",
@@ -199,52 +170,21 @@ extension CommandPaletteModel {
             )
         }
 
-        // The vault's own life cycle, through the Vault menu's notifications
-        // so the sheets are seeded in one place (`MainWindow`).
-        actions.append(
-            PaletteAction(
-                id: "vault.new",
-                title: String(localized: "New Vault\u{2026}"),
-                keywords: ["vault", "nuovo", "create"]
-            ) {
-                NotificationCenter.default.post(name: .newVault, object: nil)
-            }
-        )
+        actions.append(post(.newVault, "vault.new", String(localized: "New Vault\u{2026}"), ["vault", "nuovo", "create"]))
         // The Vault menu's rules (`VaultPermissions`): no vault on screen,
         // none of these.
         let permissions = VaultPermissions(vault: store.currentVault, engine: engine)
         if permissions.mayRename {
-            actions.append(
-                PaletteAction(
-                    id: "vault.rename",
-                    title: String(localized: "Rename Vault\u{2026}"),
-                    keywords: ["vault", "rinomina", "name"]
-                ) {
-                    NotificationCenter.default.post(name: .renameVault, object: nil)
-                }
-            )
+            let keywords = ["vault", "rinomina", "name"]
+            actions.append(post(.renameVault, "vault.rename", String(localized: "Rename Vault\u{2026}"), keywords))
         }
         if permissions.mayLeave {
-            actions.append(
-                PaletteAction(
-                    id: "vault.leave",
-                    title: String(localized: "Leave Vault\u{2026}"),
-                    keywords: ["vault", "esci", "abbandona", "leave"]
-                ) {
-                    NotificationCenter.default.post(name: .leaveVault, object: nil)
-                }
-            )
+            let keywords = ["vault", "esci", "abbandona", "leave"]
+            actions.append(post(.leaveVault, "vault.leave", String(localized: "Leave Vault\u{2026}"), keywords))
         }
         if permissions.mayDelete {
-            actions.append(
-                PaletteAction(
-                    id: "vault.delete",
-                    title: String(localized: "Delete Vault\u{2026}"),
-                    keywords: ["vault", "elimina", "cancella", "remove"]
-                ) {
-                    NotificationCenter.default.post(name: .deleteVault, object: nil)
-                }
-            )
+            let keywords = ["vault", "elimina", "cancella", "remove"]
+            actions.append(post(.deleteVault, "vault.delete", String(localized: "Delete Vault\u{2026}"), keywords))
         }
 
         actions.append(contentsOf: [
@@ -255,13 +195,12 @@ extension CommandPaletteModel {
             ) {
                 store.tab = .setup
             },
-            PaletteAction(
-                id: "open.management",
-                title: String(localized: "Manage\u{2026}"),
-                keywords: ["vault", "wallet", "gestione", "sharing"]
-            ) {
-                NotificationCenter.default.post(name: .openManagement, object: nil)
-            },
+            post(
+                .openManagement,
+                "open.management",
+                String(localized: "Manage\u{2026}"),
+                ["vault", "wallet", "gestione", "sharing"]
+            ),
         ])
 
         if store.canWrite {
@@ -274,46 +213,34 @@ extension CommandPaletteModel {
                     store.requestNewRecurring()
                 }
             )
-            actions.append(
-                PaletteAction(
-                    id: "envelopes.move",
-                    title: String(localized: "Move Between Envelopes\u{2026}"),
-                    keywords: ["move", "transfer", "sposta", "trasferisci", "buste", "envelope", "riparto", "allocation"]
-                ) {
-                    NotificationCenter.default.post(name: .moveBetweenEnvelopes, object: nil)
-                }
-            )
+            actions.append(post(
+                .moveBetweenEnvelopes,
+                "envelopes.move",
+                String(localized: "Move Between Envelopes\u{2026}"),
+                ["move", "transfer", "sposta", "trasferisci", "buste", "envelope", "riparto", "allocation"]
+            ))
         }
 
         actions.append(contentsOf: [
-            PaletteAction(
-                id: "export.csv",
-                title: String(localized: "Export CSV\u{2026}"),
-                keywords: ["csv", "export", "esporta"]
-            ) {
-                NotificationCenter.default.post(name: .exportCSV, object: nil)
-            },
-            PaletteAction(
-                id: "export.all",
-                title: String(localized: "Export All Transactions\u{2026}"),
-                keywords: ["csv", "export", "esporta", "tutto"]
-            ) {
-                NotificationCenter.default.post(name: .exportAllTransactions, object: nil)
-            },
-            PaletteAction(
-                id: "import.statement",
-                title: String(localized: "Import Statement\u{2026}"),
-                keywords: ["import", "importa", "estratto", "csv", "banca"]
-            ) {
-                NotificationCenter.default.post(name: .importStatement, object: nil)
-            },
-            PaletteAction(
-                id: "backup.database",
-                title: String(localized: "Back Up Database\u{2026}"),
-                keywords: ["backup", "copia", "salva"]
-            ) {
-                NotificationCenter.default.post(name: .backupDatabase, object: nil)
-            },
+            post(.exportCSV, "export.csv", String(localized: "Export CSV\u{2026}"), ["csv", "export", "esporta"]),
+            post(
+                .exportAllTransactions,
+                "export.all",
+                String(localized: "Export All Transactions\u{2026}"),
+                ["csv", "export", "esporta", "tutto"]
+            ),
+            post(
+                .importStatement,
+                "import.statement",
+                String(localized: "Import Statement\u{2026}"),
+                ["import", "importa", "estratto", "csv", "banca"]
+            ),
+            post(
+                .backupDatabase,
+                "backup.database",
+                String(localized: "Back Up Database\u{2026}"),
+                ["backup", "copia", "salva"]
+            ),
         ])
 
         if let engine {
@@ -374,7 +301,7 @@ struct CommandPaletteList: View {
     let onRun: () -> Void
 
     var body: some View {
-        let results = model.results
+        let results = model.list.items
         Group {
             if results.isEmpty {
                 Text(String(localized: "No matching command"))
@@ -399,7 +326,7 @@ struct CommandPaletteList: View {
     }
 
     private func row(index: Int, action: PaletteAction) -> some View {
-        let active = index == model.selection
+        let active = index == model.list.selection
         return Text(action.title)
             .font(Face.row)
             .foregroundStyle(Ink.text)
@@ -411,7 +338,7 @@ struct CommandPaletteList: View {
             .background(active ? Ink.accent.opacity(0.14) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
             .contentShape(Rectangle())
             .onHover { inside in
-                if inside { model.select(index) }
+                if inside { model.list.highlight(index) }
             }
             .onTapGesture { activate(index) }
             .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
@@ -423,7 +350,7 @@ struct CommandPaletteList: View {
     /// A click on a row, or VoiceOver pressing it: the entry runs as ↩ would
     /// run it with the row highlighted.
     private func activate(_ index: Int) {
-        model.select(index)
+        model.list.highlight(index)
         Task { if await model.run() { onRun() } }
     }
 }

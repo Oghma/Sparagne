@@ -13,10 +13,7 @@ struct AllocationStoreTests {
     /// as an opening the plan never counts), envelopes `Affitto` with no cap
     /// and `Vacanze` capped at 500,00 on its balance.
     private static func vault(probe: (@Sendable () async -> Void)? = nil) async throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.allocation.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "matteo", probe: probe), defaults: defaults)
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        let store = try await TestStore.make(probe: probe)
         await store.createEnvelope(name: "Affitto", mode: .unlimited, allowNegative: false, openingAllocation: 0)
         await store.createEnvelope(name: "Vacanze", mode: .netCapped(cap: 50_000), allowNegative: false, openingAllocation: 0)
         #expect(store.presentedError == nil)
@@ -278,8 +275,7 @@ struct AllocationStoreTests {
     /// Another window on the same core: another member's Mac, synced, with
     /// what it loaded before the first one acted.
     private static func secondWindow(on store: AppStore) async throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.allocation.\(UUID().uuidString)"))
-        let other = AppStore(core: store.core, defaults: defaults)
+        let other = try TestStore.fresh(on: store.core)
         await other.bootstrap()
         #expect(other.currentVault?.id == store.currentVault?.id)
         return other
@@ -339,8 +335,8 @@ struct AllocationStoreTests {
 
     @Test("The toast's Annulla and the history's go one at a time: the second never reaches the core")
     func oneReopenAtATime() async throws {
-        let gate = CoreGate()
-        let store = try await Self.vault(probe: { await gate.pass() })
+        let gate = TestGate()
+        let store = try await Self.vault(probe: gate.probe)
         _ = try await Self.plan(store)
         try await Self.income(store, 150_000)
         await store.executeAllocation(total: 150_000)
@@ -348,7 +344,7 @@ struct AllocationStoreTests {
 
         await gate.close()
         let fromToast = Task { await store.undoAllocation() }
-        while await gate.held == 0 { await Task.yield() }
+        await gate.holding()
         #expect(store.allocationReopening)
 
         // The history's Annulla while the toast's is in flight.
@@ -396,29 +392,5 @@ struct AllocationStoreTests {
         #expect(store.allocationRuns.isEmpty)
         #expect(store.allocationUndo == nil)
         #expect(try Self.flow(store, "Affitto").balance == 0)
-    }
-}
-
-/// Holds every call into the core while closed, so a command can be caught
-/// in flight (`CoreActor`'s probe).
-private actor CoreGate {
-    private var closed = false
-    private var waiting: [CheckedContinuation<Void, Never>] = []
-
-    /// The calls waiting at the gate.
-    var held: Int { waiting.count }
-
-    func close() { closed = true }
-
-    func open() {
-        closed = false
-        let released = waiting
-        waiting = []
-        for call in released { call.resume() }
-    }
-
-    func pass() async {
-        guard closed else { return }
-        await withCheckedContinuation { waiting.append($0) }
     }
 }

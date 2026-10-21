@@ -137,11 +137,8 @@ fn iso_date_time(text: &str) -> Option<Written> {
 }
 
 /// A chrono pattern, tried with an offset, then as a local date-time, then
-/// as a date.
+/// as a date. A blank pattern reads nothing.
 fn custom(text: &str, pattern: &str) -> Option<Written> {
-    if pattern.trim().is_empty() {
-        return None;
-    }
     if let Ok(parsed) = DateTime::parse_from_str(text, pattern) {
         return Some(Written::Offset(parsed));
     }
@@ -355,7 +352,10 @@ mod tests {
             parse("16.09.2026 07:05 +0000", &pattern("%d.%m.%Y %H:%M %z")),
             "2026-09-16T07:05:00+00:00"
         );
-        assert!(parse_date("2026-09-16", &pattern(""), ROME).is_err());
+        for blank in ["", "  "] {
+            assert!(parse_date("2026-09-16", &pattern(blank), ROME).is_err());
+            assert!(parse_date("", &pattern(blank), ROME).is_err());
+        }
     }
 
     #[test]

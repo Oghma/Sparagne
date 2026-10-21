@@ -51,22 +51,6 @@ struct RecurringDraftTests {
         #expect(draft.amountText == "780,00")
     }
 
-    @Test("Every cadence survives the round trip unchanged")
-    func unchangedEveryCadence() {
-        let schedules = [
-            RecurringFixture.schedule(.daily, every: 3),
-            RecurringFixture.schedule(.weekly(weekday: 6), every: 2),
-            RecurringFixture.schedule(.monthly(day: 31)),
-            RecurringFixture.schedule(.yearly(month: 3, day: 15), until: "2030-12-31"),
-        ]
-        for schedule in schedules {
-            let template = RecurringFixture.template(schedule: schedule)
-            let draft = RecurringDraft(template: template)
-            #expect(draft.schedule == schedule)
-            #expect(!draft.isDirty(against: template, currency: .eur))
-        }
-    }
-
     @Test("A duplicate keeps the fields, runs, and starts today")
     func duplicate() {
         let draft = RecurringDraft(duplicating: Self.rent, today: "2026-10-08")
@@ -131,24 +115,24 @@ struct RecurringDraftTests {
 
     @Test("The schedule goes whole, whichever part of it changed")
     func schedule() {
-        let day = patch { $0.monthDay = 5 }
+        let day = patch { $0.when.monthDay = 5 }
         #expect(day == RecurringPatch(schedule: RecurringFixture.schedule(.monthly(day: 5), from: "2025-11-01")))
 
-        let interval = patch { $0.interval = 2 }
+        let interval = patch { $0.when.interval = 2 }
         #expect(interval == RecurringPatch(schedule: RecurringFixture.schedule(.monthly(day: 1), every: 2, from: "2025-11-01")))
 
-        let start = patch { $0.startDate = "2026-01-01" }
+        let start = patch { $0.when.startDate = "2026-01-01" }
         #expect(start == RecurringPatch(schedule: RecurringFixture.schedule(.monthly(day: 1), from: "2026-01-01")))
 
         let end = patch {
-            $0.hasEndDate = true
-            $0.endDate = "2045-10-01"
+            $0.when.hasEndDate = true
+            $0.when.shownEndDate = "2045-10-01"
         }
         #expect(end == RecurringPatch(
             schedule: RecurringFixture.schedule(.monthly(day: 1), from: "2025-11-01", until: "2045-10-01")
         ))
 
-        let cadence = patch { $0.cadence = .weekly; $0.weekday = 3 }
+        let cadence = patch { $0.when.cadence = .weekly; $0.when.weekday = 3 }
         #expect(cadence == RecurringPatch(schedule: RecurringFixture.schedule(.weekly(weekday: 3), from: "2025-11-01")))
     }
 
@@ -162,7 +146,7 @@ struct RecurringDraftTests {
         let several = patch {
             $0.amountText = "790"
             $0.note = "mutuo BPER"
-            $0.monthDay = 2
+            $0.when.monthDay = 2
         }
         #expect(several == RecurringPatch(
             amount: 79_000,
@@ -225,72 +209,13 @@ struct RecurringDraftTests {
         }
     }
 
-    @Test("An interval of zero is not valid")
-    func zeroInterval() {
-        var draft = RecurringDraft(template: Self.rent)
-        draft.interval = 0
-        #expect(!draft.isValid(currency: .eur))
-    }
-
-    @Test("Days out of range, and an end before the start, are not valid")
+    /// Which schedules are refused, the end included, is
+    /// `ScheduleDraftTests`: here, that a refused one keeps Salva off.
+    @Test("A schedule the core would refuse makes the draft invalid")
     func invalidSchedules() {
         var draft = RecurringDraft(template: Self.rent)
-        draft.monthDay = 32
+        draft.when.interval = 0
         #expect(!draft.isValid(currency: .eur))
-
-        draft = RecurringDraft(template: Self.rent)
-        draft.cadence = .weekly
-        draft.weekday = 8
-        #expect(!draft.isValid(currency: .eur))
-
-        draft = RecurringDraft(template: Self.rent)
-        draft.cadence = .yearly
-        draft.yearMonth = 13
-        #expect(!draft.isValid(currency: .eur))
-
-        draft = RecurringDraft(template: Self.rent)
-        draft.hasEndDate = true
-        draft.endDate = "2025-10-31"
-        #expect(!draft.isValid(currency: .eur))
-        // Turned back to Mai, the stale end date does not matter.
-        draft.hasEndDate = false
-        #expect(draft.isValid(currency: .eur))
-    }
-
-    @Test("Whatever isValid accepts, the core accepts too")
-    func validMeansTheCoreAgrees() throws {
-        var draft = RecurringDraft(today: "2026-10-07")
-        draft.amountText = "12,99"
-        for cadence in RecurringDraft.Cadence.allCases {
-            draft.cadence = cadence
-            #expect(draft.isValid(currency: .eur))
-            #expect(try !RecurringFixture.core(draft.schedule, "2026-10-07", 1).isEmpty)
-        }
-    }
-
-    // MARK: - The schedule of each cadence
-
-    @Test("Each cadence builds its own frequency, with the day fields of that cadence")
-    func scheduleOfEachCadence() {
-        var draft = RecurringDraft(today: "2026-10-07")
-        draft.interval = 2
-        draft.weekday = 6
-        draft.monthDay = 27
-        draft.yearMonth = 3
-        draft.yearDay = 15
-
-        draft.cadence = .daily
-        #expect(draft.schedule == RecurringFixture.schedule(.daily, every: 2, from: "2026-10-07"))
-        draft.cadence = .weekly
-        #expect(draft.schedule == RecurringFixture.schedule(.weekly(weekday: 6), every: 2, from: "2026-10-07"))
-        draft.cadence = .monthly
-        #expect(draft.schedule == RecurringFixture.schedule(.monthly(day: 27), every: 2, from: "2026-10-07"))
-        draft.cadence = .yearly
-        #expect(draft.schedule == RecurringFixture.schedule(.yearly(month: 3, day: 15), every: 2, from: "2026-10-07"))
-
-        draft.hasEndDate = true
-        draft.endDate = "2027-12-31"
-        #expect(draft.schedule.endDate == "2027-12-31")
     }
 
     // MARK: - A new template
@@ -299,15 +224,26 @@ struct RecurringDraftTests {
     func newTemplateDefaults() {
         let draft = RecurringDraft(today: "2026-10-07")
         #expect(draft.kind == .expense)
-        #expect(draft.cadence == .monthly)
         #expect(draft.schedule == RecurringFixture.schedule(.monthly(day: 7), from: "2026-10-07"))
-        #expect(draft.weekday == 3)
         #expect(draft.walletId == nil)
         #expect(draft.flowId == nil)
         #expect(draft.enabled)
         // No amount yet.
         #expect(!draft.isValid(currency: .eur))
         #expect(draft.creation(currency: .eur) == nil)
+    }
+
+    @Test("The End field offers today, or a saved template's end or start, wherever the start moves")
+    func endFieldStaysPut() {
+        var draft = RecurringDraft(today: "2026-10-07")
+        draft.when.startDate = "2026-11-01"
+        #expect(draft.when.shownEndDate == "2026-10-07")
+        draft.when.hasEndDate = true
+        #expect(draft.schedule.endDate == "2026-10-07")
+
+        var saved = RecurringDraft(template: Self.rent)
+        saved.when.startDate = "2026-01-01"
+        #expect(saved.when.shownEndDate == "2025-11-01")
     }
 
     @Test("Creating sends what was typed, blank category and note as none")
@@ -317,7 +253,7 @@ struct RecurringDraftTests {
         draft.amountText = "2400,00"
         draft.walletId = Self.wallet
         draft.note = " Stipendio "
-        draft.monthDay = 27
+        draft.when.monthDay = 27
 
         #expect(draft.creation(currency: .eur) == RecurringDraft.Creation(
             kind: .income,
@@ -364,15 +300,9 @@ struct RecurringDraftTests {
         #expect(draft.creation(currency: .eur)?.owner == "elisa")
     }
 
-    /// `rent`, owned by elisa.
-    private static let elisasRent = RecurringFixture.template(
-        "rent",
-        amount: 78_000,
-        walletId: wallet,
-        flowId: flow,
-        category: "Casa",
-        note: "mutuo",
-        schedule: RecurringFixture.schedule(.monthly(day: 1), from: "2025-11-01"),
-        owner: "elisa"
-    )
+    private static let elisasRent = {
+        var template = rent
+        template.owner = "elisa"
+        return template
+    }()
 }

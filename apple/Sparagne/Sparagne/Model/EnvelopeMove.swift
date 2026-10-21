@@ -1,16 +1,11 @@
 import Foundation
 import SparagneCore
 
-/// The "Move between envelopes" sheet's draft: the envelope the money
-/// leaves, the envelopes it goes to with the amount typed for each, one day
-/// and one note. Plain values, so the checks and the commands are tested
-/// without a window (`EnvelopeMoveTests`).
-///
-/// Each line becomes an ordinary transfer between envelopes, the one `tf>`
-/// writes, and the store sends them as one batch
-/// (`AppStore.moveBetweenEnvelopes`): all of them or none. It decides no
-/// allocation period: the plan and its periods stay as they are.
+/// The "Move between envelopes" draft: the source, the lines and their amounts, a day and a note.
 struct EnvelopeMoveDraft: Equatable {
+    // Each line is an ordinary envelope transfer, the lot one batch; no allocation period
+    // is decided.
+
     /// One envelope the money goes to, with its amount as typed.
     struct Line: Identifiable, Equatable {
         let flowId: Uuid
@@ -125,14 +120,11 @@ struct EnvelopeMoveDraft: Equatable {
     }
 }
 
-/// What an envelope holds at the end of the move's day, and how low and how
-/// high it goes from then on (`FlowBalanceRange`).
-///
-/// A transfer dated in the past changes every balance after it, not only
-/// today's: the source can give only what it still holds at its lowest
-/// point from that day on, and an envelope with a cap on its balance can
-/// take only what fits under the cap at its highest.
+/// An envelope's balance at the end of the move's day, and its lowest and highest from then on.
 struct EnvelopeMoveBalance: Equatable {
+    // A past transfer moves every later balance: the source gives only what it holds at its
+    // lowest, and a balance cap takes only what fits at its highest.
+
     /// At the end of the move's day.
     let balance: Int64
     /// The lowest from that day on, `balance` included.
@@ -164,18 +156,12 @@ extension EnvelopeMoveBalance {
     }
 }
 
-/// What a draft would do to the envelopes, on its day and from then on: each
-/// line's amount, room and balance after, the total, what the source is left
-/// with, and what, if anything, stops the move.
-///
-/// The rules are the core's (`Flow::apply_leg_change`), checked here so the
-/// sheet can say which line is wrong before anything is sent: a line may not
-/// take its envelope past its cap, and the source may not go below zero
-/// unless it is Unallocated or allows it. Unallocated below zero is only
-/// pointed out, as the Riparto's preview does. The core checks them on the
-/// balances of today; here they hold on every day from the move's on, so a
-/// move dated in the past cannot spend money that came in only later.
+/// What a draft would do to the envelopes on its day and after, and what stops the move.
 struct EnvelopeMoveCheck: Equatable {
+    // The core's rules (`Flow::apply_leg_change`), checked here so the sheet names the wrong
+    // line, on every day from the move's: a past move cannot spend money that came later.
+    // Unallocated below zero is only pointed out.
+
     struct Row: Identifiable, Equatable {
         let flowId: Uuid
         /// `nil` once the envelope is gone: archived or deleted elsewhere
@@ -211,8 +197,7 @@ struct EnvelopeMoveCheck: Equatable {
         case gone
     }
 
-    /// `on` is the day the source is furthest below zero, when that is
-    /// after the move's own day: `nil` when it is the move's day.
+    /// `on` is the day the source is furthest below zero, `nil` when that is the move's own day.
     enum SourceState: Equatable {
         case fine
         /// Below zero by `shortfall`, which the source allows: Unallocated
@@ -237,13 +222,6 @@ struct EnvelopeMoveCheck: Equatable {
     /// The source on the move's day and after; `nil` once it is gone.
     let sourceBalance: EnvelopeMoveBalance?
     let total: Int64
-
-    init(rows: [Row], source: FlowView?, sourceBalance: EnvelopeMoveBalance?, total: Int64) {
-        self.rows = rows
-        self.source = source
-        self.sourceBalance = sourceBalance
-        self.total = total
-    }
 
     /// The source's balance on the move's day once every line has left it.
     var sourceAfter: Int64? {

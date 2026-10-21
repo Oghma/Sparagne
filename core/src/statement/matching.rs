@@ -1,0 +1,999 @@
+//! Statement rows against what the vault already holds: the other side of a
+//! transfer another statement (or the user) recorded, as a transfer or as an
+//! entry, and the rows the user typed by hand. Every preview matches again,
+//! from the vault read once around the rows' dates and from the claims,
+//! moves and replacements earlier imports wrote in the log
+//! ([`super::plan::claim_id`]), so a statement imported again finds the same
+//! transactions. The rules and their thresholds are in `docs/STATEMENTS.md`.
+
+use std::collections::{BTreeMap, HashMap, HashSet};
+
+use chrono::NaiveDate;
+use rusqlite::{params, params_from_iter, types::Value};
+use uuid::{Uuid, Version};
+
+use super::plan::{Overrides, Planned, account_key, skipped, skipped_by_you};
+use super::{
+    StatementAction, StatementLookalike, StatementMatchChoice, StatementOptions, StatementRow,
+    StatementRowOverride, StatementRowStatus,
+};
+use crate::{
+    Command, Core, Result, TransactionKind, TransactionPatch, TransactionView,
+    category::OPENING_KEY,
+    query::{TRANSACTION_VIEW_COLUMNS, blob, load_legs, transaction_view},
+};
+
+/// The most days a row and the other side of its transfer are apart.
+const TRANSFER_DAYS: i64 = 4;
+/// The most days a row and the row the user entered for it are apart.
+const DUPLICATE_DAYS: i64 = 3;
+/// How far around the rows the vault is read: more than the most days a
+/// match is apart, with room for any two offsets.
+const WINDOW_SECONDS: i64 = 7 * 86_400;
+/// One day apart weighs more than any number of seconds within a match.
+const DAY_COST: i64 = 10_000_000;
+
+/// What a row is matched as.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Found {
+    /// The other side of a transfer: [`StatementRowStatus::MatchedTransfer`].
+    Transfer,
+    /// An entry of the row's kind: [`StatementRowStatus::PossibleDuplicate`].
+    Duplicate,
+    /// An entry standing for the transfer the row is: the other wallet's
+    /// side of it, or this one's recorded as an expense or an income;
+    /// [`StatementRowStatus::PossibleDuplicate`].
+    Replace,
+}
+
+impl Found {
+    fn rank(self) -> i64 {
+        match self {
+            Self::Transfer => 0,
+            Self::Duplicate => 1,
+            Self::Replace => 2,
+        }
+    }
+}
+
+/// Flags the planned rows that a live transaction already stands for, one
+/// transaction per row at most, and settles what becomes of them with the
+/// user's `on_match` (or `skip`). `standing` holds the transactions that
+/// stand for the rows already imported, which match nothing. Returns the
+/// wallets worth checking for rows typed by hand.
+pub(super) fn claim(
+    core: &Core,
+    vault_id: Uuid,
+    options: &StatementOptions,
+    overrides: &Overrides<'_>,
+    standing: &HashSet<Uuid>,
+    planned: &mut [Planned],
+) -> Result<Vec<StatementLookalike>> {
+    let seekers: Vec<usize> = (0..planned.len())
+        .filter(|&at| {
+            let item = &planned[at];
+            item.row.paired_line.is_none()
+                && (seeks_transfer(item) || seeks_duplicate(item) || seeks_replace(item))
+        })
+        .collect();
+    let instants: Vec<i64> = seekers
+        .iter()
+        .filter_map(|&at| planned[at].row.occurred_at)
+        .map(|at| at.timestamp())
+        .collect();
+    let (Some(&earliest), Some(&latest)) = (instants.iter().min(), instants.iter().max()) else {
+        return Ok(Vec::new());
+    };
+    let own: HashSet<Uuid> = planned
+        .iter()
+        .filter_map(|item| item.row.wallet_id)
+        .collect();
+    let also = options.also_check_wallets.as_slice();
+    let since = options.since;
+    let claims = read_claims(core, vault_id)?;
+    // Every wallet is read: those a match may sit in (the rows' own, those
+    // also checked, those the transfer rows name) and the others, for advice.
+    let candidates: Vec<Candidate> = read_pool(
+        core,
+        vault_id,
+        earliest - WINDOW_SECONDS,
+        latest + WINDOW_SECONDS,
+    )?
+    .into_iter()
+    .filter(|(view, _)| !standing.contains(&view.id) && !left_before_start(view, &own, also, since))
+    .map(|(view, imported)| Candidate {
+        claimed: claims.entries.contains(&view.id),
+        sides: claims.sides.get(&view.id).cloned().unwrap_or_default(),
+        imported,
+        view,
+    })
+    .collect();
+    // The file's own days: its readable rows from the start day on.
+    let dates = planned
+        .iter()
+        .filter_map(|item| item.row.occurred_at)
+        .map(|at| at.date_naive())
+        .filter(|day| since.is_none_or(|since| since <= *day));
+    // The statements' wallets: those a claim or a move names, those the app
+    // says receive statements, and those this file's rows go to.
+    let mut statements = claims.targets.clone();
+    statements.extend(&options.statement_wallets);
+    statements.extend(&own);
+    let fit = Fit {
+        also,
+        span: dates.clone().min().zip(dates.max()),
+        statements: &statements,
+        since,
+    };
+    let mut by_amount: HashMap<i64, Vec<usize>> = HashMap::new();
+    for (at, tx) in candidates.iter().enumerate() {
+        by_amount.entry(tx.view.amount).or_default().push(at);
+    }
+    let pairs = pair_by_amount(planned, seekers, &by_amount, |item, txs| {
+        fit.edges(item, txs, &candidates)
+    });
+    for (row, tx, edge) in pairs {
+        let user = overrides.get(&planned[row].row.line).copied();
+        settle(&mut planned[row], &candidates[tx].view, edge, user);
+    }
+    Ok(fit.lookalikes(planned, &candidates, &by_amount, overrides))
+}
+
+/// Pairs the `rows` of `planned` with the `targets` of their amount, amount
+/// by amount, the rows in date order: `edges` lists, closest first, the
+/// targets a row may take, by their position among those of its amount.
+/// Returns each pair's row, target and edge.
+fn pair_by_amount(
+    planned: &[Planned],
+    rows: Vec<usize>,
+    targets: &HashMap<i64, Vec<usize>>,
+    edges: impl Fn(&Planned, &[usize]) -> Vec<Edge>,
+) -> Vec<(usize, usize, Edge)> {
+    let mut groups: BTreeMap<i64, Vec<usize>> = BTreeMap::new();
+    for row in rows {
+        groups.entry(planned[row].row.amount).or_default().push(row);
+    }
+    let mut pairs = Vec::new();
+    for (amount, mut rows) in groups {
+        let Some(targets) = targets.get(&amount) else {
+            continue;
+        };
+        rows.sort_by_key(|&row| (planned[row].row.occurred_at, planned[row].row.line));
+        let edges: Vec<Vec<Edge>> = rows
+            .iter()
+            .map(|&row| edges(&planned[row], targets))
+            .collect();
+        for (local, edge) in pair(&edges, targets.len()).into_iter().enumerate() {
+            if let Some(edge) = edge {
+                pairs.push((rows[local], targets[edge.tx], edge));
+            }
+        }
+    }
+    pairs
+}
+
+/// Pairs the halves of the file's own moves between two of the user's
+/// accounts, before anything is matched against the vault: a money-out half
+/// (an expense) and a money-in half (an income or a refund) the transfer
+/// column marks, both new, of the same amount, from two accounts, at most a
+/// day apart; one to one, as many as can be, the closest in all. A half the
+/// user changed (its action, or left out) is no half.
+///
+/// Two halves in one wallet move nothing: both are skipped
+/// (`internal_transfer`). In two wallets, the money-out half becomes the
+/// transfer between them and the money-in half is skipped (`transfer_pair`),
+/// the import claiming its side for it. Each says the other's line.
+pub(super) fn pair_legs(planned: &mut [Planned], overrides: &Overrides<'_>) {
+    let half = |item: &Planned| -> Option<bool> {
+        let changed = overrides
+            .get(&item.row.line)
+            .is_some_and(|user| user.skip || user.action.is_some());
+        let leg = item.row.transfer_leg && !changed && seeks_duplicate(item);
+        leg.then(|| item.row.kind.and_then(moves_out)).flatten()
+    };
+    let mut outs = Vec::new();
+    let mut ins: HashMap<i64, Vec<usize>> = HashMap::new();
+    for (at, item) in planned.iter().enumerate() {
+        match half(item) {
+            Some(true) => outs.push(at),
+            Some(false) => ins.entry(item.row.amount).or_default().push(at),
+            None => {}
+        }
+    }
+    for halves in ins.values_mut() {
+        halves.sort_by_key(|&at| (planned[at].row.occurred_at, planned[at].row.line));
+    }
+    let pairs = pair_by_amount(planned, outs, &ins, |out, halves| {
+        let other = |(local, &at): (usize, &usize)| leg_edge(&out.row, &planned[at].row, local);
+        halves.iter().enumerate().filter_map(other).collect()
+    });
+    for (out, other, _) in pairs {
+        join(planned, out, other);
+    }
+}
+
+/// How far apart the two halves of a move between accounts may be: the
+/// money leaves one on a day and reaches the other the next.
+const LEG_DAYS: i64 = 1;
+
+/// The edge from a money-out half to the money-in half at `local`, when they
+/// may be one move: two accounts, at most a day apart. The halves of an
+/// amount come in date order, so the cheapest edge is also the earliest.
+fn leg_edge(out: &StatementRow, other: &StatementRow, local: usize) -> Option<Edge> {
+    let same = out.account.as_deref().map(account_key) == other.account.as_deref().map(account_key);
+    let (at, then) = (out.occurred_at?, other.occurred_at?);
+    let days = (at.date_naive() - then.date_naive()).num_days().abs();
+    (!same && days <= LEG_DAYS).then(|| {
+        let seconds = (at.timestamp() - then.timestamp()).abs();
+        Edge {
+            tx: local,
+            cost: days * DAY_COST + seconds * 3,
+            found: Found::Transfer,
+            days,
+            hints: Hints::default(),
+        }
+    })
+}
+
+/// Makes the halves at `out` and `other` one move (see [`pair_legs`]).
+fn join(planned: &mut [Planned], out: usize, other: usize) {
+    let (out_line, in_line) = (planned[out].row.line, planned[other].row.line);
+    let (Some(from), Some(to)) = (planned[out].row.wallet_id, planned[other].row.wallet_id) else {
+        return;
+    };
+    planned[out].row.paired_line = Some(in_line);
+    planned[other].row.paired_line = Some(out_line);
+    if from == to {
+        for (at, line) in [(out, in_line), (other, out_line)] {
+            let item = &mut planned[at];
+            let reason = format!("a move between two accounts of one wallet, with line {line}");
+            item.row.status = skipped("internal_transfer", reason);
+            item.command = None;
+        }
+        return;
+    }
+    let in_row = planned[other].row.command_id;
+    let half = &mut planned[out];
+    let Some(Command::Expense(entry) | Command::Income(entry) | Command::Refund(entry)) =
+        half.command.take()
+    else {
+        return;
+    };
+    half.command = Some(Command::TransferWallet {
+        amount: entry.amount,
+        from_wallet_id: from,
+        to_wallet_id: to,
+        note: entry.note,
+        occurred_at: entry.occurred_at,
+    });
+    half.row.action = StatementAction::TransferOut {
+        to_wallet_id: Some(to),
+    };
+    half.row.kind = Some(TransactionKind::TransferWallet);
+    half.row.counter_wallet_id = Some(to);
+    half.paired_in = Some(in_row);
+    let half = &mut planned[other];
+    let reason = format!("the other half of the transfer on line {out_line}");
+    half.row.status = skipped("transfer_pair", reason);
+    half.command = None;
+    half.row.action = StatementAction::TransferIn {
+        from_wallet_id: Some(from),
+    };
+    half.row.kind = Some(TransactionKind::TransferWallet);
+    half.row.counter_wallet_id = Some(from);
+}
+
+/// A transaction a row may match.
+struct Candidate {
+    view: TransactionView,
+    /// Written by an import under its own command's id, a UUID v5: a row of
+    /// an earlier statement, or of any import that names its commands after
+    /// what it imports. A row typed by hand, or one a recurring template
+    /// recorded, has an id the app minted (v7).
+    imported: bool,
+    /// An entry a claim or a move of the log names: it stands for a row of
+    /// some statement.
+    claimed: bool,
+    /// The wallets whose side of this transfer a claim of the log names.
+    sides: Vec<Uuid>,
+}
+
+/// One transaction a row may be paired with.
+#[derive(Clone, Copy, Debug)]
+struct Edge {
+    /// Position among the transactions of the row's amount.
+    tx: usize,
+    /// Days apart, then seconds, then [`Found::rank`].
+    cost: i64,
+    found: Found,
+    /// Calendar days between the row and the transaction.
+    days: i64,
+    hints: Hints,
+}
+
+/// What a fitting transaction says about the default, beside the days.
+#[derive(Clone, Copy, Debug, Default)]
+struct Hints {
+    /// The transaction stands for a row of another export and sits near the
+    /// first or last day of the file: the row is imported by default.
+    near_edge: bool,
+    /// For [`Found::Replace`]: the entry is in the wallet the row names and
+    /// stands for that wallet's statement row (its import wrote it, or its
+    /// claim or move names it).
+    other_row: bool,
+    /// For [`Found::Replace`]: the entry sits in a wallet also checked, where
+    /// the user's own sheet is, never replaced by default.
+    in_also: bool,
+    /// For [`Found::Replace`]: the entry is a statement's row of the wallet
+    /// the row names (a statement's wallet, not one also checked, the entry
+    /// imported or claimed there), replaced by default up to 4 days away.
+    statement_row: bool,
+    /// The transaction is dated before [`StatementOptions::since`]: never
+    /// replaced by default.
+    before_start: bool,
+}
+
+impl Hints {
+    fn near(near_edge: bool) -> Self {
+        Self {
+            near_edge,
+            ..Self::default()
+        }
+    }
+}
+
+/// Which transactions may stand for a row of the statement.
+struct Fit<'a> {
+    /// The other wallets checked for rows typed by hand.
+    also: &'a [Uuid],
+    /// The first and last day of the file's readable rows from the start
+    /// day on.
+    span: Option<(NaiveDate, NaiveDate)>,
+    /// The statements' wallets: those a claim or a move names,
+    /// [`StatementOptions::statement_wallets`], and this file's.
+    statements: &'a HashSet<Uuid>,
+    since: Option<NaiveDate>,
+}
+
+impl Fit<'_> {
+    /// The transactions among `txs` (positions in `candidates`) that may
+    /// stand for `item`, closest first, seen from the row's own wallet.
+    fn edges(&self, item: &Planned, txs: &[usize], candidates: &[Candidate]) -> Vec<Edge> {
+        let (Some(wallet), Some(at)) = (item.row.wallet_id, item.row.occurred_at) else {
+            return Vec::new();
+        };
+        let mut edges: Vec<(Edge, i64, Uuid)> = Vec::new();
+        for (local, &tx) in txs.iter().enumerate() {
+            let candidate = &candidates[tx];
+            let then = candidate.view.occurred_at;
+            let days = (at.date_naive() - then.date_naive()).num_days().abs();
+            // What fits, near the edges or not, and whether it is the other
+            // wallet's statement row.
+            let fit = if candidate.view.kind == TransactionKind::TransferWallet {
+                (seeks_transfer(item) && days <= TRANSFER_DAYS)
+                    .then(|| self.fits_transfer(item, candidate, wallet))
+                    .flatten()
+                    .map(|near_edge| (Found::Transfer, Hints::near(near_edge)))
+            } else if seeks_duplicate(item) {
+                (days <= DUPLICATE_DAYS)
+                    .then(|| self.fits_duplicate(item, candidate, wallet))
+                    .flatten()
+                    .map(|near_edge| (Found::Duplicate, Hints::near(near_edge)))
+            } else {
+                (seeks_replace(item) && days <= TRANSFER_DAYS)
+                    .then(|| self.fits_replace(item, candidate, wallet))
+                    .flatten()
+                    .map(|hints| (Found::Replace, hints))
+            };
+            if let Some((found, mut hints)) = fit {
+                hints.before_start = self.since.is_some_and(|since| then.date_naive() < since);
+                let seconds = (at.timestamp() - then.timestamp()).abs();
+                let edge = Edge {
+                    tx: local,
+                    cost: days * DAY_COST + seconds * 3 + found.rank(),
+                    found,
+                    days,
+                    hints,
+                };
+                edges.push((edge, then.timestamp(), candidate.view.id));
+            }
+        }
+        edges.sort_by_key(|(edge, then, id)| (edge.cost, *then, *id));
+        edges.into_iter().map(|(edge, ..)| edge).collect()
+    }
+
+    /// A transfer between wallets touching the row's `wallet` the way the
+    /// row says the money went, to or from the wallet it names if it names
+    /// one; held to [`Self::own`] when a claim names its side on that wallet.
+    fn fits_transfer(&self, item: &Planned, tx: &Candidate, wallet: Uuid) -> Option<bool> {
+        let (from, to) = (tx.view.from_id, tx.view.to_id);
+        let way = match &item.row.action {
+            StatementAction::TransferOut { to_wallet_id } => {
+                from == Some(wallet) && to_wallet_id.is_none_or(|other| to == Some(other))
+            }
+            StatementAction::TransferIn { from_wallet_id } => {
+                to == Some(wallet) && from_wallet_id.is_none_or(|other| from == Some(other))
+            }
+            StatementAction::BySign if item.row.outflow => from == Some(wallet),
+            StatementAction::BySign => to == Some(wallet),
+            _ => false,
+        };
+        if !way {
+            return None;
+        }
+        self.own(&tx.view, tx.sides.contains(&wallet), TRANSFER_DAYS)
+    }
+
+    /// An entry moving the money the row's way (an expense for money going
+    /// out, an income or a refund for money coming in), on the row's
+    /// `wallet`, held to [`Self::own`], or on one also checked where no claim
+    /// or move names it: one that does stands for a row of another
+    /// statement, while an imported one is the user's own sheet.
+    fn fits_duplicate(&self, item: &Planned, tx: &Candidate, wallet: Uuid) -> Option<bool> {
+        let out = item.row.kind.and_then(moves_out)?;
+        if moves_out(tx.view.kind) != Some(out) {
+            return None;
+        }
+        match tx.view.wallet_id {
+            Some(id) if id == wallet => {
+                self.own(&tx.view, tx.claimed || tx.imported, DUPLICATE_DAYS)
+            }
+            Some(id) if self.also.contains(&id) => (!tx.claimed).then_some(false),
+            _ => None,
+        }
+    }
+
+    /// An entry standing for the transfer the row is: in the wallet the row
+    /// names, the money moving the other way (an income or a refund there
+    /// for money going out to it, an expense there for money coming in from
+    /// it); or, the money moving the row's way, in the row's `wallet`, held
+    /// to [`Self::own`], or in one also checked where no claim or move names
+    /// it. Gives whether it sits near the edges, whether it is the named
+    /// wallet's row of a statement (one an import wrote, or a claim or a move
+    /// names), whether it sits in a wallet also checked, and whether it is
+    /// such a row in a statement's wallet not also checked.
+    fn fits_replace(&self, item: &Planned, tx: &Candidate, wallet: Uuid) -> Option<Hints> {
+        let other = item.row.counter_wallet_id?;
+        let out = matches!(item.row.action, StatementAction::TransferOut { .. });
+        let way = moves_out(tx.view.kind)?;
+        match tx.view.wallet_id {
+            Some(id) if id == other => (way != out).then(|| {
+                let other_row = tx.claimed || tx.imported;
+                let in_also = self.also.contains(&id);
+                Hints {
+                    other_row,
+                    in_also,
+                    statement_row: other_row && !in_also && self.statements.contains(&id),
+                    ..Hints::default()
+                }
+            }),
+            Some(id) if id == wallet && way == out => self
+                .own(&tx.view, tx.claimed || tx.imported, TRANSFER_DAYS)
+                .map(Hints::near),
+            Some(id) if self.also.contains(&id) && way == out => (!tx.claimed).then_some(Hints {
+                in_also: true,
+                ..Hints::default()
+            }),
+            _ => None,
+        }
+    }
+
+    /// Whether a transaction of the statement's wallet may stand for a row,
+    /// and whether it sits near the file's edges. One typed by hand that
+    /// nothing `held` (a claim, a move, an import's own id) always may: one
+    /// typed on the 30th may be booked on the 1st. One held stands for a row
+    /// of an export already in, and may only when it is dated within the
+    /// file's own days, as it is when the same file is read with another
+    /// mapping; within `margin` days of the first or the last of them, it is
+    /// more likely another export's neighbour, and the row is imported by
+    /// default.
+    fn own(&self, tx: &TransactionView, held: bool, margin: i64) -> Option<bool> {
+        if !held {
+            return Some(false);
+        }
+        let (first, last) = self.span?;
+        let day = tx.occurred_at.date_naive();
+        (first <= day && day <= last)
+            .then(|| (day - first).num_days() <= margin || (last - day).num_days() <= margin)
+    }
+
+    /// For each wallet that is neither the statement's, nor checked, nor any
+    /// statement's, the new rows that matched nothing and would match an
+    /// entry there as a duplicate in a wallet also checked would: no claim
+    /// or move naming it, the money moving the row's way, at most 3 days
+    /// away, from 3 days before the start day on. The most such rows first.
+    fn lookalikes(
+        &self,
+        planned: &[Planned],
+        candidates: &[Candidate],
+        by_amount: &HashMap<i64, Vec<usize>>,
+        overrides: &Overrides<'_>,
+    ) -> Vec<StatementLookalike> {
+        let mut counts: HashMap<Uuid, u32> = HashMap::new();
+        for item in planned {
+            let left_out = overrides.get(&item.row.line).is_some_and(|user| user.skip);
+            if !seeks_duplicate(item) || item.row.existing.is_some() || left_out {
+                continue;
+            }
+            let (Some(at), Some(out)) = (item.row.occurred_at, item.row.kind.and_then(moves_out))
+            else {
+                continue;
+            };
+            let mut found = HashSet::new();
+            for &tx in by_amount.get(&item.row.amount).into_iter().flatten() {
+                let candidate = &candidates[tx];
+                let Some(id) = candidate.view.wallet_id else {
+                    continue;
+                };
+                let day = candidate.view.occurred_at.date_naive();
+                let unchecked = !self.also.contains(&id) && !self.statements.contains(&id);
+                if unchecked
+                    && !candidate.claimed
+                    && moves_out(candidate.view.kind) == Some(out)
+                    && (at.date_naive() - day).num_days().abs() <= DUPLICATE_DAYS
+                    && self
+                        .since
+                        .is_none_or(|since| (since - day).num_days() <= DUPLICATE_DAYS)
+                    && found.insert(id)
+                {
+                    *counts.entry(id).or_default() += 1;
+                }
+            }
+        }
+        let mut lookalikes: Vec<StatementLookalike> = counts
+            .into_iter()
+            .map(|(wallet_id, rows)| StatementLookalike { wallet_id, rows })
+            .collect();
+        lookalikes.sort_by(|a, b| b.rows.cmp(&a.rows).then(a.wallet_id.cmp(&b.wallet_id)));
+        lookalikes
+    }
+}
+
+/// What [`StatementOptions::since`] leaves out: a transfer between a wallet
+/// the file's rows go to (`own`) and one also checked dated before it (the
+/// bank funded from Cash the day before the user starts), and an entry of a
+/// wallet also checked, and none of the file's, dated more than 3 days
+/// before it (a pizza typed on the 30th may be booked by the bank on the
+/// 1st). The file's own rows and the other banks' sides of a transfer stay:
+/// a bank's start day is not the others'.
+fn left_before_start(
+    tx: &TransactionView,
+    own: &HashSet<Uuid>,
+    also: &[Uuid],
+    since: Option<NaiveDate>,
+) -> bool {
+    let Some(since) = since else {
+        return false;
+    };
+    let before = (since - tx.occurred_at.date_naive()).num_days();
+    if tx.kind == TransactionKind::TransferWallet {
+        let (Some(from), Some(to)) = (tx.from_id, tx.to_id) else {
+            return false;
+        };
+        let with_checked = (own.contains(&from) && also.contains(&to))
+            || (own.contains(&to) && also.contains(&from));
+        before > 0 && with_checked
+    } else {
+        before > DUPLICATE_DAYS
+            && tx
+                .wallet_id
+                .is_some_and(|id| also.contains(&id) && !own.contains(&id))
+    }
+}
+
+/// Whether an entry of `kind` takes money out of its wallet (an expense)
+/// or brings it in (an income, a refund); `None` for a transfer.
+fn moves_out(kind: TransactionKind) -> Option<bool> {
+    match kind {
+        TransactionKind::Expense => Some(true),
+        TransactionKind::Income | TransactionKind::Refund => Some(false),
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow => None,
+    }
+}
+
+/// Pairs as many rows as can be with a transaction each, and among the ways
+/// to pair that many the cheapest in all: successive cheapest augmenting
+/// paths over `edges` (per row, closest first), rows in their order. Returns
+/// the edge each row got.
+fn pair(edges: &[Vec<Edge>], txs: usize) -> Vec<Option<Edge>> {
+    let rows = edges.len();
+    let mut row_edge: Vec<Option<Edge>> = vec![None; rows];
+    let mut tx_row: Vec<Option<usize>> = vec![None; txs];
+    loop {
+        // The cheapest way to reach every row from a row still free, giving
+        // each row passed through the next transaction on the way.
+        let mut dist: Vec<Option<i64>> = row_edge
+            .iter()
+            .map(|edge| edge.is_none().then_some(0))
+            .collect();
+        let mut via: Vec<Option<(usize, Edge)>> = vec![None; rows];
+        for _ in 0..=rows {
+            let mut changed = false;
+            for row in 0..rows {
+                let Some(here) = dist[row] else {
+                    continue;
+                };
+                for edge in &edges[row] {
+                    let Some(other) = tx_row[edge.tx] else {
+                        continue;
+                    };
+                    if other == row {
+                        continue;
+                    }
+                    let held = row_edge[other].map_or(0, |held| held.cost);
+                    let there = here + edge.cost - held;
+                    if dist[other].is_none_or(|old| there < old) {
+                        dist[other] = Some(there);
+                        via[other] = Some((row, *edge));
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        let mut best: Option<(i64, usize, Edge)> = None;
+        for row in 0..rows {
+            let Some(here) = dist[row] else {
+                continue;
+            };
+            for edge in edges[row].iter().filter(|edge| tx_row[edge.tx].is_none()) {
+                let total = here + edge.cost;
+                if best.is_none_or(|(cheapest, ..)| total < cheapest) {
+                    best = Some((total, row, *edge));
+                }
+            }
+        }
+        let Some((_, mut row, mut edge)) = best else {
+            return row_edge;
+        };
+        loop {
+            row_edge[row] = Some(edge);
+            tx_row[edge.tx] = Some(row);
+            match via[row] {
+                Some((previous, through)) => {
+                    row = previous;
+                    edge = through;
+                }
+                None => break,
+            }
+        }
+    }
+}
+
+/// A row the other side of a transfer may stand for: one that would be new
+/// or waits for its other wallet, taken for a transfer (with or without the
+/// wallet) or by its sign.
+fn seeks_transfer(item: &Planned) -> bool {
+    let waiting = match &item.row.status {
+        StatementRowStatus::New => true,
+        StatementRowStatus::Skipped { code, .. } => code == "needs_wallet",
+        _ => false,
+    };
+    waiting
+        && matches!(
+            item.row.action,
+            StatementAction::TransferIn { .. }
+                | StatementAction::TransferOut { .. }
+                | StatementAction::BySign
+        )
+}
+
+/// A row a hand-entered one may stand for: a new income, expense or refund.
+fn seeks_duplicate(item: &Planned) -> bool {
+    item.row.status == StatementRowStatus::New
+        && matches!(
+            item.command,
+            Some(Command::Income(_) | Command::Expense(_) | Command::Refund(_))
+        )
+}
+
+/// A row an entry may stand for as the transfer it is: a new transfer
+/// between the statement's wallet and the one it names.
+fn seeks_replace(item: &Planned) -> bool {
+    item.row.status == StatementRowStatus::New
+        && matches!(item.command, Some(Command::TransferWallet { .. }))
+}
+
+/// What becomes of a row `tx` matched: the user's `on_match`, else the
+/// default, each read as `docs/STATEMENTS.md` §4 says. Left out by the user
+/// (`skip`), the row is skipped by them like a new one, and nothing is
+/// written or claimed for it; `match_choice` still says what including it
+/// would do. Imported anyway, the row stays what it was, with the match
+/// beside it; replacing, it keeps its transfer to write, flagged.
+fn settle(
+    item: &mut Planned,
+    tx: &TransactionView,
+    edge: Edge,
+    user: Option<&StatementRowOverride>,
+) {
+    let found = edge.found;
+    let asked = user.and_then(|user| user.on_match);
+    // A seeker always has a wallet.
+    let movable = found == Found::Duplicate && tx.wallet_id != item.row.wallet_id;
+    let (default, choice) = if found == Found::Replace {
+        (replace_choice(edge, None), replace_choice(edge, asked))
+    } else {
+        let default = if edge.hints.near_edge {
+            StatementMatchChoice::ImportAnyway
+        } else if movable {
+            StatementMatchChoice::MoveExisting
+        } else {
+            StatementMatchChoice::Skip
+        };
+        let choice = match asked {
+            None | Some(StatementMatchChoice::ReplaceExisting) => default,
+            Some(StatementMatchChoice::Skip | StatementMatchChoice::MoveExisting) if movable => {
+                StatementMatchChoice::MoveExisting
+            }
+            Some(StatementMatchChoice::MoveExisting) => StatementMatchChoice::Skip,
+            Some(choice) => choice,
+        };
+        (default, choice)
+    };
+    item.row.existing = Some(tx.clone());
+    item.row.match_choice = Some(choice);
+    item.row.default_choice = Some(default);
+    item.replaces_other_row = found == Found::Replace && edge.hints.other_row;
+    if user.is_some_and(|user| user.skip) {
+        item.row.status = skipped_by_you();
+        item.command = None;
+        return;
+    }
+    match (found, choice) {
+        (_, StatementMatchChoice::ImportAnyway) => return,
+        (Found::Replace, _) => {
+            item.row.status = StatementRowStatus::PossibleDuplicate;
+            return;
+        }
+        _ => {}
+    }
+    item.command = None;
+    item.row.status = match found {
+        Found::Transfer => {
+            item.row.kind = Some(TransactionKind::TransferWallet);
+            item.row.counter_wallet_id = if tx.from_id == item.row.wallet_id {
+                tx.to_id
+            } else {
+                tx.from_id
+            };
+            StatementRowStatus::MatchedTransfer
+        }
+        Found::Duplicate | Found::Replace => StatementRowStatus::PossibleDuplicate,
+    };
+}
+
+/// What becomes of a row whose match is an entry standing for its transfer.
+/// Keeping the entry instead of the row would leave the transfer missing, so
+/// `Skip` and `MoveExisting` read as `ImportAnyway`; by default the entry is
+/// replaced only when it very likely is the transfer's other side
+/// (`docs/STATEMENTS.md` §4).
+fn replace_choice(edge: Edge, asked: Option<StatementMatchChoice>) -> StatementMatchChoice {
+    let hints = edge.hints;
+    let likely = hints.statement_row || (edge.days <= 1 && !hints.in_also);
+    match asked {
+        Some(StatementMatchChoice::ReplaceExisting) => StatementMatchChoice::ReplaceExisting,
+        Some(_) => StatementMatchChoice::ImportAnyway,
+        None if likely && !hints.near_edge && !hints.before_start => {
+            StatementMatchChoice::ReplaceExisting
+        }
+        None => StatementMatchChoice::ImportAnyway,
+    }
+}
+
+/// What the claims and moves of the log name.
+#[derive(Default)]
+struct Claims {
+    /// Entries a claim or a move names.
+    entries: HashSet<Uuid>,
+    /// Transfer -> the wallets whose side a claim names.
+    sides: HashMap<Uuid, Vec<Uuid>>,
+    /// Every wallet a claim or a move names: those of some statement.
+    targets: HashSet<Uuid>,
+}
+
+/// The transaction and what of it a command claims, when it is a statement
+/// import's claim or move: an `UpdateTransaction` under a UUID v5 whose patch
+/// names one wallet (`wallet_id`, `from_id` or `to_id`) and nothing else.
+/// Nothing else writes that shape: the app mints v7 ids, and a script that
+/// relabels rows under v5 ids patches their category.
+fn claimed_by(id: Uuid, command: &Command) -> Option<(Uuid, Claimed)> {
+    if id.get_version() != Some(Version::Sha1) {
+        return None;
+    }
+    let Command::UpdateTransaction {
+        transaction_id,
+        patch,
+    } = command
+    else {
+        return None;
+    };
+    let wallets = TransactionPatch {
+        wallet_id: patch.wallet_id,
+        from_id: patch.from_id,
+        to_id: patch.to_id,
+        ..TransactionPatch::default()
+    };
+    if wallets != *patch {
+        return None;
+    }
+    let claimed = match (patch.wallet_id, patch.from_id, patch.to_id) {
+        (Some(wallet), None, None) => Claimed::Entry(wallet),
+        (None, Some(wallet), None) | (None, None, Some(wallet)) => Claimed::Side(wallet),
+        _ => return None,
+    };
+    Some((*transaction_id, claimed))
+}
+
+/// What a claim names of a transaction.
+enum Claimed {
+    /// The whole entry, in this wallet.
+    Entry(Uuid),
+    /// The side of a transfer on this wallet.
+    Side(Uuid),
+}
+
+/// Every claim and move of the vault's log, whatever became of it: a claim
+/// the server refused still counts, as a row refused on its own id still
+/// reads as imported.
+fn read_claims(core: &Core, vault_id: Uuid) -> Result<Claims> {
+    // The version of a UUID is its 13th hex digit.
+    let mut stmt = core.conn.prepare(
+        "SELECT id, payload FROM commands
+         WHERE vault_id = ?1 AND kind = 'update_transaction'
+           AND substr(hex(id), 13, 1) = '5'",
+    )?;
+    let rows = stmt.query_map(params![vault_id], |r| {
+        Ok((r.get::<_, Uuid>(0)?, r.get::<_, String>(1)?))
+    })?;
+    let mut claims = Claims::default();
+    for row in rows {
+        let (id, payload) = row?;
+        let Ok(command) = serde_json::from_str::<Command>(&payload) else {
+            continue;
+        };
+        match claimed_by(id, &command) {
+            Some((tx, Claimed::Entry(wallet))) => {
+                claims.entries.insert(tx);
+                claims.targets.insert(wallet);
+            }
+            Some((tx, Claimed::Side(wallet))) => {
+                claims.sides.entry(tx).or_default().push(wallet);
+                claims.targets.insert(wallet);
+            }
+            None => {}
+        }
+    }
+    Ok(claims)
+}
+
+/// The live transactions of every wallet a row may match, oldest first,
+/// each with whether an import wrote it under its own command's id:
+/// incomes, expenses, refunds and transfers between wallets dated from
+/// `from` to `to` (UTC seconds), opening balances left out.
+fn read_pool(
+    core: &Core,
+    vault_id: Uuid,
+    from: i64,
+    to: i64,
+) -> Result<Vec<(TransactionView, bool)>> {
+    // Right after the view's own columns.
+    let own_id = TRANSACTION_VIEW_COLUMNS.split(',').count();
+    let sql = format!(
+        "SELECT {TRANSACTION_VIEW_COLUMNS}, t.id = t.command_id
+         FROM transactions t JOIN categories c ON c.id = t.category_id
+         WHERE t.vault_id = ?1 AND t.voided_at IS NULL
+           AND t.occurred_at BETWEEN ?2 AND ?3
+           AND t.kind IN (?4, ?5, ?6, ?7)
+           AND NOT (c.is_system = 1 AND c.name_norm = ?8)
+         ORDER BY t.occurred_at, t.id"
+    );
+    let mut args = vec![blob(vault_id), Value::Integer(from), Value::Integer(to)];
+    args.extend(
+        [
+            TransactionKind::Income,
+            TransactionKind::Expense,
+            TransactionKind::Refund,
+            TransactionKind::TransferWallet,
+        ]
+        .map(|kind| Value::Text(kind.as_str().to_string())),
+    );
+    args.push(Value::Text(OPENING_KEY.to_string()));
+    let mut stmt = core.conn.prepare(&sql)?;
+    let (mut views, own): (Vec<TransactionView>, Vec<bool>) = stmt
+        .query_map(params_from_iter(args), |r| {
+            Ok((transaction_view(r)?, r.get::<_, bool>(own_id)?))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?
+        .into_iter()
+        .unzip();
+    load_legs(&core.conn, &mut views)?;
+    Ok(views
+        .into_iter()
+        .zip(own)
+        .map(|(view, own)| {
+            let imported = own && view.id.get_version() == Some(Version::Sha1);
+            (view, imported)
+        })
+        .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn edge(tx: usize, days: i64) -> Edge {
+        Edge {
+            tx,
+            cost: days * DAY_COST,
+            found: Found::Duplicate,
+            days,
+            hints: Hints::default(),
+        }
+    }
+
+    fn txs_of(pairs: &[Option<Edge>]) -> Vec<Option<usize>> {
+        pairs.iter().map(|edge| edge.map(|edge| edge.tx)).collect()
+    }
+
+    #[test]
+    fn as_many_pairs_as_can_be_then_the_closest() {
+        // Rows on the 10th, 11th and 12th; transactions on the 11th (0) and
+        // the 12th (1): the 11th and the 12th pair with their own day.
+        let edges = vec![
+            vec![edge(0, 1), edge(1, 2)],
+            vec![edge(0, 0), edge(1, 1)],
+            vec![edge(1, 0), edge(0, 1)],
+        ];
+        assert_eq!(txs_of(&pair(&edges, 2)), [None, Some(0), Some(1)]);
+        // Rows on the 10th and 13th, transactions on the 11th (0) and the
+        // 8th (1): both rows pair, though the 10th is closer to the 11th.
+        let edges = vec![vec![edge(0, 1), edge(1, 2)], vec![edge(0, 2)]];
+        assert_eq!(txs_of(&pair(&edges, 2)), [Some(1), Some(0)]);
+    }
+
+    #[test]
+    fn a_claim_is_one_wallet_patched_alone_under_a_v5_id() {
+        let (tx, wallet) = (Uuid::now_v7(), Uuid::now_v7());
+        let claim = Uuid::new_v5(&tx, b"claim");
+        let read = |id, patch| {
+            let command = Command::UpdateTransaction {
+                transaction_id: tx,
+                patch,
+            };
+            match claimed_by(id, &command)? {
+                (of, Claimed::Entry(wallet)) => Some((of, "entry", wallet)),
+                (of, Claimed::Side(wallet)) => Some((of, "side", wallet)),
+            }
+        };
+        let patch = |wallet_id, from_id, to_id| TransactionPatch {
+            wallet_id,
+            from_id,
+            to_id,
+            ..TransactionPatch::default()
+        };
+        let one = Some(wallet);
+        assert_eq!(
+            read(claim, patch(one, None, None)),
+            Some((tx, "entry", wallet))
+        );
+        assert_eq!(
+            read(claim, patch(None, one, None)),
+            Some((tx, "side", wallet))
+        );
+        assert_eq!(
+            read(claim, patch(None, None, one)),
+            Some((tx, "side", wallet))
+        );
+        // The app's own id, two wallets, another field or none: an edit.
+        assert_eq!(read(Uuid::now_v7(), patch(one, None, None)), None);
+        assert_eq!(read(claim, patch(None, one, one)), None);
+        let relabel = TransactionPatch {
+            category: Some("Bar".to_string()),
+            ..patch(one, None, None)
+        };
+        assert_eq!(read(claim, relabel), None);
+        assert_eq!(read(claim, TransactionPatch::default()), None);
+    }
+}

@@ -1,9 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// When a template next wants something: the
-/// "Prossima" column of the templates table, and the inspector's "Prossime
-/// date".
+/// When a template next wants something: the table's Prossima, the inspector's Prossime date.
 enum RecurringNext: Equatable {
     /// The oldest period still waiting for a decision. It beats any future
     /// date: until it is recorded or skipped, it is what the template is

@@ -306,49 +306,10 @@ struct AllocationPlanningTests {
     }
 }
 
-/// A string catalog built on disk for one language, with the plural keys of
-/// the Riparto tab and the sentences they go into: the helpers read it
-/// through their `bundle` parameter, whatever the app's own catalog holds.
+/// The plural keys of the Riparto tab and the sentences they go into.
 private enum AllocationCatalog {
-    static func bundle(
-        language: String,
-        plurals: [String: (one: String, other: String)],
-        strings: [String: String]
-    ) throws -> Bundle {
-        let root = FileManager.default.temporaryDirectory
-            .appending(path: "sparagne-allocation-\(UUID().uuidString).bundle", directoryHint: .isDirectory)
-        let contents = root.appending(path: "Contents", directoryHint: .isDirectory)
-        let lproj = contents.appending(path: "Resources/\(language).lproj", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: lproj, withIntermediateDirectories: true)
-        let info: [String: Any] = [
-            "CFBundleIdentifier": "it.oghma.sparagne.tests.allocation.\(language)",
-            "CFBundleDevelopmentRegion": language,
-            "CFBundlePackageType": "BNDL",
-        ]
-        try plist(info).write(to: contents.appending(path: "Info.plist"))
-        var rules: [String: Any] = [:]
-        for (key, forms) in plurals {
-            rules[key] = [
-                "NSStringLocalizedFormatKey": "%#@count@",
-                "count": [
-                    "NSStringFormatSpecTypeKey": "NSStringPluralRuleType",
-                    "NSStringFormatValueTypeKey": "lld",
-                    "one": forms.one,
-                    "other": forms.other,
-                ],
-            ]
-        }
-        try plist(rules).write(to: lproj.appending(path: "Localizable.stringsdict"))
-        try plist(strings).write(to: lproj.appending(path: "Localizable.strings"))
-        return try #require(Bundle(url: root))
-    }
-
-    private static func plist(_ value: Any) throws -> Data {
-        try PropertyListSerialization.data(fromPropertyList: value, format: .xml, options: 0)
-    }
-
     static func english() throws -> Bundle {
-        try bundle(
+        try CatalogBundle.make(
             language: "en",
             plurals: [
                 "%lld envelopes": ("%lld envelope", "%lld envelopes"),
@@ -356,12 +317,13 @@ private enum AllocationCatalog {
             ],
             strings: [
                 "%@ since %@": "%1$@ since %2$@",
-            ]
+            ],
+            name: "allocation"
         )
     }
 
     static func italian() throws -> Bundle {
-        try bundle(
+        try CatalogBundle.make(
             language: "it",
             plurals: [
                 "%lld envelopes": ("%lld busta", "%lld buste"),
@@ -372,7 +334,8 @@ private enum AllocationCatalog {
             strings: [
                 "%@ after the last allocation (%@)": "%1$@ dopo l'ultimo riparto (%2$@)",
                 "%@ since %@": "%1$@ dal %2$@",
-            ]
+            ],
+            name: "allocation"
         )
     }
 }

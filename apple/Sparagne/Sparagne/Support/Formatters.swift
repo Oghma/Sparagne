@@ -1,14 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// Formats `Int64` minor units (e.g. cents) as currency. Amounts are never
-/// floats anywhere in the app; this is the
-/// only place minor units get converted to displayable text, always through
-/// `Decimal`.
-///
-/// Note: this assumes 2 minor-unit decimal places (true for EUR, the only
-/// currency v2.0 supports). A future multi-currency
-/// core would need to expose the exponent per currency instead of assuming it.
+/// Minor units in the user's locale, kept for more currencies (screens use `LedgerMoney`); 2 decimals.
 enum MoneyFormatter {
     private static let minorUnitsPerMajor: Int64 = 100
 
@@ -20,8 +13,7 @@ enum MoneyFormatter {
     /// `1250` -> `"12.50"`: the plain major-unit text `parseMoney` accepts,
     /// with no sign, grouping separator or currency code.
     static func editable(minorUnits: Int64) -> String {
-        let absolute = minorUnits.magnitude
-        return String(format: "%llu.%02llu", absolute / 100, absolute % 100)
+        LedgerMoney.editable(minorUnits)
     }
 
     private static func decimalValue(_ minorUnits: Int64) -> Decimal {
@@ -29,9 +21,7 @@ enum MoneyFormatter {
     }
 }
 
-/// Formats dates the way the transactions table wants them: "Today"/
-/// "Yesterday" for the last two days, a locale-formatted date otherwise
-/// ("Today / Yesterday / date").
+/// "Today", "Yesterday" or a locale-formatted date.
 enum DateFormatting {
     /// `"Today"`, `"Yesterday"`, or a locale-formatted date (e.g. `"Sep 9, 2026"`).
     static func relativeDay(_ date: Date, now: Date = Date(), calendar: Calendar = .current, locale: Locale = .autoupdatingCurrent) -> String {
@@ -62,13 +52,7 @@ nonisolated extension Currency {
     }
 }
 
-/// Sentences that carry a count. Each is one catalog key with a plural
-/// variation (`"%lld rows"`, one and other in English and Italian), never a
-/// number glued to a word: that reads "1 rows", and a translation cannot move
-/// the number.
-///
-/// `bundle` is the catalog to read the key from: the app's own, or one a
-/// test builds so the plural forms can be checked before the catalog has them.
+/// Sentences that carry a count: one plural catalog key each, never a number glued to a word.
 enum CountText {
     /// `"3 to confirm"`: the top bar's due pill.
     static func toConfirm(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
@@ -93,24 +77,16 @@ enum CountText {
     }
 }
 
-/// Days as the Ricorrenze tab writes them: `"gio 1
-/// ott"` in Italian, `"Thu, Oct 1"` in English, the order and the
-/// abbreviations the locale's own.
-///
-/// A `NaiveDate` is a calendar day with no time zone, so it is read and
-/// written in UTC on both sides: the local zone could put its midnight on
-/// the day before.
+/// Days as the Ricorrenze tab writes them (`gio 1 ott`), in UTC like every `NaiveDate`.
 enum RecurringDayText {
-    private static let utc = TimeZone(identifier: "UTC") ?? .gmt
-
     private static func style(_ locale: Locale) -> Date.FormatStyle {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = locale
-        return Date.FormatStyle(locale: locale, calendar: calendar, timeZone: utc)
+        return Date.FormatStyle(locale: locale, calendar: calendar, timeZone: CoreDate.utc)
     }
 
     private static func date(_ day: NaiveDate) -> Date? {
-        CoreDate.localDay(day, timeZone: utc)
+        CoreDate.localDay(day, timeZone: CoreDate.utc)
     }
 
     /// `"gio 1 ott"`: a due period, a tile of the agenda.
@@ -149,16 +125,11 @@ enum ScheduleUnit {
     case year
 }
 
-/// Describes a recurring template's `Schedule` (`frequency` + `interval`,
-/// day/weekday/month clamped to the calendar by
-/// the core) for the Recurring panel's list and edit form.
-///
-/// Every description is one whole sentence in the catalog. An interval of
-/// one and an interval of more are two sentences rather than one plural key:
-/// a plural key holds a single `%lld` (`scripts/catalog.py`), these hold a
-/// name or a day beside it, and above one both English and Italian use the
-/// same form anyway.
+/// A template's `Schedule` in words, for the Recurring panel's list and edit form.
 enum ScheduleFormatting {
+    // One whole catalog sentence each: an interval of one and of more are two sentences,
+    // since a plural key holds a single `%lld` and these hold a name or a day beside it.
+
     static func describe(
         _ schedule: Schedule,
         bundle: Bundle = .main,
@@ -206,20 +177,12 @@ enum ScheduleFormatting {
     /// The localized weekday name for an ISO weekday (Monday = 1 ... Sunday
     /// = 7), used both by `describe` and by the weekday picker.
     static func weekdayName(_ isoWeekday: UInt8, locale: Locale = .autoupdatingCurrent) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = locale
-        let symbols = calendar.weekdaySymbols
-        let index = Int(isoWeekday) % 7
-        return symbols.indices.contains(index) ? symbols[index] : "\(isoWeekday)"
+        LedgerDate.weekdayName(Int(isoWeekday) % 7 + 1, style: .format, locale: locale)
     }
 
     /// The localized month name for a 1-based month, used both by
     /// `describe` and by the yearly-schedule picker.
     static func monthName(_ month: UInt8, locale: Locale = .autoupdatingCurrent) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = locale
-        let symbols = calendar.monthSymbols
-        let index = Int(month) - 1
-        return symbols.indices.contains(index) ? symbols[index] : "\(month)"
+        LedgerDate.monthName(Int(month), style: .format, locale: locale)
     }
 }

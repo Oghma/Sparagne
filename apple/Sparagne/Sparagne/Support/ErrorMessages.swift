@@ -1,4 +1,5 @@
 import Foundation
+import SparagneCore
 
 /// Headlines for the stable error codes in
 /// `apple/SparagneCore/Sources/SparagneCore/ErrorCodes.swift`: every
@@ -67,6 +68,35 @@ nonisolated enum ErrorMessages {
               let name = detail?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty
         else { return summary(for: code) }
         return String(localized: "\(name) is not a member of this vault")
+    }
+
+    /// The headline a sheet shows for an error it caught: a server's or the
+    /// core's code in words, and the system's own description for anything
+    /// else.
+    static func headline(for error: Error) -> String {
+        switch error {
+        case let error as ServerError: error.summary
+        case let error as DomainError: summary(for: error.code)
+        default: error.localizedDescription
+        }
+    }
+
+    /// The line under `headline(for:)`: the server's or the core's English
+    /// words, when there are any; nothing for any other error, whose
+    /// headline already says all it has.
+    static func detail(for error: Error) -> String? {
+        switch error {
+        case let error as ServerError: error.detail
+        case let error as DomainError: error.message
+        default: nil
+        }
+    }
+
+    /// Both on one line, `headline: detail`, for a sheet that has room for
+    /// only one.
+    static func line(for error: Error) -> String {
+        let headline = headline(for: error)
+        return detail(for: error).map { "\(headline): \($0)" } ?? headline
     }
 
     /// A person cell or a `!name` that matches nobody who may be named on a

@@ -1,10 +1,6 @@
-//! Shared harness for the sync acceptance tests.
-//!
-//! `Api` is a trimmed copy of the request/response plumbing in `api.rs`: JSON
-//! in, JSON out, bearer tokens, the router driven in-process with
-//! `tower::ServiceExt::oneshot`. `Client` is a "real" client: an in-memory
-//! [`Core`], a token and a username, synced over HTTP exactly as the app
-//! does.
+//! Shared harness for the server tests: `Api` drives the router in-process
+//! with `tower::ServiceExt::oneshot` (JSON in and out, bearer tokens), and
+//! `Client` is an in-memory [`Core`] that syncs over HTTP as the app does.
 
 #![allow(dead_code, clippy::unwrap_used, clippy::expect_used)]
 
@@ -19,7 +15,10 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use sparagne_core::{
     Command, CommandEnvelope, Core, Currency, Entry, FlowMode, SyncReport, TransactionFilter,
-    sync::{PullResponse, PushResponse, TokenResponse},
+    sync::{
+        MemberEntry, MemberRole, PullResponse, PushOutcome, PushResponse, PushResult,
+        TokenResponse, VaultSummary,
+    },
 };
 use sparagne_server::{AppState, Config, router};
 use tower::ServiceExt;
@@ -29,10 +28,6 @@ pub const T0: i64 = 1_700_000_000;
 pub const PASSWORD: &str = "correct horse battery staple";
 /// What the app uses: a push carries at most this many commands.
 pub const BATCH: usize = 500;
-
-// ---------------------------------------------------------------------------
-// HTTP harness
-// ---------------------------------------------------------------------------
 
 pub struct Api {
     pub app: Router,
@@ -56,12 +51,6 @@ impl Res {
             .as_str()
             .unwrap_or_default()
             .to_string()
-    }
-}
-
-impl Default for Api {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -147,39 +136,73 @@ impl Api {
         self.call(Method::DELETE, uri, Some(token), None).await
     }
 
-    /// Registers `username` with the fixed test [`PASSWORD`] and returns its
-    /// token.
+    /// `POST /auth/register` with any credentials, whatever the outcome.
+    pub async fn register_as(&self, username: &str, password: &str) -> Res {
+        let body = json!({ "username": username, "password": password });
+        self.call(Method::POST, "/auth/register", None, Some(body))
+            .await
+    }
+
+    /// Registers `username` with [`PASSWORD`] and returns its token.
     pub async fn register(&self, username: &str) -> String {
-        let res = self
-            .call(
-                Method::POST,
-                "/auth/register",
-                None,
-                Some(json!({ "username": username, "password": PASSWORD })),
-            )
-            .await;
+        let res = self.register_as(username, PASSWORD).await;
         assert_eq!(res.status, StatusCode::CREATED, "{:?}", res.body);
         res.json::<TokenResponse>().token
     }
 
     /// `POST /auth/login`, whatever the outcome.
     pub async fn login(&self, username: &str, password: &str) -> Res {
-        self.call(
-            Method::POST,
-            "/auth/login",
-            None,
-            Some(json!({ "username": username, "password": password })),
-        )
-        .await
+        let body = json!({ "username": username, "password": password });
+        self.call(Method::POST, "/auth/login", None, Some(body))
+            .await
+    }
+
+    pub async fn push(&self, token: &str, vault: Uuid, commands: Vec<CommandEnvelope>) -> Res {
+        let body = json!({ "commands": commands });
+        self.post(&format!("/vaults/{vault}/push"), token, body)
+            .await
+    }
+
+    /// Creates a vault owned by `author` with a push whose first command is
+    /// the vault's own `CreateVault`, and returns its id.
+    pub async fn create_vault(&self, token: &str, author: &str, name: &str) -> Uuid {
+        let envelope = CommandEnvelope::create_vault(author, name, Currency::Eur);
+        let id = envelope.id;
+        let res = self.push(token, id, vec![envelope]).await;
+        assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
+        assert_eq!(applied(&res.json::<PushResponse>().results[0]), 1);
+        id
+    }
+
+    /// `PUT /vaults/{vault}/members`, whatever the outcome.
+    pub async fn set_member(&self, token: &str, vault: Uuid, username: &str, role: &str) -> Res {
+        let body = json!({ "username": username, "role": role });
+        self.put(&format!("/vaults/{vault}/members"), token, body)
+            .await
+    }
+
+    /// [`Api::set_member`], which must succeed.
+    pub async fn add_member(&self, token: &str, vault: Uuid, username: &str, role: &str) {
+        let res = self.set_member(token, vault, username, role).await;
+        assert_eq!(res.status, StatusCode::NO_CONTENT, "{:?}", res.body);
     }
 }
 
-// ---------------------------------------------------------------------------
-// A synchronizing client
-// ---------------------------------------------------------------------------
+pub fn applied(result: &PushResult) -> i64 {
+    match result.outcome {
+        PushOutcome::Applied { seq, .. } => seq,
+        PushOutcome::Rejected { .. } => panic!("expected applied, got {:?}", result.outcome),
+    }
+}
 
-/// One of the two (or three) clients of the acceptance test: a local [`Core`]
-/// plus the account it syncs as.
+pub fn rejection(result: &PushResult) -> (String, String) {
+    match &result.outcome {
+        PushOutcome::Rejected { code, message, .. } => (code.clone(), message.clone()),
+        PushOutcome::Applied { .. } => panic!("expected rejected, got {:?}", result.outcome),
+    }
+}
+
+/// One member's device: a local [`Core`] plus the account it syncs as.
 pub struct Client {
     pub core: Core,
     pub token: String,
@@ -195,7 +218,6 @@ impl Client {
         }
     }
 
-    /// Registers a fresh account on `api` and returns a client for it.
     pub async fn register(api: &Api, username: &str) -> Self {
         let token = api.register(username).await;
         Self::new(token, username)
@@ -222,23 +244,16 @@ impl Client {
             .expect("create_vault returns the vault id")
     }
 
-    /// Push the outbox in batches until it is empty
-    /// (the first push also creates the vault, when the server has never seen
-    /// it), then pull until the report says nothing more is waiting. Returns
-    /// every [`SyncReport`] produced along the way.
+    /// Pushes the outbox in batches until it is empty (the first push also
+    /// creates a vault the server has never seen), then pulls until nothing
+    /// more is waiting. Returns every [`SyncReport`] along the way.
     pub async fn sync(&mut self, api: &Api, vault: Uuid) -> Vec<SyncReport> {
         let mut reports = Vec::new();
 
         while self.core.sync_state(vault).unwrap().outbox > 0 {
             let before = self.core.sync_state(vault).unwrap().outbox;
             let request = self.core.push_request(vault, BATCH).unwrap();
-            let res = api
-                .post(
-                    &format!("/vaults/{vault}/push"),
-                    &self.token,
-                    json!(request),
-                )
-                .await;
+            let res = api.push(&self.token, vault, request.commands).await;
             assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
             let response: PushResponse = res.json();
             reports.push(self.core.apply_push_response(vault, &response).unwrap());
@@ -276,10 +291,6 @@ impl Client {
         self.core.integrate_pull(vault, &response).unwrap()
     }
 }
-
-// ---------------------------------------------------------------------------
-// Command builders
-// ---------------------------------------------------------------------------
 
 pub fn at(secs: i64) -> DateTime<FixedOffset> {
     Utc.timestamp_opt(secs, 0)
@@ -353,10 +364,6 @@ pub fn all_txns() -> TransactionFilter {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Projection comparison
-// ---------------------------------------------------------------------------
-
 /// Everything a user can see of a vault, in one comparable value.
 pub type Projection = (
     sparagne_core::VaultSnapshot,
@@ -376,10 +383,6 @@ pub fn projection(core: &Core, vault: Uuid) -> Projection {
     )
 }
 
-// ---------------------------------------------------------------------------
-// Shared setup
-// ---------------------------------------------------------------------------
-
 /// alice registers, creates "Casa" with a wallet holding 100.00 and an income
 /// of 50.00, and syncs; bob registers, is added as an editor and joins by
 /// pulling from zero.
@@ -391,32 +394,24 @@ pub async fn basics(api: &Api) -> (Client, Client, Uuid, Uuid) {
     alice.sync(api, vault).await;
 
     assert_eq!(api.state.core().last_seq(vault).unwrap(), 3);
-    let members: Vec<sparagne_core::sync::MemberEntry> = api
+    let members: Vec<MemberEntry> = api
         .get(&format!("/vaults/{vault}/members"), &alice.token)
         .await
         .json();
     assert_eq!(members.len(), 1);
     assert_eq!(members[0].username, "alice");
-    assert_eq!(members[0].role, sparagne_core::sync::MemberRole::Owner);
+    assert_eq!(members[0].role, MemberRole::Owner);
 
     let mut bob = Client::register(api, "bob").await;
-    let put = api
-        .put(
-            &format!("/vaults/{vault}/members"),
-            &alice.token,
-            json!({ "username": "bob", "role": "editor" }),
-        )
-        .await;
-    assert_eq!(put.status, StatusCode::NO_CONTENT, "{:?}", put.body);
+    api.add_member(&alice.token, vault, "bob", "editor").await;
 
-    let bob_vaults: Vec<sparagne_core::sync::VaultSummary> =
-        api.get("/vaults", &bob.token).await.json();
+    let bob_vaults: Vec<VaultSummary> = api.get("/vaults", &bob.token).await.json();
     let casa = bob_vaults
         .iter()
         .find(|v| v.id == vault)
         .expect("Casa visible to bob");
     assert_eq!(casa.name, "Casa");
-    assert_eq!(casa.role, sparagne_core::sync::MemberRole::Editor);
+    assert_eq!(casa.role, MemberRole::Editor);
 
     let report = bob.join(api, vault).await;
     assert!(report.rebased);

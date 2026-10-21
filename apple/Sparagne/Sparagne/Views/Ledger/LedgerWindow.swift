@@ -39,7 +39,9 @@ struct LedgerWindow: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Ink.sheet)
-            SheetTabBar(store: store) { statusLine }
+            SheetTabBar(store: store) {
+                StatusLine(items: SheetStatus.items(for: store.tab, store: store), savedAt: store.savedAt)
+            }
         }
         .background(Ink.bg)
         .overlay(alignment: .top) {
@@ -160,18 +162,6 @@ struct LedgerWindow: View {
                 Spacer()
             }
             .frame(maxWidth: .infinity)
-        }
-    }
-
-    /// The figures of the sheet on screen, at the right of the tab bar.
-    @ViewBuilder
-    private var statusLine: some View {
-        switch store.tab {
-        case .summary: SummaryStatusLine(store: store)
-        case .ledger: LedgerStatusLine(store: store)
-        case .recurring: RecurringStatusLine(store: store)
-        case .allocation: AllocationStatusLine(store: store)
-        case .setup: SetupStatusLine(store: store)
         }
     }
 }

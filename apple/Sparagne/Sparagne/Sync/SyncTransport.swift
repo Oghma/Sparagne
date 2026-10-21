@@ -1,26 +1,14 @@
 import Foundation
 
-/// One HTTP call, reduced to what the sync protocol needs.
-///
-/// `path` is everything after the server's base URL, query string included
-/// (`/vaults/<id>/pull?since=0&limit=500`). The body is opaque `Data`: the
-/// engine hands over JSON the core wrote and never inspects a command.
+/// One HTTP call: `path` is everything after the base URL; the body is the core's JSON, never inspected.
 nonisolated struct SyncRequest: Sendable, Equatable {
-    var method: String
+    var method = "GET"
     var path: String
     var bearer: String?
     var body: Data?
-
-    init(method: String = "GET", path: String, bearer: String? = nil, body: Data? = nil) {
-        self.method = method
-        self.path = path
-        self.bearer = bearer
-        self.body = body
-    }
 }
 
-/// The status line, the headers and the bytes; the API layer decides what
-/// they mean.
+/// The status, the headers and the bytes; `ServerAPI` decides what they mean.
 nonisolated struct SyncResponse: Sendable, Equatable {
     var status: Int
     var body: Data
@@ -43,25 +31,15 @@ nonisolated struct SyncResponse: Sendable, Equatable {
     }
 }
 
-/// What `ServerAPI` talks to. The tests replace it with a fake server backed
-/// by a second core, so the whole engine runs without a network.
+/// What `ServerAPI` talks to; the tests put a fake server on a second core behind it.
 nonisolated protocol SyncTransport: Sendable {
     func send(_ request: SyncRequest) async throws -> SyncResponse
 }
 
-/// The real transport: `URLSession` against the configured server.
-///
-/// Any transport-level failure (no route to host, timeout, a response that is
-/// not HTTP) becomes `ServerError.offline`, which the engine shows as the
-/// offline status rather than an error.
+/// `URLSession` against the server; any failure below HTTP is `ServerError.offline`.
 nonisolated struct URLSessionTransport: SyncTransport {
     let baseURL: URL
     var timeout: TimeInterval = 20
-
-    init(baseURL: URL, timeout: TimeInterval = 20) {
-        self.baseURL = baseURL
-        self.timeout = timeout
-    }
 
     func send(_ request: SyncRequest) async throws -> SyncResponse {
         var base = baseURL.absoluteString

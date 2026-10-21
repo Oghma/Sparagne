@@ -1,18 +1,9 @@
-//! UniFFI surface: custom scalar mappings, the handle object the app holds and
-//! the free functions that mint envelopes and parse text.
-//!
-//! The domain types are exported as they are, so there are no mirror DTOs: the
-//! derives live on the real `Command`, `Entry`, `TransactionView` and friends.
-//! Only three things are added here.
-//!
-//! 1. **Scalars.** `Uuid`, the two `DateTime` flavours and `NaiveDate` are not
-//!    UniFFI builtins, so they travel as strings. A malformed string surfaces
-//!    as a [`DomainError`] rather than a panic (see [`lift_failed`]).
-//! 2. **[`CoreHandle`].** [`Core::execute`] takes `&mut self`; UniFFI objects
-//!    are shared and only ever hand out `&self`, so the mutability lives behind
-//!    a `Mutex` here instead of changing the core.
-//! 3. **Free functions.** Ids are minted in Rust only: Swift never builds a
-//!    [`CommandEnvelope`] by hand.
+//! UniFFI surface. The domain types carry the derives themselves, so there are
+//! no mirror DTOs; this module adds the scalars that travel as strings (a
+//! malformed one is a [`DomainError`], not a panic: [`lift_failed`]), the
+//! [`CoreHandle`] that keeps the `&mut self` core behind a `Mutex` because
+//! UniFFI objects only hand out `&self`, and the free functions, which mint
+//! every id so that Swift never builds a [`CommandEnvelope`] by hand.
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -22,12 +13,12 @@ use uuid::Uuid;
 use crate::{
     AliasView, AllocationBase, AllocationLine, AllocationPlanView, AllocationPreview,
     AllocationRunView, BucketCategoryTotals, BucketPersonTotals, BucketTargetTotals,
-    CategorySuggestion, CategoryTotals, CategoryView, Command, CommandEnvelope, CommandRecord,
-    Core, Currency, DomainError, FlowBalanceRange, FlowPersonTotals, MergePreview, Money, Page,
-    PendingAllocation, PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView,
-    RecurringView, RejectedCommand, Schedule, StatementDetection, StatementMapping,
-    StatementOptions, StatementPreset, StatementPreview, StatementReport, StatementRowOverride,
-    SyncReport, SyncState, TargetKind, TopExpense, TransactionFilter, TransactionView,
+    CategorySuggestion, CategoryTotals, CategoryView, Command, CommandEnvelope, Core, Currency,
+    DomainError, FlowBalanceRange, FlowPersonTotals, MergePreview, Money, Page, PendingAllocation,
+    PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView, RecurringView,
+    RejectedCommand, Schedule, StatementColumnValue, StatementDetection, StatementFormatGuess,
+    StatementMapping, StatementOptions, StatementPreset, StatementPreview, StatementReport,
+    StatementRowOverride, SyncReport, SyncState, TargetKind, TopExpense, TransactionFilter,
     VaultSnapshot, VaultView,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
     statement,
@@ -215,15 +206,6 @@ impl CoreHandle {
             .list_transactions(vault_id, &filter, to_usize(limit), cursor.as_deref())
     }
 
-    /// One transaction with its legs, voided included.
-    pub fn transaction(
-        &self,
-        vault_id: Uuid,
-        transaction_id: Uuid,
-    ) -> Result<TransactionView, DomainError> {
-        self.lock()?.transaction(vault_id, transaction_id)
-    }
-
     /// Ids of the entities used most recently, for picker ordering.
     pub fn recent_usage(
         &self,
@@ -243,18 +225,6 @@ impl CoreHandle {
         since: UtcDateTime,
     ) -> Result<Vec<Option<CategorySuggestion>>, DomainError> {
         self.lock()?.suggest_categories(vault_id, &notes, since)
-    }
-
-    /// Sums by kind over `[from, to)`. Either bound may be `nil`; both `nil`
-    /// is all time.
-    #[uniffi::method(default(from = None, to = None))]
-    pub fn period_totals(
-        &self,
-        vault_id: Uuid,
-        from: Option<UtcDateTime>,
-        to: Option<UtcDateTime>,
-    ) -> Result<PeriodTotals, DomainError> {
-        self.lock()?.period_totals(vault_id, from, to)
     }
 
     // -- analytics -------------------------------------------------------
@@ -346,6 +316,8 @@ impl CoreHandle {
         self.lock()?.top_expenses(vault_id, from, to, person, limit)
     }
 
+    // -- Recurring and allocation -----------------------------------------
+
     pub fn list_recurring(
         &self,
         vault_id: Uuid,
@@ -415,15 +387,6 @@ impl CoreHandle {
         self.lock()?.allocation_runs(vault_id, limit)
     }
 
-    /// Log entries of a vault with `seq > since_seq`, in order.
-    pub fn commands_since(
-        &self,
-        vault_id: Uuid,
-        since_seq: i64,
-    ) -> Result<Vec<CommandRecord>, DomainError> {
-        self.lock()?.commands_since(vault_id, since_seq)
-    }
-
     // -- Sync ---------------------------------------------------------------
 
     /// Where the vault stands with the server: last known server seq, outbox
@@ -476,7 +439,7 @@ impl CoreHandle {
         limit: u32,
     ) -> Result<String, DomainError> {
         self.lock()?
-            .serve_pull_json(vault_id, since, limit as usize)
+            .serve_pull_json(vault_id, since, to_usize(limit))
     }
 
     /// Rewrites the author of the outbox after a login, and every person or
@@ -523,16 +486,19 @@ impl CoreHandle {
 
     // -- Statement import -------------------------------------------------
 
-    /// What importing a statement would do, row by row. Writes nothing.
+    /// What importing a statement would do, row by row, with the user's
+    /// overrides. Writes nothing.
+    #[uniffi::method(default(overrides = []))]
     pub fn preview_statement(
         &self,
         vault_id: Uuid,
         text: String,
         mapping: StatementMapping,
         options: StatementOptions,
+        overrides: Vec<StatementRowOverride>,
     ) -> Result<StatementPreview, DomainError> {
         self.lock()?
-            .preview_statement(vault_id, &text, &mapping, &options)
+            .preview_statement(vault_id, &text, &mapping, &options, &overrides)
     }
 
     /// Imports a statement, one command per row, with the user's overrides.
@@ -548,6 +514,8 @@ impl CoreHandle {
         self.lock()?
             .import_statement(vault_id, &author, &text, &mapping, &options, &overrides)
     }
+
+    // -- Quick add ----------------------------------------------------------
 
     /// Resolves the wallet, flow and person names of a parsed quick-add line
     /// against the vault and `people` (who the app lets a row be for), and
@@ -592,14 +560,6 @@ pub fn parse_quick_add(input: String, currency: Currency) -> Result<QuickAdd, Qu
     quick_add::parse(&input, currency)
 }
 
-/// `<sign><major>.<minor> <CODE>`, e.g. `-12.50 EUR`. Debug and test output;
-/// the app formats for display with the system formatter.
-#[must_use]
-#[uniffi::export]
-pub fn format_money(minor: i64, currency: Currency) -> String {
-    Money::new(minor).format(currency)
-}
-
 /// Parses a major-unit amount into minor units. No grouping separators.
 #[uniffi::export]
 pub fn parse_money(text: String, currency: Currency) -> Result<i64, DomainError> {
@@ -626,6 +586,36 @@ pub fn statement_presets() -> Vec<StatementPreset> {
 #[uniffi::export]
 pub fn detect_statement(text: String) -> Result<StatementDetection, DomainError> {
     statement::detect(&text)
+}
+
+/// The distinct values of a statement column with how many rows hold each,
+/// most rows first: the accounts or the types of a file, for the mapping.
+#[must_use]
+#[uniffi::export]
+pub fn statement_column_values(
+    text: String,
+    delimiter: String,
+    column: String,
+) -> Vec<StatementColumnValue> {
+    statement::column_values(&text, &delimiter, &column)
+}
+
+/// The date format and decimal mark the values of a statement's date and
+/// amount columns are written in, for a mapping that starts blank.
+#[must_use]
+#[uniffi::export]
+pub fn guess_statement_formats(
+    text: String,
+    delimiter: String,
+    date_column: Option<String>,
+    amount_column: Option<String>,
+) -> StatementFormatGuess {
+    statement::guess_formats(
+        &text,
+        &delimiter,
+        date_column.as_deref(),
+        amount_column.as_deref(),
+    )
 }
 
 /// A statement mapping as JSON, for the app to remember.
@@ -666,7 +656,7 @@ fn to_usize(value: u32) -> usize {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[expect(clippy::unwrap_used, reason = "tests")]
 mod tests {
     use super::*;
     use crate::recurring::Frequency;
@@ -684,7 +674,7 @@ mod tests {
     fn occurrences_preview_is_capped() {
         let from = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
         let all = schedule_occurrences(open_ended_daily(), from, u32::MAX).unwrap();
-        assert_eq!(all.len(), MAX_OCCURRENCES_PREVIEW as usize);
+        assert_eq!(all.len(), to_usize(MAX_OCCURRENCES_PREVIEW));
         let few = schedule_occurrences(open_ended_daily(), from, 3).unwrap();
         assert_eq!(few.len(), 3);
     }

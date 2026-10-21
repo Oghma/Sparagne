@@ -1,7 +1,6 @@
 import Foundation
 
-/// One category a new vault starts with, and the other words that file under
-/// it: `#pizza` lands in Ristoranti without anyone having typed that name.
+/// A category a new vault starts with, and its aliases: `#pizza` lands in Ristoranti.
 struct DefaultCategory: Equatable, Sendable {
     let name: String
     let aliases: [String]
@@ -12,20 +11,11 @@ struct DefaultCategory: Equatable, Sendable {
     }
 }
 
-/// The categories the onboarding sheet gives a new vault, so the first rows
-/// have somewhere to go.
-///
-/// The names are ordinary user data once written: the app sends them as
-/// `CreateCategory` and `AddAlias` commands right after `CreateVault`, and the
-/// core knows nothing of this list. Changing it later changes only the vaults
-/// made afterwards; a replay of an old log still ends with what it had.
-///
-/// Each name is one word, so the quick-add can reach it as `#Name`. The list
-/// leaves out a catch-all (Uncategorized is one already), savings, which are
-/// what the envelopes are for, and refunds: a refund is its own kind of
-/// transaction, filed under the category of the expense it nets off, and an
-/// income category by that name would invite recording it as income instead.
+/// The categories onboarding gives a new vault, sent as ordinary commands right after `CreateVault`.
 enum DefaultCategories {
+    // One word each, so `#Name` reaches it. No catch-all (Uncategorized is one), no savings
+    // (the envelopes are), no refunds (a refund is filed under its expense's category).
+
     /// The list in the language the app's own strings are shown in, so an
     /// Italian window makes a vault with Italian names; English for any
     /// language the app is not translated into.

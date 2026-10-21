@@ -43,14 +43,9 @@ struct LeaveVaultSheet: View {
             do {
                 try await engine.leaveVault(vault.id)
                 dismiss()
-            } catch let error as ServerError {
-                failure = error.summary
-                failureDetail = error.detail
-            } catch let error as DomainError {
-                failure = ErrorMessages.summary(for: error.code)
-                failureDetail = error.message
             } catch {
-                failure = error.localizedDescription
+                failure = ErrorMessages.headline(for: error)
+                failureDetail = ErrorMessages.detail(for: error)
             }
             busy = false
         }

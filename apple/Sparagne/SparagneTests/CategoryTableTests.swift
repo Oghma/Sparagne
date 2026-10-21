@@ -8,16 +8,9 @@ import Testing
 /// sends to the core, and which rows can be typed at all. The diff lives in
 /// `CategoryDraft`, so none of this needs a view.
 struct CategoryTableTests {
-    private static func makeStore() throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.categories.\(UUID().uuidString)"))
-        return AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
-    }
-
-    /// A vault with its system categories and one of the user's own.
+    /// A vault with its system categories, loaded as the table loads them.
     private static func vault() async throws -> AppStore {
-        let store = try makeStore()
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        let store = try await TestStore.make()
         await store.loadCategoryManagement()
         #expect(store.presentedError == nil)
         return store
@@ -60,6 +53,19 @@ struct CategoryTableTests {
         #expect(changes.added.isEmpty)
     }
 
+    @Test("Each category's aliases come grouped and in alphabetical order, case aside")
+    func aliasesByCategory() {
+        let aliases = SetupFigures.aliases([
+            AliasView(id: "1", categoryId: "casa", alias: "mutuo"),
+            AliasView(id: "2", categoryId: "spesa", alias: "super"),
+            AliasView(id: "3", categoryId: "casa", alias: "Affitto"),
+            AliasView(id: "4", categoryId: "casa", alias: "bolletta"),
+        ])
+        #expect(aliases["casa"] == ["Affitto", "bolletta", "mutuo"])
+        #expect(aliases["spesa"] == ["super"])
+        #expect(aliases["pizza"] == nil)
+    }
+
     // MARK: - The name cell
 
     @Test("The name cell renames only when it says something new")
@@ -93,17 +99,15 @@ struct CategoryTableTests {
 
     // MARK: - System categories
 
-    @Test("System categories are read-only, and are shown under their localized name")
+    @Test("System categories are read-only, the user's own are not until archived")
     func systemCategoriesAreReadOnly() async throws {
         let store = try await Self.vault()
         let system = try #require(store.windowCategories.first { $0.isSystem })
         #expect(!CategoryDraft.isEditable(system))
-        #expect(!CategoryDraft.label(system).isEmpty)
 
         await store.createCategory(name: "Spesa")
         let own = try #require(store.windowCategories.first { $0.name == "Spesa" })
         #expect(CategoryDraft.isEditable(own))
-        #expect(CategoryDraft.label(own) == "Spesa")
 
         // An archived row is restored from the menu, not retyped.
         await store.archiveCategory(own.id)

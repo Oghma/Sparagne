@@ -2,10 +2,18 @@ import SwiftUI
 import SparagneCore
 
 /// The review page: every row of the file with what the core would do with
-/// it. A new row can be ticked off (it goes to the core as `skip`) and its
-/// category typed, with the list the ledger's CATEGORY cell offers; a
-/// category typed here may create one, the bank's never does
+/// it, and what the user can change about it before anything is written.
+/// A new row can be ticked off (it goes to the core as `skip`), given
+/// another note, category (with the list the ledger's CATEGORY cell offers)
+/// or envelope; any row the rules decided can be made another kind,
+/// another wallet's transfer among them; and a row that matched a
+/// transaction already in the vault says which, with what becomes of it.
+/// A category typed here may create one, the bank's never does
 /// (`core/src/statement/mod.rs`).
+///
+/// A kind, an envelope or a choice over a match re-runs the preview, since
+/// the core decides what the row then is; a tick, a note or a category is
+/// counted by the model alone (`StatementImportModel.PreviewInput`).
 ///
 /// Ruled like the window's tables (`SetupHeaderRow`, `SetupRow`,
 /// `GridCell`), and pulled out by a cell's padding so the first column
@@ -23,10 +31,20 @@ struct StatementReview: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     let names = NameBook(snapshot: model.store.snapshot)
-                    ForEach(model.preview?.rows ?? [], id: \.line) { row in
-                        StatementReviewRow(model: model, row: row, names: names, completion: completion)
+                    let rows = model.preview?.rows ?? []
+                    let routes = StatementImportModel.pairedRoutes(rows, names: names)
+                    ForEach(rows, id: \.line) { row in
+                        StatementReviewRow(
+                            model: model,
+                            row: row,
+                            names: names,
+                            pairedRoute: routes[row.line],
+                            completion: completion
+                        )
                     }
                 }
+                // What the rows show is about to be planned again or written.
+                .disabled(model.isLocked)
             }
             .scrollBounceBehavior(.basedOnSize)
         }
@@ -42,11 +60,15 @@ struct StatementReview: View {
                 heading("#", spoken: String(localized: "Number"))
             }
             GridCell(width: ReviewColumn.date) { heading(String(localized: "Date")) }
+            if model.mapping.accountColumn != nil {
+                GridCell(width: ReviewColumn.account) { heading(String(localized: "Statement account")) }
+            }
             GridCell { heading(String(localized: "Description")) }
             GridCell(width: ReviewColumn.amount, alignment: .trailing) { heading(String(localized: "Amount")) }
             GridCell(width: ReviewColumn.kind) { heading(String(localized: "Kind")) }
             GridCell(width: ReviewColumn.status) { heading(String(localized: "Status")) }
             GridCell(width: ReviewColumn.category) { heading(String(localized: "Category")) }
+            GridCell(width: ReviewColumn.envelope) { heading(String(localized: "Envelope")) }
         }
     }
 
@@ -59,71 +81,135 @@ struct StatementReview: View {
 }
 
 /// Column widths of the review, as a cell's content gets them (`GridCell`
-/// pads each side); the description takes what is left, about 180 points
-/// of the sheet. Kind and status fit the longest words they show
-/// ("trasferimento", "Needs the other wallet" in the tag's 10 pt).
+/// pads each side); the description takes what is left, about 285 points
+/// of the sheet, 170 beside an account column. Date fits a whole
+/// `2026-09-16`, kind its menu's longest word ("trasferimento verso") and
+/// status the tag's ("Needs the other wallet" in its 10 pt); a longer tag
+/// or account is cut, its whole text on hover.
 private enum ReviewColumn {
     static let check: CGFloat = 14
     static let line: CGFloat = 28
-    static let date: CGFloat = 70
+    static let date: CGFloat = 76
+    /// An export holding several accounts: the row's account, and the
+    /// wallet it goes to when that is not the file's.
+    static let account: CGFloat = 100
     static let amount: CGFloat = 76
-    static let kind: CGFloat = 86
+    static let kind: CGFloat = 118
     static let status: CGFloat = 140
     static let category: CGFloat = 136
+    static let envelope: CGFloat = 102
+
+    /// The columns before the description, padding included: where the
+    /// second line of a flagged row starts.
+    static func lead(accounts: Bool) -> CGFloat {
+        check + line + date + 6 * GridColumn.padding + (accounts ? account + 2 * GridColumn.padding : 0)
+    }
+    /// The second line's menu spans the status and category columns, room
+    /// for "Tieni quella già presente".
+    static let choice = status + category + 2 * GridColumn.padding
+    /// The envelope column, padding included, which the second line leaves
+    /// empty.
+    static let trail = envelope + 2 * GridColumn.padding
 }
 
 /// One previewed row. Rows that will not be imported are drawn in the dim
-/// ink, their outcome tag excepted.
+/// ink, their outcome tag excepted. A row that matched a transaction
+/// already in the vault gets a second, dim line under it: that
+/// transaction, and a menu of what becomes of the row.
 private struct StatementReviewRow: View {
     @Bindable var model: StatementImportModel
     let row: StatementRow
     let names: NameBook
+    /// Where the move this row is half of goes (`pairedRoutes`).
+    let pairedRoute: String?
     let completion: CategoryCompletionModel
 
     @FocusState private var categoryFocused: Bool
+    /// The rule "Make a Rule from This Row…" made, while its popover is open.
+    @State private var ruleIndex: Int?
 
     private var isNew: Bool { row.status == .new }
     private var included: Bool { model.isIncluded(row.line) }
-    /// Imported if the user goes ahead.
-    private var live: Bool { isNew && included }
+    /// The box shows on a new row and on a transfer row standing for an
+    /// entry, which it is the only way to leave out.
+    private var tickable: Bool { StatementImportModel.takesTick(row) }
+    /// Written if the user goes ahead: a new row, or a transfer replacing the
+    /// entry it matched, left ticked.
+    private var live: Bool { included && (isNew || replacing) }
+    private var replacing: Bool { StatementImportModel.replaces(row) }
+    /// What the row is taken for, the user's kind before the preview has
+    /// caught up with it.
+    private var action: StatementAction { model.action(for: row) }
+    /// The transaction already in the vault the row matched, if it is to be
+    /// shown: a flagged row's, or one imported anyway.
+    private var match: TransactionView? { StatementImportModel.isFlagged(row) ? row.existing : nil }
+    /// The file has an account column: the review shows each row's account.
+    private var hasAccounts: Bool { model.mapping.accountColumn != nil }
+    /// Half of a move between two accounts whose other half the file does
+    /// not hold, imported as what its type says.
+    private var unpaired: Bool {
+        row.transferLeg && row.pairedLine == nil && (isNew || StatementImportModel.isFlagged(row))
+    }
 
     var body: some View {
-        SetupRow {
-            GridCell(width: ReviewColumn.check) {
-                if isNew {
-                    IncludeBox(isOn: included) { model.setIncluded($0, line: row.line) }
-                } else {
-                    // An empty cell still holds its width.
-                    Color.clear.frame(height: 1)
-                }
+        VStack(spacing: 0) {
+            // The bar at the left marks a row the last import found planned
+            // otherwise after syncing.
+            SetupRow(editing: model.changedLines.contains(row.line), separator: match == nil && !unpaired) { cells }
+            if let match {
+                matchLine(match)
+            } else if unpaired {
+                hintLine(StatementText.unpairedLeg)
             }
-            GridCell(width: ReviewColumn.line, alignment: .trailing) {
-                Text(verbatim: String(row.line)).foregroundStyle(Ink.text3)
-            }
-            GridCell(width: ReviewColumn.date) { Text(verbatim: date).foregroundStyle(ink) }
-            GridCell {
-                HStack(spacing: 6) {
-                    Text(verbatim: row.payee.isEmpty ? TransactionRow.placeholder : row.payee)
-                        .foregroundStyle(ink)
-                    if let original = row.original {
-                        Text(verbatim: original).foregroundStyle(Ink.text3)
-                    }
-                }
-                .help(row.payee)
-            }
-            GridCell(width: ReviewColumn.amount, alignment: .trailing) {
-                Text(verbatim: LedgerMoney.bare(signedAmount)).foregroundStyle(live ? amountTint : Ink.text3)
-            }
-            GridCell(width: ReviewColumn.kind) {
-                Text(verbatim: StatementText.kind(row.kind)).foregroundStyle(ink)
-            }
-            GridCell(width: ReviewColumn.status) {
-                OutcomeTag(text: statusText, tone: tone)
-                    .help(StatementText.detail(row.status) ?? "")
-            }
-            GridCell(width: ReviewColumn.category) { category }
         }
         .font(Face.row)
+        .contextMenu {
+            Button(String(localized: "Make a Rule from This Row…")) {
+                ruleIndex = model.makeRule(from: row)
+            }
+            .disabled(row.payee.isEmpty)
+        }
+        .popover(
+            isPresented: Binding(get: { ruleIndex != nil }, set: { if !$0 { ruleIndex = nil } }),
+            arrowEdge: .bottom
+        ) {
+            if let ruleIndex {
+                DescriptionRulePopover(model: model, index: ruleIndex) { self.ruleIndex = nil }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var cells: some View {
+        GridCell(width: ReviewColumn.check) {
+            if tickable {
+                IncludeBox(isOn: included) { model.setIncluded($0, line: row.line) }
+            } else {
+                // An empty cell still holds its width.
+                Color.clear.frame(height: 1)
+            }
+        }
+        GridCell(width: ReviewColumn.line, alignment: .trailing) {
+            Text(verbatim: String(row.line)).foregroundStyle(Ink.text3)
+        }
+        GridCell(width: ReviewColumn.date) { Text(verbatim: date).foregroundStyle(ink) }
+        if hasAccounts {
+            GridCell(width: ReviewColumn.account) {
+                Text(verbatim: accountText).foregroundStyle(ink).help(accountText)
+            }
+        }
+        GridCell { description }
+        GridCell(width: ReviewColumn.amount, alignment: .trailing) {
+            Text(verbatim: LedgerMoney.bare(StatementImportModel.signedAmount(row)))
+                .foregroundStyle(live ? amountTint : Ink.text3)
+        }
+        GridCell(width: ReviewColumn.kind) { kind }
+        GridCell(width: ReviewColumn.status) {
+            OutcomeTag(text: statusText, tone: tone)
+                .help(StatementText.detail(row.status) ?? statusText)
+        }
+        GridCell(width: ReviewColumn.category) { category }
+        GridCell(width: ReviewColumn.envelope) { envelope }
     }
 
     private var ink: Color { live ? Ink.text : Ink.text3 }
@@ -133,9 +219,6 @@ private struct StatementReviewRow: View {
         return CoreDate.day(date)
     }
 
-    /// Expenses out, everything else in, as the ledger's totals sign them.
-    private var signedAmount: Int64 { row.kind == .expense ? -row.amount : row.amount }
-
     private var amountTint: Color {
         switch row.kind {
         case .expense: Ink.negative
@@ -144,30 +227,143 @@ private struct StatementReviewRow: View {
         }
     }
 
-    /// A new row the user ticked off reads as the core will count it.
+    /// A row the user ticked off reads as the core will count it, and a row
+    /// replacing the entry it matched as one that will be written.
     private var statusText: String {
-        isNew && !included ? StatementText.skipped("skipped_by_you") : StatementText.status(row.status)
+        if tickable && !included { return StatementText.skipped("skipped_by_you") }
+        if replacing { return String(localized: "To replace") }
+        if case .skipped("transfer_pair", _) = row.status, let other = row.pairedLine {
+            return StatementText.otherHalf(of: other)
+        }
+        return StatementText.status(row.status)
     }
 
+    /// The row's account, and the wallet it goes to when that is not the
+    /// file's: `BBVA` into the file's wallet, `Conto Arancio → Arancio`
+    /// into another, `→ Revolut` into a wallet named as the account.
+    private var accountText: String {
+        let account = row.account ?? TransactionRow.placeholder
+        guard let wallet = row.walletId, wallet != model.walletId, let name = names.wallet(wallet) else {
+            return account
+        }
+        if StatementImportModel.accountKey(name) == StatementImportModel.accountKey(account) {
+            return "\u{2192} \(name)"
+        }
+        return "\(account) \u{2192} \(name)"
+    }
+
+    private var pairedHalf: Bool { StatementImportModel.isPairedHalf(row) }
+
+    /// A replacing row is written, and deletes the entry it matched: its tag
+    /// takes the caution ink rather than the accent of an ordinary write.
     private var tone: OutcomeTag.Tone {
-        switch row.status {
+        if tickable && !included { return .quiet }
+        if replacing { return .warning }
+        return switch row.status {
         case .new: included ? .new : .quiet
-        case .alreadyImported, .skipped: .quiet
+        case .alreadyImported, .possibleDuplicate, .matchedTransfer, .skipped: .quiet
         case .invalid: .invalid
         }
     }
 
-    /// Editable on a new entry, completing as the ledger's CATEGORY cell
-    /// does (`completing`): typing opens the list, ↑↓ move in it, ↩ and ⇥
-    /// pick, esc closes it; the other wallet on a transfer; the bank's
-    /// match, dimmed, on a row that will not be imported.
+    // MARK: Description
+
+    /// The note the row will get, editable on a row that will be imported:
+    /// a description rule's or the bank's text until the user types another.
+    /// The bank's own text is on hover. Emptied, the field shows in the dim
+    /// ink the note the row keeps.
+    @ViewBuilder
+    private var description: some View {
+        HStack(spacing: 6) {
+            if live {
+                let typed = Binding(
+                    get: { model.noteText(for: row) },
+                    set: { model.setNote($0, for: row.line) }
+                )
+                ZStack(alignment: .leading) {
+                    if model.noteText(for: row).isEmpty {
+                        Text(verbatim: row.note.isEmpty ? TransactionRow.placeholder : row.note)
+                            .foregroundStyle(Ink.text3)
+                            .allowsHitTesting(false)
+                    }
+                    TextField(String(localized: "Note"), text: typed, prompt: Text(verbatim: ""))
+                        .textFieldStyle(.plain)
+                        .foregroundStyle(ink)
+                }
+            } else {
+                let note = model.noteText(for: row)
+                Text(verbatim: note.isEmpty ? TransactionRow.placeholder : note)
+                    .foregroundStyle(ink)
+            }
+            if let original = row.original {
+                Text(verbatim: original).foregroundStyle(Ink.text3)
+            }
+        }
+        .help(row.payee)
+    }
+
+    // MARK: Kind
+
+    /// A menu on any row the rules decided: expense, income, refund, a
+    /// transfer either way, or skip. `BySign` reads as the kind it resolved
+    /// to. A row already in the vault or unreadable has nothing to choose.
+    @ViewBuilder
+    private var kind: some View {
+        if StatementImportModel.takesAction(row) {
+            FormPicker(
+                label: String(localized: "Kind"),
+                selection: Binding(
+                    get: { model.kindChoice(for: row) },
+                    set: { model.setAction($0.action(keeping: action), for: row) }
+                ),
+                options: StatementActionChoice.rowChoices,
+                title: StatementText.action,
+                boxed: false,
+                // Half of a move between two accounts reads as the transfer
+                // it makes; another kind of the user's takes it apart.
+                value: pairedHalf ? StatementText.kind(.transferWallet) : StatementText.rowKind(action, resolved: row.kind),
+                tint: ink
+            )
+        } else {
+            Text(verbatim: StatementText.kind(pairedHalf ? .transferWallet : row.kind)).foregroundStyle(ink)
+        }
+    }
+
+    // MARK: Category
+
+    /// The other wallet of a transfer, as a menu; on a new entry the
+    /// category, completing as the ledger's CATEGORY cell does
+    /// (`completing`): typing opens the list, ↑↓ move in it, ↩ and ⇥ pick,
+    /// esc closes it; the row's category, dimmed, on a row that will not be
+    /// imported. A transfer already there names, dimmed, the other wallet of
+    /// the transfer it matched: there is nothing to choose while it stands
+    /// for the row.
     ///
     /// The placeholder of an empty field is drawn here in the dim ink, not
     /// left to the field: the field's own prompt takes the row's text ink
     /// and would read as a category.
     @ViewBuilder
     private var category: some View {
-        if StatementImportModel.takesCategory(row) {
+        if let route = pairedRoute {
+            // Both halves of a move between two accounts say where it went.
+            Text(verbatim: route).foregroundStyle(Ink.text3).help(route)
+        } else if row.status == .matchedTransfer, let existing = row.existing {
+            let other = existing.fromId == model.walletId ? existing.toId : existing.fromId
+            Text(verbatim: "\u{21C4} \(walletName(other))").foregroundStyle(Ink.text3)
+        } else if StatementImportModel.takesAction(row), StatementActionChoice(action).isTransfer {
+            FormPicker(
+                label: String(localized: "Wallet"),
+                selection: Binding(
+                    get: { action.counterWalletId },
+                    set: { model.setAction(action.withCounterWallet($0), for: row) }
+                ),
+                options: [nil] + model.counterWallets.map { Optional($0.id) },
+                title: walletName,
+                boxed: false,
+                value: action.counterWalletId.map { "\u{21C4} \(walletName($0))" } ?? walletName(nil),
+                tint: action.counterWalletId == nil ? Ink.text2 : ink
+            )
+        } else if StatementImportModel.takesCategory(row) {
             let text = model.categoryText(for: row)
             let typed = Binding(
                 get: { model.categoryText(for: row) },
@@ -190,18 +386,189 @@ private struct StatementReviewRow: View {
         } else if row.kind == .transferWallet, let wallet = names.wallet(row.counterWalletId) {
             Text(verbatim: "\u{21C4} \(wallet)").foregroundStyle(Ink.text3)
         } else {
-            Text(verbatim: row.matchedCategory ?? "").foregroundStyle(Ink.text3)
+            Text(verbatim: row.category ?? row.matchedCategory ?? "").foregroundStyle(Ink.text3)
+        }
+    }
+
+    private func walletName(_ id: Uuid?) -> String {
+        guard let id else { return String(localized: "Choose…") }
+        return names.wallet(id) ?? TransactionRow.placeholder
+    }
+
+    // MARK: Envelope
+
+    /// A new entry's envelope, as a menu of the vault's active ones, the
+    /// file's unless the user picks another; dimmed on an entry that will
+    /// not be imported; nothing on a transfer, which moves no envelope.
+    @ViewBuilder
+    private var envelope: some View {
+        if StatementImportModel.takesCategory(row) {
+            FormPicker(
+                label: String(localized: "Envelope"),
+                selection: Binding(
+                    get: { model.flow(for: row) },
+                    set: { if let flow = $0 { model.setFlow(flow, for: row) } }
+                ),
+                options: model.store.flows.map { Optional($0.id) },
+                title: flowName,
+                boxed: false,
+                tint: ink
+            )
+            .disabled(!included)
+        } else if row.kind == .income || row.kind == .expense || row.kind == .refund {
+            Text(verbatim: flowName(model.flow(for: row))).foregroundStyle(Ink.text3)
+        } else {
+            Color.clear.frame(height: 1)
+        }
+    }
+
+    private func flowName(_ id: Uuid?) -> String {
+        names.flow(id) ?? NameBook.unallocatedLabel
+    }
+
+    // MARK: The match
+
+    /// `↳ 2026-09-14 · Bar Centrale · Bar · in Cash` under the description,
+    /// and under the status the menu of what becomes of the row. A transfer
+    /// row standing for an entry, which the line then names by its kind
+    /// (`income in Revolut`), replaces it or is imported beside it; any
+    /// other keeps the transaction already there for it, moves that one
+    /// here (only an entry typed into another wallet), or is imported
+    /// anyway. A row imported by default says why after the match: its
+    /// match is more likely another export's row, or, for a transfer, the
+    /// entry may still be its other side, one choice away from replaced.
+    private func matchLine(_ existing: TransactionView) -> some View {
+        let text = StatementText.existing(existing, names: names, replacing: StatementImportModel.isReplace(row))
+        let chosen = model.matchChoice(for: row) ?? model.defaultChoice(for: row)
+        // Why the row is imported by default, and whether its match was
+        // typed before the start day, on the line under the match.
+        let reasons = [
+            model.matchPredatesStart(row) ? StatementText.typedBeforeStart : nil,
+            model.importsByDefault(row) ? StatementText.importedByDefault : nil,
+            model.mayReplace(row) ? StatementText.mayBeOtherSide : nil,
+            unpaired ? StatementText.unpairedLeg : nil,
+        ].compactMap(\.self)
+        let hint = reasons.isEmpty ? nil : reasons.joined(separator: " \u{00B7} ")
+        return VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                Color.clear.frame(width: ReviewColumn.lead(accounts: hasAccounts), height: 1)
+                GridCell {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.turn.down.right")
+                            .font(.system(size: 9))
+                            .accessibilityHidden(true)
+                        Text(verbatim: text)
+                    }
+                    .foregroundStyle(Ink.text3)
+                    .help(text)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(String(localized: "Already in the vault: \(text)"))
+                    .accessibilityHint(hint ?? "")
+                }
+                GridCell(width: ReviewColumn.choice) {
+                    FormPicker(
+                        label: String(localized: "Matching transaction"),
+                        selection: Binding(
+                            get: { chosen },
+                            set: { model.setMatchChoice($0, for: row) }
+                        ),
+                        options: model.availableChoices(for: row),
+                        title: StatementText.matchChoice,
+                        boxed: false,
+                        tint: chosen == .importAnyway && included ? Ink.accent : Ink.text2
+                    )
+                    // A row ticked off writes and records nothing, whatever
+                    // the choice.
+                    .disabled(!included)
+                    .help(StatementText.matchChoiceDetail(chosen))
+                    .accessibilityHint(StatementText.matchChoiceDetail(chosen))
+                }
+                Color.clear.frame(width: ReviewColumn.trail, height: 1)
+            }
+            .frame(height: 20)
+            // Why the row is imported by default, on a line of its own so
+            // the match above it is never cut for it.
+            if let hint, included {
+                // VoiceOver already hears it as the match's hint.
+                hintRow(hint)
+                    .accessibilityHidden(true)
+                    .frame(height: 16)
+                    .padding(.bottom, 2)
+            }
+        }
+        .font(Face.footnote)
+        .overlay(alignment: .bottom) { Rectangle().fill(Ink.rowLine).frame(height: 1) }
+    }
+
+    /// A quiet line under a row that matched nothing, as the match line's
+    /// hint is drawn: half of a move whose other half the file lacks.
+    private func hintLine(_ hint: String) -> some View {
+        hintRow(hint)
+            .font(Face.footnote)
+            .frame(height: 18)
+            .overlay(alignment: .bottom) { Rectangle().fill(Ink.rowLine).frame(height: 1) }
+    }
+
+    /// `hint` in italic and the dim ink, from the description's column on.
+    private func hintRow(_ hint: String) -> some View {
+        HStack(spacing: 0) {
+            Color.clear.frame(width: ReviewColumn.lead(accounts: hasAccounts), height: 1)
+            GridCell {
+                Text(verbatim: hint)
+                    .italic()
+                    .foregroundStyle(Ink.text3)
+                    .padding(.leading, 14)
+                    .help(hint)
+            }
+            Color.clear.frame(width: ReviewColumn.choice + ReviewColumn.trail + 2 * GridColumn.padding, height: 1)
         }
     }
 }
 
+/// "Make a Rule from This Row…": the rule the model just made from the row
+/// (`StatementImportModel.makeRule`), in the same editor as the mapping
+/// page's rules, with its own CATEGORY list drawn under the field. Every
+/// change re-runs the preview, so the row and the others the rule finds
+/// change under the popover; Remove Rule takes it back.
+private struct DescriptionRulePopover: View {
+    @Bindable var model: StatementImportModel
+    let index: Int
+    let close: () -> Void
+
+    @State private var completion = CategoryCompletionModel()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionLabel(text: String(localized: "Rule for rows like this one"))
+            DescriptionRuleEditor(model: model, index: index, layout: .form, completion: completion)
+            HStack(spacing: 8) {
+                FormDestructiveButton(title: String(localized: "Remove Rule"), small: true) {
+                    model.removeDescriptionRule(at: index)
+                    close()
+                }
+                Spacer(minLength: 8)
+                Button(String(localized: "Done"), action: close)
+                    .buttonStyle(.chrome(.bordered))
+                    .keyboardShortcut(completion.isOpen ? nil : .defaultAction)
+            }
+        }
+        .padding(14)
+        .frame(width: 400)
+        .background(Ink.card)
+        .environment(\.formMetrics, .inspector)
+        .preferredColorScheme(.dark)
+    }
+}
+
 /// What the core will do with a row, as a small rounded tag: soft accent on
-/// a row that will be imported, `raised` and dim on one that will not
-/// (already in the vault, skipped by a rule, its status or the user), soft
-/// negative on one the core cannot read. The ledger's and setup's tags,
-/// so the three tables speak the same way.
+/// a row that will be imported, soft caution on one whose transfer will
+/// delete the entry it replaces, `raised` and dim on one that will not be
+/// written (already in the vault, matched to a transaction there, skipped
+/// by a rule, its status or the user), soft negative on one the core cannot
+/// read. The ledger's and setup's tags, so the three tables speak the same
+/// way; the dim one is cut rather than spilling out of its column.
 private struct OutcomeTag: View {
-    enum Tone { case new, quiet, invalid }
+    enum Tone { case new, warning, quiet, invalid }
 
     let text: String
     let tone: Tone
@@ -209,7 +576,17 @@ private struct OutcomeTag: View {
     var body: some View {
         switch tone {
         case .new: RowTag(text: text, tint: Ink.accent)
-        case .quiet: SetupTag(text: text)
+        case .warning:
+            // Outlined rather than filled, so it never reads as the
+            // accent's "New" beside it.
+            Text(text)
+                .font(Face.ui(10, .semibold))
+                .foregroundStyle(Ink.warning)
+                .lineLimit(1)
+                .padding(.horizontal, 5)
+                .frame(height: 16)
+                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Ink.warning.opacity(0.7), lineWidth: 1))
+        case .quiet: SetupTag(text: text, fixed: false)
         case .invalid: RowTag(text: text, tint: Ink.negative)
         }
     }
@@ -237,7 +614,7 @@ private struct IncludeBox: View {
                 if isOn {
                     Image(systemName: "checkmark")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Color(hex: 0x140A00))
+                        .foregroundStyle(Ink.onAccent)
                 }
             }
             .frame(width: 13, height: 13)
@@ -251,21 +628,69 @@ private struct IncludeBox: View {
 }
 
 /// What the import did: the counts, then every row the core refused, with
-/// its line and the reason in the user's language.
+/// its line and the reason in the user's language. The rows matched to a
+/// transaction already in the vault, the transactions moved and the entries
+/// replaced by their transfers get a figure and a sentence only when there
+/// are any.
+///
+/// The core counts a transfer that replaced an entry as executed and its
+/// row as a possible duplicate; `replaced`, how many the model sent so and
+/// the core did not refuse, takes them out of both and shows them on their
+/// own.
 struct StatementReportView: View {
     let report: StatementReport
+    var replaced = 0
+
+    private var imported: UInt32 { report.executed - min(report.executed, UInt32(replaced)) }
+    private var duplicates: UInt32 { report.possibleDuplicates - min(report.possibleDuplicates, UInt32(replaced)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             FormGroup(String(localized: "Import finished")) {
                 Panel {
                     HStack(alignment: .top, spacing: 0) {
-                        figure(String(localized: "Imported"), report.executed, Ink.positive)
+                        figure(String(localized: "Imported"), imported, Ink.positive)
                         figure(String(localized: "Already imported"), report.deduplicated, Ink.text)
                         figure(String(localized: "Skipped"), report.skipped, Ink.text)
+                        if duplicates > 0 {
+                            figure(String(localized: "Possible duplicates"), duplicates, Ink.text)
+                        }
+                        if report.matchedTransfers > 0 {
+                            figure(String(localized: "Transfers already there"), report.matchedTransfers, Ink.text)
+                        }
+                        if report.moved > 0 {
+                            figure(String(localized: "Moved"), report.moved, Ink.text)
+                        }
+                        if replaced > 0 {
+                            figure(String(localized: "Replaced"), UInt32(replaced), Ink.positive)
+                        }
                         figure(String(localized: "Rounded"), report.rounded, Ink.text)
                         figure(String(localized: "Refused"), UInt32(report.rejected.count), Ink.negative)
                     }
+                }
+                if duplicates > 0 {
+                    FormNote(
+                        String(localized: "\(Int(duplicates)) rows looked like a transaction already in the vault and were not imported."),
+                        indented: false
+                    )
+                }
+                if replaced > 0 {
+                    FormNote(
+                        String(localized: "\(replaced) transactions were deleted and replaced by the transfers they stood for."),
+                        indented: false
+                    )
+                }
+                if report.moved > 0 {
+                    FormNote(
+                        String(localized: "\(Int(report.moved)) transactions entered by hand were moved into the statement’s wallet."),
+                        indented: false
+                    )
+                }
+                if report.matchedTransfers > 0 {
+                    FormNote(
+                        String(localized: "\(Int(report.matchedTransfers)) transfers were already there from the other wallet’s side and were not imported again."),
+                        indented: false
+                    )
                 }
                 if report.rounded > 0 {
                     FormNote(String(localized: "Rounded rows had more decimals than the currency keeps."), indented: false)
@@ -305,12 +730,16 @@ struct StatementReportView: View {
     private static let lineColumn: CGFloat = 70
 
     /// A figure of the report, as the summary's cards show one: the label
-    /// over the number, the number dimmed at zero.
+    /// over the number, the number dimmed at zero. With all eight figures
+    /// out, a long label ("Trasferimenti già presenti") shrinks a little
+    /// rather than wrap and push its number below the others.
     private func figure(_ label: String, _ value: UInt32, _ tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label)
                 .font(Face.label)
                 .foregroundStyle(Ink.text3)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
             Text(verbatim: String(value))
                 .font(Face.display)
                 .foregroundStyle(value == 0 ? Ink.text3 : tint)

@@ -9,6 +9,7 @@ use sparagne_core::{
     TransactionView,
 };
 use uuid::Uuid;
+pub mod sync;
 
 pub const T0: i64 = 1_700_000_000;
 
@@ -47,6 +48,52 @@ pub fn setup() -> Fx {
         wallet,
         unallocated,
     }
+}
+
+impl Fx {
+    /// Executes `cmd` on the fixture's vault as alice; panics on refusal.
+    pub fn run(&mut self, cmd: Command) -> Receipt {
+        run(&mut self.core, self.vault, cmd)
+    }
+
+    /// Executes `cmd` on the fixture's vault as alice, refusal and all.
+    pub fn try_run(&mut self, cmd: Command) -> Result<Receipt, DomainError> {
+        try_run(&mut self.core, self.vault, cmd)
+    }
+
+    /// Executes `cmd` and returns the id of what it created.
+    pub fn id(&mut self, cmd: Command) -> Uuid {
+        self.run(cmd).result_id.unwrap()
+    }
+}
+
+/// A fresh core with `vault`'s log replayed into it, checked to agree with
+/// `core` on the snapshot, every transaction, the categories and the log
+/// itself.
+pub fn replayed(core: &Core, vault: Uuid) -> Core {
+    let log = core.commands_since(vault, 0).unwrap();
+    let mut fresh = Core::open_in_memory().unwrap();
+    sparagne_core::replay(&log, &mut fresh).unwrap();
+    assert_eq!(
+        fresh.snapshot(vault).unwrap(),
+        core.snapshot(vault).unwrap()
+    );
+    assert_eq!(list(&fresh, vault, &all()), list(core, vault, &all()));
+    assert_eq!(
+        fresh.categories(vault, true).unwrap(),
+        core.categories(vault, true).unwrap()
+    );
+    let key = |r: &sparagne_core::CommandRecord| (r.seq, r.envelope.id, r.result_id);
+    assert_eq!(
+        fresh
+            .commands_since(vault, 0)
+            .unwrap()
+            .iter()
+            .map(key)
+            .collect::<Vec<_>>(),
+        log.iter().map(key).collect::<Vec<_>>()
+    );
+    fresh
 }
 
 pub fn run(core: &mut Core, vault: Uuid, cmd: Command) -> Receipt {
@@ -232,4 +279,71 @@ pub fn envelope(fx: &mut Fx, name: &str, mode: FlowMode) -> Uuid {
     run(&mut fx.core, fx.vault, flow_cmd(name, mode, false, 0))
         .result_id
         .unwrap()
+}
+
+impl Fx {
+    /// [`Fx::run`] as `author`.
+    pub fn run_as(&mut self, author: &str, cmd: Command) -> Receipt {
+        self.core
+            .execute(CommandEnvelope::new(self.vault, author, cmd))
+            .unwrap()
+    }
+}
+
+pub fn utc(secs: i64) -> DateTime<Utc> {
+    Utc.timestamp_opt(secs, 0).unwrap()
+}
+
+pub fn create_vault(core: &mut Core, author: &str, name: &str) -> Uuid {
+    core.execute(CommandEnvelope::create_vault(author, name, Currency::Eur))
+        .unwrap()
+        .result_id
+        .unwrap()
+}
+
+/// Id of the category named `name`, archived included.
+pub fn category_id(fx: &Fx, name: &str) -> Uuid {
+    fx.core
+        .categories(fx.vault, true)
+        .unwrap()
+        .into_iter()
+        .find(|c| c.name == name)
+        .unwrap_or_else(|| panic!("no category named '{name}'"))
+        .id
+}
+
+/// A 25.00 Rent expense on the 1st of every month from 2026-01-01, on the
+/// only wallet.
+pub fn rent_cmd() -> Command {
+    Command::CreateRecurring {
+        transaction_kind: sparagne_core::TransactionKind::Expense,
+        amount: 2_500,
+        wallet_id: None,
+        flow_id: None,
+        category: Some("Rent".to_string()),
+        note: None,
+        schedule: monthly_from(1, day(2026, 1, 1)),
+        owner: None,
+    }
+}
+
+/// A database path in the temp directory, removed with its WAL files on drop.
+pub struct TempDb(std::path::PathBuf);
+
+impl TempDb {
+    pub fn new(label: &str) -> Self {
+        Self(std::env::temp_dir().join(format!("sparagne-{label}-{}.sqlite", Uuid::now_v7())))
+    }
+
+    pub fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+impl Drop for TempDb {
+    fn drop(&mut self) {
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{suffix}", self.0.display()));
+        }
+    }
 }

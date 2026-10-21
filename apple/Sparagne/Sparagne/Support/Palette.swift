@@ -24,6 +24,11 @@ enum Ink {
     static let line2 = Color(hex: 0x2B2B32)
     /// The hairline between table rows, fainter than `line`.
     static let rowLine = Color(hex: 0x18181C)
+    /// The faint track under a category's share bar.
+    static let track = Color(hex: 0x222228)
+    /// A panel floating over the window, ⌘K's and the sync popover's: a
+    /// step above the cards.
+    static let float = Color(hex: 0x17171B)
     static let text = Color(hex: 0xEDEDEF)
     /// Secondary text: values that support a heading.
     static let text2 = Color(hex: 0xA3A3AB)
@@ -32,6 +37,8 @@ enum Ink {
     /// Amber: interaction, selection, focus and active states only. Expenses
     /// and errors have their own colors, so amber never means "bad".
     static let accent = Color(hex: 0xFF9A2E)
+    /// Text and marks on the amber: white on it fails contrast.
+    static let onAccent = Color(hex: 0x140A00)
     static let positive = Color(hex: 0x3ECF8E)
     /// Errors and negative balances. Deliberately not the accent.
     static let negative = Color(hex: 0xFF6B6B)
@@ -134,23 +141,36 @@ struct Panel<Content: View>: View {
     }
 }
 
-/// A horizontal proportional bar, as under each category in the summary.
+/// A horizontal proportional bar, as under each category in the summary:
+/// `tint` filling `fraction` of a `track` as wide as it is offered.
+/// `rounded` draws both as capsules, as the category, fund and cap bars
+/// are; a fixed length is a `.frame(width:)` around it.
 struct MeterBar: View {
     /// 0...1; values outside are clamped.
     let fraction: Double
     var tint: Color = Ink.chartExpense
+    var track: Color = Ink.line
     var height: CGFloat = 3
+    var rounded = false
 
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
-                Rectangle().fill(Ink.line)
-                Rectangle()
-                    .fill(tint)
+                piece(track)
+                piece(tint)
                     .frame(width: geometry.size.width * min(max(fraction, 0), 1))
             }
         }
         .frame(height: height)
+    }
+
+    @ViewBuilder
+    private func piece(_ color: Color) -> some View {
+        if rounded {
+            Capsule().fill(color)
+        } else {
+            Rectangle().fill(color)
+        }
     }
 }
 

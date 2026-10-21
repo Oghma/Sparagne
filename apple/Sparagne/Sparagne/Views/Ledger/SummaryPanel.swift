@@ -68,12 +68,6 @@ enum PanelMoney {
     static func bare(_ minorUnits: Int64) -> String {
         LedgerMoney.bare(minorUnits).replacingOccurrences(of: "-", with: "\u{2212}")
     }
-
-    /// The month as a sentence writes it: "ottobre" in Italian, "October" in
-    /// English.
-    static func monthName(_ month: MonthKey, locale: Locale = .autoupdatingCurrent) -> String {
-        month.start().formatted(Date.FormatStyle(locale: locale).month(.wide))
-    }
 }
 
 // MARK: - Savings
@@ -89,14 +83,9 @@ struct SavingsHero: View {
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: 0) {
-                CardHeader(title: String(localized: "Savings in \(PanelMoney.monthName(summary.month))")) {
+                CardHeader(title: String(localized: "Savings in \(SummaryText.monthName(summary.month.month))")) {
                     if isCurrent {
-                        Text(String(localized: "in progress"))
-                            .font(Face.ui(10, .semibold))
-                            .foregroundStyle(Ink.text3)
-                            .padding(.horizontal, 5)
-                            .frame(height: 16)
-                            .background(Ink.raised, in: RoundedRectangle(cornerRadius: 4))
+                        SetupTag(text: String(localized: "in progress"))
                     }
                 }
 
@@ -112,7 +101,7 @@ struct SavingsHero: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(
                     AccessibilityText.figure(
-                        String(localized: "Savings in \(PanelMoney.monthName(summary.month))"),
+                        String(localized: "Savings in \(SummaryText.monthName(summary.month.month))"),
                         amount: LedgerMoney.amount(summary.savings)
                     )
                 )
@@ -157,7 +146,7 @@ struct SavingsHero: View {
         let change = summary.savings - summary.previousSavings
         let arrow = change > 0 ? "\u{25B2}" : change < 0 ? "\u{25BC}" : "="
         let tint = change > 0 ? Ink.positive : change < 0 ? Ink.negative : Ink.text2
-        let month = PanelMoney.monthName(summary.month.adding(months: -1))
+        let month = SummaryText.monthName(summary.month.adding(months: -1).month)
         let amount = "\(arrow) \(LedgerMoney.bare(abs(change)))"
         return (String(localized: "\(amount) vs \(month)"), tint)
     }
@@ -165,7 +154,7 @@ struct SavingsHero: View {
     private func figure(_ label: String, _ amount: Int64) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(label)
-                .font(Face.ui(11))
+                .font(Face.footnote)
                 .foregroundStyle(Ink.text3)
             Text(PanelMoney.bare(amount))
                 .font(Face.ui(13, .medium))
@@ -211,7 +200,7 @@ struct PersonMatrix: View {
                             Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
                             ForEach(people, id: \.self) { person in
                                 Text(person)
-                                    .font(Face.ui(11))
+                                    .font(Face.footnote)
                                     .foregroundStyle(Ink.text3)
                                     .lineLimit(1)
                                     .frame(width: columnWidth, alignment: .trailing)
@@ -329,7 +318,7 @@ struct CategoryBreakdown: View {
     }
 
     private func line(_ category: CategoryTotals) -> some View {
-        let name = Self.name(category)
+        let name = SummaryText.categoryName(category.name, isSystem: category.isSystem)
         let share = LedgerMoney.percent(category.netExpense, of: spent, decimals: 0)
         return VStack(spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -341,12 +330,12 @@ struct CategoryBreakdown: View {
                 Text(PanelMoney.bare(category.netExpense))
                     .foregroundStyle(Ink.text)
                 Text(share ?? "")
-                    .font(Face.ui(11))
+                    .font(Face.footnote)
                     .foregroundStyle(Ink.text3)
                     .frame(width: 32, alignment: .trailing)
             }
             .font(Face.row)
-            CategoryBar(fraction: fraction(category))
+            MeterBar(fraction: fraction(category), track: Ink.track, height: 4, rounded: true)
         }
         // The bar is decoration for the same figure, not a second one: one
         // stop, "Casa: €480,00".
@@ -359,35 +348,6 @@ struct CategoryBreakdown: View {
         let heaviest = shown.first?.netExpense ?? 0
         guard heaviest > 0 else { return 0 }
         return Double(category.netExpense) / Double(heaviest)
-    }
-
-    /// The core names its two system categories in English; the UI says them
-    /// in the user's language, as the grid does (`TransactionRow`).
-    static func name(_ category: CategoryTotals) -> String {
-        guard category.isSystem else { return category.name }
-        switch category.name.lowercased() {
-        case "uncategorized": return String(localized: "Uncategorized")
-        case "opening": return String(localized: "Opening")
-        default: return category.name
-        }
-    }
-}
-
-/// A 4-point bar with rounded ends on a faint track (`.bar`).
-private struct CategoryBar: View {
-    let fraction: Double
-
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color(hex: 0x222228))
-                Capsule()
-                    .fill(Ink.chartExpense)
-                    .frame(width: geometry.size.width * min(max(fraction, 0), 1))
-            }
-        }
-        .frame(height: 4)
-        .accessibilityHidden(true)
     }
 }
 

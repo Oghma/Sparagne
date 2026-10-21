@@ -1,19 +1,10 @@
-//! Engine: allocation plan commands and the allocation queries.
-//!
-//! A plan is decided one period at a time, like a recurring template: a
-//! period is pending while it has no row in `allocation_runs`. Unlike a
-//! template, periods are decided in order, so a period older than the latest
-//! decided one is never due again, and deciding the most recent due period
-//! closes the older ones still waiting.
-//!
-//! The plan holds rules, the commands carry amounts: `ExecuteAllocation`
-//! brings the moves [`resolve`] worked out when the user confirmed them, and
-//! this module only checks them, so a replay never depends on what the plan
-//! says by then. Checks on the plan itself are kept to what a replay can never
-//! trip over: an envelope archived or uncapped since is the resolver's
-//! business, not a refusal. The transfers of an executed period carry the
-//! run's `command_id`, which is how `ReopenAllocation` and
-//! [`Core::allocation_runs`] find them again.
+//! Allocation plan commands and queries. Like a recurring template, a plan is
+//! decided one period at a time (a row in `allocation_runs`), but in order:
+//! see [`Core::pending_allocation`]. The plan holds rules, the commands carry
+//! amounts: `ExecuteAllocation` brings the moves [`resolve`] worked out when
+//! the user confirmed them, so a replay never depends on what the plan says by
+//! then, and its transfers carry the run's `command_id`, which is how
+//! `ReopenAllocation` and [`Core::allocation_runs`] find them again.
 
 use std::collections::HashSet;
 
@@ -21,6 +12,7 @@ use chrono::{DateTime, FixedOffset, NaiveDate};
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use uuid::Uuid;
 
+use super::{check_amount, encode_schedule, invalid, parse_date};
 use crate::{
     CommandEnvelope, Core, DomainError, Result, TransactionKind, TransactionView,
     allocation::{
@@ -43,11 +35,6 @@ pub(super) struct ExecuteSpec<'a> {
     pub note: Option<&'a str>,
 }
 
-// ---------------------------------------------------------------------------
-// Commands
-// ---------------------------------------------------------------------------
-
-/// Returns the plan id (the command id).
 pub(super) fn create_plan(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
@@ -212,10 +199,6 @@ pub(super) fn reopen_allocation(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Queries
-// ---------------------------------------------------------------------------
-
 impl Core {
     /// The vault's plan, if it has one.
     pub fn allocation_plan(&self, vault_id: Uuid) -> Result<Option<AllocationPlanView>> {
@@ -287,7 +270,7 @@ impl Core {
             Some(run) => Some(command_seq(&self.conn, run.command_id)?),
             None => None,
         };
-        let unallocated = unallocated_flow(&self.conn, vault_id)?;
+        let unallocated = super::unallocated_id(&self.conn, vault_id)?;
         let mut stmt = self.conn.prepare(&base_sql())?;
         let mut incomes: Vec<TransactionView> = stmt
             .query_map(
@@ -301,7 +284,6 @@ impl Core {
                 transaction_view,
             )?
             .collect::<std::result::Result<_, _>>()?;
-        // The date where the income was recorded, in its own offset.
         let start = plan.schedule.start_date;
         incomes.retain(|income| income.occurred_at.date_naive() >= start);
         load_legs(&self.conn, &mut incomes)?;
@@ -382,10 +364,6 @@ impl Core {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 /// The base's incomes as [`transaction_view`] reads them, oldest first: `?1`
 /// the vault, `?2` its Unallocated, `?3` the income kind, `?4` the opening
 /// category's key and `?5` the log seq they must come after (NULL before any
@@ -430,21 +408,9 @@ const LIVE_MOVES_SQL: &str = "
     WHERE vault_id = ?1 AND command_id = ?2 AND voided_at IS NULL
     ORDER BY rowid";
 
-/// The id of the vault's Unallocated.
-fn unallocated_flow(conn: &Connection, vault_id: Uuid) -> Result<Uuid> {
-    conn.query_row(
-        "SELECT id FROM flows WHERE vault_id = ?1 AND system_kind = 'unallocated'",
-        params![vault_id],
-        |r| r.get(0),
-    )
-    .optional()?
-    .ok_or_else(|| DomainError::InvalidFlow("missing Unallocated flow".to_string()))
-}
-
 const PLAN_COLUMNS: &str = "id, schedule, lines, enabled, created_by";
 
-/// Raw `PLAN_COLUMNS` row; turned into an [`AllocationPlanView`] by
-/// [`to_view`].
+/// Raw [`PLAN_COLUMNS`] row, before [`to_view`].
 type PlanRow = (Uuid, String, String, bool, String);
 
 fn plan_row(r: &Row<'_>) -> rusqlite::Result<PlanRow> {
@@ -462,7 +428,6 @@ fn to_view(row: PlanRow) -> Result<AllocationPlanView> {
     })
 }
 
-/// The plan of a vault, if it has one.
 fn vault_plan(conn: &Connection, vault_id: Uuid) -> Result<Option<AllocationPlanView>> {
     conn.query_row(
         &format!("SELECT {PLAN_COLUMNS} FROM allocation_plans WHERE vault_id = ?1"),
@@ -516,7 +481,6 @@ fn due_plan(
     Ok(plan)
 }
 
-/// One row of `allocation_runs`.
 struct RunRow {
     period_date: NaiveDate,
     outcome: RunOutcome,
@@ -553,7 +517,6 @@ fn decided_runs(conn: &Connection, plan_id: Uuid) -> Result<Vec<RunRow>> {
     Ok(runs)
 }
 
-/// Where a command sits in its vault's log.
 fn command_seq(conn: &Connection, command_id: Uuid) -> Result<i64> {
     conn.query_row(
         "SELECT seq FROM commands WHERE id = ?1",
@@ -616,9 +579,7 @@ fn check_lines(tx: &Transaction<'_>, vault_id: Uuid, lines: &[AllocationLine]) -
 
 fn check_rule(rule: AllocationRule) -> Result<()> {
     match rule {
-        AllocationRule::Fixed { amount } if amount <= 0 => {
-            Err(DomainError::InvalidAmount("amount must be > 0".to_string()))
-        }
+        AllocationRule::Fixed { amount } => check_amount(amount),
         AllocationRule::Percent { basis_points }
             if !(1..=FULL_PERCENT_BP).contains(&basis_points) =>
         {
@@ -626,7 +587,7 @@ fn check_rule(rule: AllocationRule) -> Result<()> {
                 "percent must be 1..={FULL_PERCENT_BP} basis points"
             )))
         }
-        _ => Ok(()),
+        AllocationRule::Percent { .. } | AllocationRule::FillToCap => Ok(()),
     }
 }
 
@@ -646,14 +607,11 @@ fn check_moves(moves: &[AllocationMove], unallocated: Uuid) -> Result<()> {
         if !seen.insert(movement.flow_id) {
             return Err(invalid("an envelope appears twice in the moves"));
         }
-        if movement.amount <= 0 {
-            return Err(DomainError::InvalidAmount("amount must be > 0".to_string()));
-        }
+        check_amount(movement.amount)?;
     }
     Ok(())
 }
 
-/// The moves add up to no more than the total they were worked out on.
 fn check_total(total: i64, moves: &[AllocationMove]) -> Result<()> {
     if total < 0 {
         return Err(DomainError::InvalidAmount("total must be >= 0".to_string()));
@@ -674,23 +632,9 @@ fn move_id(command_id: Uuid, flow_id: Uuid) -> Uuid {
     super::derived_id(command_id, &format!("allocation:{flow_id}"))
 }
 
-fn encode_schedule(schedule: &Schedule) -> Result<String> {
-    Ok(serde_json::to_string(schedule)?)
-}
-
 /// The same JSON as the command's `lines`.
 fn encode_lines(lines: &[AllocationLine]) -> Result<String> {
     Ok(serde_json::to_string(lines)?)
-}
-
-fn parse_date(value: &str) -> Result<NaiveDate> {
-    value
-        .parse()
-        .map_err(|_| DomainError::Storage(format!("invalid period date '{value}'")))
-}
-
-fn invalid(message: &str) -> DomainError {
-    DomainError::InvalidCommand(message.to_string())
 }
 
 #[cfg(test)]
