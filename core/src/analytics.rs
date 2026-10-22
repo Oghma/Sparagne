@@ -83,10 +83,10 @@ pub struct BucketPersonTotals {
     /// Opening balances of wallets (system category `Opening`), signed: an
     /// income counts positive, an expense negative.
     pub opening: i64,
-    /// `max(expense - refund, 0)` on envelopes without a cap.
-    pub cash_expense: i64,
-    /// `max(expense - refund, 0)` on envelopes with a cap (the "fondi").
-    pub fund_expense: i64,
+    /// `max(expense - refund, 0)` on every envelope, Cash among them: each one
+    /// is money kept for something, and what it pays out is spent all the
+    /// same.
+    pub expense: i64,
 }
 
 /// One category's net expense inside one bucket: the months x categories
@@ -131,10 +131,8 @@ pub struct BucketTargetTotals {
 struct YearSlot {
     income: i64,
     opening: i64,
-    cash_expense: i64,
-    cash_refund: i64,
-    fund_expense: i64,
-    fund_refund: i64,
+    expense: i64,
+    refund: i64,
 }
 
 /// What [`BucketCategoryTotals`] is folded from; the bucket nets at the end.
@@ -460,9 +458,8 @@ impl Core {
     /// The app passes the epoch followed by thirteen month starts, so bucket 0
     /// is everything that happened before the year. Amounts come from the flow
     /// legs, like [`Core::flow_person_totals`], so a future split lands on both
-    /// envelopes, and each leg is cash or fund depending on whether its
-    /// envelope has a cap. Only pairs with movement come back; the app fills
-    /// the gaps with zeros.
+    /// envelopes. Only pairs with movement come back; the app fills the gaps
+    /// with zeros.
     pub fn year_breakdown(
         &self,
         vault_id: Uuid,
@@ -477,10 +474,9 @@ impl Core {
                 let (where_sql, args) = scope(vault_id, from, to, None);
                 let sql = format!(
                     "SELECT t.occurred_at, t.person, t.kind, c.is_system, c.name_norm,
-                            f.cap IS NULL, ABS(l.amount)
+                            ABS(l.amount)
                      FROM transactions t
                      JOIN legs l ON l.transaction_id = t.id AND l.target_kind = 'flow'
-                     JOIN flows f ON f.id = l.target_id
                      JOIN categories c ON c.id = t.category_id
                      {where_sql}"
                 );
@@ -491,8 +487,7 @@ impl Core {
                 let kind: String = row.get(2)?;
                 let is_system: bool = row.get(3)?;
                 let category: String = row.get(4)?;
-                let uncapped: bool = row.get(5)?;
-                let amount: i64 = row.get(6)?;
+                let amount: i64 = row.get(5)?;
 
                 let slot = &mut find_or_push(
                     &mut slots,
@@ -509,12 +504,10 @@ impl Core {
                     }
                     return Ok(());
                 }
-                match (kind.as_str(), uncapped) {
-                    ("income", _) => slot.income += amount,
-                    ("expense", true) => slot.cash_expense += amount,
-                    ("expense", false) => slot.fund_expense += amount,
-                    ("refund", true) => slot.cash_refund += amount,
-                    ("refund", false) => slot.fund_refund += amount,
+                match kind.as_str() {
+                    "income" => slot.income += amount,
+                    "expense" => slot.expense += amount,
+                    "refund" => slot.refund += amount,
                     _ => {}
                 }
                 Ok(())
@@ -528,8 +521,7 @@ impl Core {
                 person,
                 income: slot.income,
                 opening: slot.opening,
-                cash_expense: (slot.cash_expense - slot.cash_refund).max(0),
-                fund_expense: (slot.fund_expense - slot.fund_refund).max(0),
+                expense: (slot.expense - slot.refund).max(0),
             })
             .collect();
         out.sort_by(|a, b| {
@@ -630,11 +622,10 @@ impl Core {
     /// the end of bucket `m`, at `bounds[m + 1]`, as long as `bounds[0]` is
     /// before the vault's first row (the app passes the epoch). On the
     /// envelope side, the deltas of every envelope in a bucket sum to
-    /// `income + opening - cash_expense - fund_expense` of
-    /// [`Core::year_breakdown`] for that bucket, summed over its persons:
-    /// transfers between envelopes net to zero. That holds while nobody's
-    /// refunds in the bucket exceed their expenses on the same group of
-    /// envelopes, where `year_breakdown` floors at zero.
+    /// `income + opening - expense` of [`Core::year_breakdown`] for that
+    /// bucket, summed over its persons: transfers between envelopes net to
+    /// zero. That holds while nobody's refunds in the bucket exceed their
+    /// expenses, where `year_breakdown` floors at zero.
     pub fn balance_breakdown(
         &self,
         vault_id: Uuid,

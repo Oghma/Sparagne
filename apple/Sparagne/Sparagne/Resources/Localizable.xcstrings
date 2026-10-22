@@ -2465,6 +2465,22 @@
         }
       }
     },
+    "Caps": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caps"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tetti"
+          }
+        }
+      }
+    },
     "Card transactions": {
       "localizations": {
         "en": {
@@ -4845,38 +4861,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Da / A"
-          }
-        }
-      }
-    },
-    "Fund expenses": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fund expenses"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Uscite fondi"
-          }
-        }
-      }
-    },
-    "Funds": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Funds"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fondi"
           }
         }
       }
@@ -11105,18 +11089,18 @@
         }
       }
     },
-    "Total = savings + cash fund − fund expenses": {
+    "Total = savings + cash fund": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Total = savings + cash fund − fund expenses"
+            "value": "Total = savings + cash fund"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Totale = risparmio + fondo cassa − uscite dei fondi"
+            "value": "Totale = risparmio + fondo cassa"
           }
         }
       }
@@ -12157,22 +12141,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importo zero"
-          }
-        }
-      }
-    },
-    "a cap makes it a fund in the summary": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "a cap makes it a fund in the summary"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "un tetto la rende un fondo nel riepilogo"
           }
         }
       }
@@ -13301,6 +13269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "il"
+          }
+        }
+      }
+    },
+    "one for each purpose: the house, the holidays, …": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "one for each purpose: the house, the holidays, …"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "una per ogni scopo: la casa, le vacanze, …"
           }
         }
       }

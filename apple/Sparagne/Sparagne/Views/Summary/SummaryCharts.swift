@@ -39,7 +39,7 @@ private struct CashFlowCard: View {
     private var series: [Series] {
         [
             Series(id: "income", name: String(localized: "Income"), tint: Ink.chartIncome, value: { $0.income }),
-            Series(id: "expenses", name: String(localized: "Expenses"), tint: Ink.chartExpense, value: { $0.cashExpense }),
+            Series(id: "expenses", name: String(localized: "Expenses"), tint: Ink.chartExpense, value: { $0.expense }),
             Series(id: "savings", name: String(localized: "Savings"), tint: Ink.chartSavings, value: { $0.savings }),
         ]
     }

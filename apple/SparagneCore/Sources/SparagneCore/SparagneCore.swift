@@ -2334,13 +2334,11 @@ public struct BucketPersonTotals: Equatable, Hashable, Codable {
      */
     public var opening: Int64
     /**
-     * `max(expense - refund, 0)` on envelopes without a cap.
+     * `max(expense - refund, 0)` on every envelope, Cash among them: each one
+     * is money kept for something, and what it pays out is spent all the
+     * same.
      */
-    public var cashExpense: Int64
-    /**
-     * `max(expense - refund, 0)` on envelopes with a cap (the "fondi").
-     */
-    public var fundExpense: Int64
+    public var expense: Int64
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -2359,17 +2357,15 @@ public struct BucketPersonTotals: Equatable, Hashable, Codable {
          * income counts positive, an expense negative.
          */opening: Int64, 
         /**
-         * `max(expense - refund, 0)` on envelopes without a cap.
-         */cashExpense: Int64, 
-        /**
-         * `max(expense - refund, 0)` on envelopes with a cap (the "fondi").
-         */fundExpense: Int64) {
+         * `max(expense - refund, 0)` on every envelope, Cash among them: each one
+         * is money kept for something, and what it pays out is spent all the
+         * same.
+         */expense: Int64) {
         self.bucket = bucket
         self.person = person
         self.income = income
         self.opening = opening
-        self.cashExpense = cashExpense
-        self.fundExpense = fundExpense
+        self.expense = expense
     }
 
     
@@ -2392,8 +2388,7 @@ public struct FfiConverterTypeBucketPersonTotals: FfiConverterRustBuffer {
                 person: FfiConverterString.read(from: &buf), 
                 income: FfiConverterInt64.read(from: &buf), 
                 opening: FfiConverterInt64.read(from: &buf), 
-                cashExpense: FfiConverterInt64.read(from: &buf), 
-                fundExpense: FfiConverterInt64.read(from: &buf)
+                expense: FfiConverterInt64.read(from: &buf)
         )
     }
 
@@ -2402,8 +2397,7 @@ public struct FfiConverterTypeBucketPersonTotals: FfiConverterRustBuffer {
         FfiConverterString.write(value.person, into: &buf)
         FfiConverterInt64.write(value.income, into: &buf)
         FfiConverterInt64.write(value.opening, into: &buf)
-        FfiConverterInt64.write(value.cashExpense, into: &buf)
-        FfiConverterInt64.write(value.fundExpense, into: &buf)
+        FfiConverterInt64.write(value.expense, into: &buf)
     }
 }
 

@@ -180,9 +180,9 @@ fn every_aggregation_follows_the_person_not_who_recorded_the_row() {
 
     let year = core.year_breakdown(vault, vec![from, to]).unwrap();
     let elisa_year = year.iter().find(|r| r.person == "elisa").unwrap();
-    assert_eq!(elisa_year.cash_expense, 70);
+    assert_eq!(elisa_year.expense, 70);
     let matteo_year = year.iter().find(|r| r.person == "matteo").unwrap();
-    assert_eq!(matteo_year.cash_expense, 90 + 25);
+    assert_eq!(matteo_year.expense, 90 + 25);
 
     let grid = core
         .category_bucket_totals(vault, vec![from, to], elisa())
@@ -365,11 +365,11 @@ fn year_breakdown_puts_wallet_openings_in_their_own_column() {
         .unwrap();
     assert_eq!(alice.opening, 150);
     assert_eq!(alice.income, 900);
-    assert_eq!((alice.cash_expense, alice.fund_expense), (0, 0));
+    assert_eq!(alice.expense, 0);
 }
 
 #[test]
-fn year_breakdown_splits_expenses_by_cap_and_nets_refunds_inside_the_group() {
+fn year_breakdown_sums_every_envelope_and_nets_refunds() {
     let s = year_fx();
     let w = Some(s.fx.wallet);
     let rows = s.fx.core.year_breakdown(s.fx.vault, year_bounds()).unwrap();
@@ -378,13 +378,13 @@ fn year_breakdown_splits_expenses_by_cap_and_nets_refunds_inside_the_group() {
         .find(|r| r.bucket == 1 && r.person == "elisa")
         .unwrap();
 
-    // 100 on the unlimited envelope, 80 - 30 on the capped one: the refund
-    // nets off the fondo only.
-    assert_eq!(elisa.cash_expense, 100);
-    assert_eq!(elisa.fund_expense, 50);
+    // 100 on the unlimited envelope and 80 - 30 on the capped one: a cap
+    // does not take an expense out of the month.
+    assert_eq!(elisa.expense, 100 + 50);
     assert_eq!((elisa.income, elisa.opening), (0, 0));
 
-    // A refund alone floors its group at zero instead of going negative.
+    // A refund larger than the month's expenses floors it at zero instead of
+    // going negative.
     let mut s = s;
     let cmd = Command::Refund(entry(70, w, Some(s.fondo), Some("Casa"), T0 + 12 * DAY));
     s.fx.run_as("elisa", cmd);
@@ -393,7 +393,7 @@ fn year_breakdown_splits_expenses_by_cap_and_nets_refunds_inside_the_group() {
         .iter()
         .find(|r| r.bucket == 2 && r.person == "elisa")
         .unwrap();
-    assert_eq!((late.cash_expense, late.fund_expense), (40, 0));
+    assert_eq!(late.expense, 0);
 }
 
 #[test]
@@ -731,7 +731,7 @@ fn balance_breakdown_of_the_envelopes_matches_the_year_breakdown_bucket_by_bucke
     let earned = |bucket: u32| -> i64 {
         year.iter()
             .filter(|r| r.bucket == bucket)
-            .map(|r| r.income + r.opening - r.cash_expense - r.fund_expense)
+            .map(|r| r.income + r.opening - r.expense)
             .sum()
     };
     // 700 - 50; 1.000 + 250 - 150 - (80 - 20); the transfer nets to zero.

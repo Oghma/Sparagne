@@ -15,30 +15,27 @@ struct YearModelTests {
         _ person: String,
         income: Int64 = 0,
         opening: Int64 = 0,
-        cashExpense: Int64 = 0,
-        fundExpense: Int64 = 0
+        expense: Int64 = 0
     ) -> BucketPersonTotals {
         BucketPersonTotals(
             bucket: bucket,
             person: person,
             income: income,
             opening: opening,
-            cashExpense: cashExpense,
-            fundExpense: fundExpense
+            expense: expense
         )
     }
 
     /// Two people with money already in the vault before January, a January
-    /// that earns and spends on both kinds of envelope, a wallet opened in
-    /// March and a quiet September.
+    /// that earns and spends, a wallet opened in March and a quiet September.
     private static var household: [BucketPersonTotals] {
         [
-            row(0, "matteo", income: 100_000, opening: 500_000, cashExpense: 40_000, fundExpense: 10_000),
+            row(0, "matteo", income: 100_000, opening: 500_000, expense: 50_000),
             row(0, "elisa", opening: 200_000),
-            row(1, "elisa", income: 200_000, cashExpense: 50_000),
-            row(1, "matteo", income: 300_000, cashExpense: 95_000, fundExpense: 20_000),
-            row(3, "matteo", income: 300_000, opening: 100_000, cashExpense: 100_000),
-            row(9, "elisa", income: 100_000, fundExpense: 5_000),
+            row(1, "elisa", income: 200_000, expense: 50_000),
+            row(1, "matteo", income: 300_000, expense: 115_000),
+            row(3, "matteo", income: 300_000, opening: 100_000, expense: 100_000),
+            row(9, "elisa", income: 100_000, expense: 5_000),
         ]
     }
 
@@ -122,20 +119,19 @@ struct YearModelTests {
         #expect(march.total == 1_385_000)
     }
 
-    @Test("USCITE and USCITE FONDI split by the envelope's cap, and RISPARMIO ignores the funds")
-    func cashAndFundExpensesAreSeparate() {
+    @Test("RISPARMIO is income less USCITE, everybody's expenses together")
+    func savingsAreIncomeLessExpenses() {
         let january = Self.build(rows: Self.household).months[0]
         #expect(january.income == 500_000)
-        #expect(january.cashExpense == 145_000)
-        #expect(january.fundExpense == 20_000)
-        #expect(january.savings == 355_000)
+        #expect(january.expense == 165_000)
+        #expect(january.savings == 335_000)
     }
 
-    @Test("TOTALE is RISPARMIO plus FONDO CASSA less USCITE FONDI, every month")
+    @Test("TOTALE is FONDO CASSA plus RISPARMIO, every month")
     func totalIdentityHolds() {
         let year = Self.build(rows: Self.household)
         for month in year.months {
-            #expect(month.total == month.savings + month.carried - month.fundExpense)
+            #expect(month.total == month.carried + month.savings)
         }
     }
 
@@ -156,7 +152,7 @@ struct YearModelTests {
         let year = Self.build(
             rows: [
                 Self.row(0, "matteo", opening: 100_000),
-                Self.row(1, "matteo", income: 50_000, cashExpense: 20_000),
+                Self.row(1, "matteo", income: 50_000, expense: 20_000),
             ]
         )
         #expect(year.people == ["matteo"])
@@ -266,10 +262,9 @@ struct YearModelTests {
         #expect(opening.total == 750_000)
         #expect(opening.totalByPerson == [200_000, 550_000])
         #expect(opening.income == nil)
-        #expect(opening.cashExpense == nil)
+        #expect(opening.expense == nil)
         #expect(opening.savings == nil)
         #expect(opening.carried == nil)
-        #expect(opening.fundExpense == nil)
         #expect(!opening.isFuture)
         #expect(!opening.isCurrent)
     }
@@ -294,11 +289,11 @@ struct YearModelTests {
     @Test("TOTALE goes up or down against the line before, January against the opening fund")
     func trend() {
         // February spends 1.000 with nothing coming in: down. March earns.
-        let rows = Self.build(rows: Self.household + [Self.row(2, "matteo", cashExpense: 100_000)]).tableRows
+        let rows = Self.build(rows: Self.household + [Self.row(2, "matteo", expense: 100_000)]).tableRows
         #expect(rows[1].trendUp)
         #expect(!rows[2].trendUp)
         #expect(rows[3].trendUp)
-        let january = Self.build(rows: [Self.row(0, "elisa", opening: 100_000), Self.row(1, "elisa", cashExpense: 1)])
+        let january = Self.build(rows: [Self.row(0, "elisa", opening: 100_000), Self.row(1, "elisa", expense: 1)])
         #expect(!january.tableRows[1].trendUp)
     }
 
@@ -314,9 +309,8 @@ struct YearModelTests {
         let year = Self.build(rows: Self.household)
         let sum = year.tableRows[13]
         #expect(sum.income == 900_000)
-        #expect(sum.cashExpense == 245_000)
-        #expect(sum.savings == 655_000)
-        #expect(sum.fundExpense == 25_000)
+        #expect(sum.expense == 270_000)
+        #expect(sum.savings == 630_000)
         #expect(sum.carried == nil)
         #expect(sum.total == 1_480_000)
         #expect(sum.totalByPerson == year.months[8].totalByPerson)
@@ -344,25 +338,24 @@ struct YearModelTests {
         #expect(kpis.savingsDelta == -17_994)
     }
 
-    @Test("The cards are the table's rows: expenses are USCITE, fund expenses apart")
+    @Test("The cards are the table's rows: expenses are USCITE")
     func cardsAreTheRows() throws {
-        // August: 920,00 spent from a fund, 300,00 from the cash envelopes.
         let august = MonthKey(year: 2026, month: 8)
         let year = Self.build(
             rows: [
-                Self.row(7, "matteo", income: 400_000, cashExpense: 250_000),
-                Self.row(8, "matteo", income: 500_000, cashExpense: 30_000, fundExpense: 92_000),
+                Self.row(7, "matteo", income: 400_000, expense: 250_000),
+                Self.row(8, "matteo", income: 500_000, expense: 122_000),
             ],
             upTo: august
         )
         let kpis = try #require(year.kpis)
         let row = try #require(year.tableRows.first { $0.kind == .month(august) })
         #expect(kpis.income == row.income)
-        #expect(kpis.expenses == row.cashExpense)
+        #expect(kpis.expenses == row.expense)
         #expect(kpis.savings == row.savings)
-        #expect(kpis.expenses == 30_000)
+        #expect(kpis.expenses == 122_000)
         #expect(kpis.previous == .init(income: 400_000, expenses: 250_000))
-        #expect(kpis.savingsDelta == Int64(320_000))
+        #expect(kpis.savingsDelta == Int64(228_000))
         // The year to date counts the same way.
         #expect(kpis.yearSavings == year.yearSavings)
         #expect(kpis.yearRate == Double(year.yearSavings) / Double(year.yearIncome))
@@ -371,7 +364,7 @@ struct YearModelTests {
     @Test("January has no month before it to compare with")
     func januaryHasNoPrevious() throws {
         let year = Self.build(
-            rows: [Self.row(0, "matteo", opening: 100_000), Self.row(1, "matteo", income: 50_000, cashExpense: 20_000)],
+            rows: [Self.row(0, "matteo", opening: 100_000), Self.row(1, "matteo", income: 50_000, expense: 20_000)],
             upTo: MonthKey(year: 2026, month: 1)
         )
         let kpis = try #require(year.kpis)
@@ -423,8 +416,7 @@ struct YearModelTests {
         #expect(year.initial == 200_000)
         // January is elisa's alone: matteo's 3.000,00 are not there.
         #expect(year.months[0].income == 200_000)
-        #expect(year.months[0].cashExpense == 50_000)
-        #expect(year.months[0].fundExpense == 0)
+        #expect(year.months[0].expense == 50_000)
         #expect(year.months[0].total == 350_000)
         #expect(year.months[0].totalByPerson == [350_000])
         // March was matteo's, opening included: nothing moves for elisa.
@@ -446,19 +438,18 @@ struct YearModelTests {
 
     @Test("Each person's figures add up to the month's, every month")
     func byPersonSumsToTheMonth() {
-        let year = Self.build(rows: Self.household + [Self.row(5, "elisa", income: 1_000, cashExpense: 70_000)])
+        let year = Self.build(rows: Self.household + [Self.row(5, "elisa", income: 1_000, expense: 70_000)])
         for month in year.months {
             #expect(month.byPerson.count == year.people.count)
             #expect(month.byPerson.reduce(0) { $0 + $1.income } == month.income)
-            #expect(month.byPerson.reduce(0) { $0 + $1.cashExpense } == month.cashExpense)
-            #expect(month.byPerson.reduce(0) { $0 + $1.fundExpense } == month.fundExpense)
+            #expect(month.byPerson.reduce(0) { $0 + $1.expense } == month.expense)
             #expect(month.byPerson.reduce(0) { $0 + $1.total } == month.total)
         }
         // January: elisa, then matteo.
         #expect(
             year.months[0].byPerson == [
-                PersonMonth(income: 200_000, cashExpense: 50_000, fundExpense: 0, total: 350_000),
-                PersonMonth(income: 300_000, cashExpense: 95_000, fundExpense: 20_000, total: 735_000),
+                PersonMonth(income: 200_000, expense: 50_000, total: 350_000),
+                PersonMonth(income: 300_000, expense: 115_000, total: 735_000),
             ]
         )
     }
@@ -467,11 +458,11 @@ struct YearModelTests {
 
     @Test("TASSO is savings over income, absent without income and negative when the month spent more")
     func monthRate() {
-        let year = Self.build(rows: Self.household + [Self.row(4, "matteo", income: 100_000, cashExpense: 150_000)])
-        #expect(year.months[0].rate == 355_000.0 / 500_000.0)
+        let year = Self.build(rows: Self.household + [Self.row(4, "matteo", income: 100_000, expense: 150_000)])
+        #expect(year.months[0].rate == 335_000.0 / 500_000.0)
         // February has no rows, and a month with expenses only has no rate.
         #expect(year.months[1].rate == nil)
-        #expect(Self.build(rows: [Self.row(1, "matteo", cashExpense: 1)]).months[0].rate == nil)
+        #expect(Self.build(rows: [Self.row(1, "matteo", expense: 1)]).months[0].rate == nil)
         #expect(year.months[3].rate == -0.5)
         // The table prints the month's own.
         #expect(year.tableRows[4].rate == -0.5)
@@ -511,9 +502,9 @@ struct YearModelTests {
     private static var threeMonths: [BucketPersonTotals] {
         [
             row(0, "matteo", opening: 100_000),
-            row(1, "matteo", income: 300_000, cashExpense: 100_000),
-            row(2, "matteo", income: 300_000, cashExpense: 200_000),
-            row(3, "matteo", income: 300_000, cashExpense: 120_001, fundExpense: 30_000),
+            row(1, "matteo", income: 300_000, expense: 100_000),
+            row(2, "matteo", income: 300_000, expense: 200_000),
+            row(3, "matteo", income: 300_000, expense: 150_001),
             row(4, "matteo", income: 50_000),
         ]
     }
@@ -529,8 +520,7 @@ struct YearModelTests {
         #expect(projection.monthlyGrowth == 149_999)
         // April is not over: nine months still to come, April included.
         #expect(projection.yearEnd == 549_999 + 149_999 * 9)
-        #expect(projection.averageSavings == 159_999)
-        #expect(projection.averageExpense == 140_000)
+        #expect(projection.averageExpense == 150_000)
     }
 
     @Test("A wallet opened in a finished month raises TOTALE, not the pace")
@@ -548,7 +538,7 @@ struct YearModelTests {
         // pace is January's savings alone.
         let february = MonthKey(year: 2026, month: 2)
         let opened = Self.build(
-            rows: [Self.row(1, "matteo", income: 200_000, opening: 1_200_000, cashExpense: 150_000)],
+            rows: [Self.row(1, "matteo", income: 200_000, opening: 1_200_000, expense: 150_000)],
             upTo: february,
             today: february
         )
@@ -562,14 +552,13 @@ struct YearModelTests {
         let april = MonthKey(year: 2026, month: 4)
         let rows = [
             Self.row(0, "matteo", opening: 1_000),
-            Self.row(1, "matteo", cashExpense: 4),
-            Self.row(2, "matteo", cashExpense: 3),
-            Self.row(3, "matteo", cashExpense: 3),
+            Self.row(1, "matteo", expense: 4),
+            Self.row(2, "matteo", expense: 3),
+            Self.row(3, "matteo", expense: 3),
         ]
         let projection = try #require(Self.build(rows: rows, upTo: april, today: april).projection)
         #expect(projection.monthlyGrowth == -3)
         #expect(projection.yearEnd == 990 - 3 * 9)
-        #expect(projection.averageSavings == -3)
     }
 
     @Test("No projection for a live January, for a month gone by, or when nobody said what today is")
@@ -588,21 +577,21 @@ struct YearModelTests {
         let year = Self.build(rows: Self.household)
         #expect(
             year.personFigures == [
-                PersonYear(person: "elisa", income: 300_000, expenses: 50_000, growth: 245_000),
-                PersonYear(person: "matteo", income: 600_000, expenses: 195_000, growth: 485_000),
+                PersonYear(person: "elisa", income: 300_000, expenses: 55_000, growth: 245_000),
+                PersonYear(person: "matteo", income: 600_000, expenses: 215_000, growth: 485_000),
             ]
         )
         for (index, figures) in year.personFigures.enumerated() {
             #expect(figures.growth == year.closingByPerson[index] - year.initialByPerson[index])
         }
         #expect(year.personFigures.reduce(0) { $0 + $1.growth } == year.growth)
-        #expect(year.personFigures.reduce(0) { $0 + $1.expenses } == year.yearCashExpense)
-        #expect(year.personFigures[0].rate == 250_000.0 / 300_000.0)
+        #expect(year.personFigures.reduce(0) { $0 + $1.expenses } == year.yearExpense)
+        #expect(year.personFigures[0].rate == 245_000.0 / 300_000.0)
     }
 
     @Test("A person who earned nothing has no rate")
     func personWithoutIncome() {
-        let year = Self.build(rows: [Self.row(0, "elisa", opening: 1_000), Self.row(1, "elisa", cashExpense: 500)])
+        let year = Self.build(rows: [Self.row(0, "elisa", opening: 1_000), Self.row(1, "elisa", expense: 500)])
         #expect(year.personFigures == [PersonYear(person: "elisa", income: 0, expenses: 500, growth: -500)])
         #expect(year.personFigures[0].rate == nil)
     }

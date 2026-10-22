@@ -106,7 +106,7 @@ private struct KPICard: View {
     }
 }
 
-// MARK: - Funds
+// MARK: - Caps
 
 /// One card per capped envelope. Nothing is drawn for
 /// a vault without caps.
@@ -116,7 +116,7 @@ struct FundCards: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                SectionLabel(text: String(localized: "Funds"), tint: Ink.text2)
+                SectionLabel(text: String(localized: "Caps"), tint: Ink.text2)
                 Text(String(localized: "envelopes with a cap"))
                     .font(Face.label)
                     .foregroundStyle(Ink.text3)

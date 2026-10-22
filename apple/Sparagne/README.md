@@ -20,7 +20,7 @@ which is the only thing that talks to `CoreHandle`).
 | `Sparagne/Views/Chrome/` | The window's own chrome: the 44 pt `TopBar` (vault selector, month stepper, search, due pill, Add, `SyncPill`), the `SheetTabBar` along the bottom with each tab's `StatusLine` |
 | `Sparagne/Views/Ledger/` | The Mastro tab: `LedgerWindow` (top bar, sheet, tab bar), `FilterBar`, the `LedgerGrid` ruled sheet, `LedgerRow` (with the pending recurring rows), `SelectionBar`, `SummaryPanel`, the command palette |
 | `Sparagne/Views/QuickAdd/` | The ⌘K panel: the parsed line as chips, and the command palette after `>` |
-| `Sparagne/Views/Summary/` | The Riepilogo tab: the to-do strip, KPI cards, fund bars, the month-by-month table, the people and envelopes cards, two charts, the category list, the heaviest expenses and the months × categories grid |
+| `Sparagne/Views/Summary/` | The Riepilogo tab: the to-do strip, KPI cards, cap bars, the month-by-month table, the people and envelopes cards, two charts, the category list, the heaviest expenses and the months × categories grid |
 | `Sparagne/Views/Recurring/` | The Ricorrenze tab: to confirm, next 30 days, templates table and inspector |
 | `Sparagne/Views/Setup/` | The Setup tab (⌘4, ⌘⇧C): vault card, wallets, envelopes and categories as editable tables, the merge sheet |
 | `Sparagne/Model/YearModel.swift` | `YearSummary.build`, the arithmetic behind the Riepilogo; beside it in `Model/` `SummaryCategories`, `CategoryHeat`, `EnvelopeYear`, `FixedCosts` and `SummaryTodo` |

@@ -23,7 +23,7 @@ struct EnvelopeTable: View {
     @FocusState private var focus: EnvelopeCell?
 
     var body: some View {
-        SetupCard(title: String(localized: "Envelopes"), hint: String(localized: "a cap makes it a fund in the summary")) {
+        SetupCard(title: String(localized: "Envelopes"), hint: String(localized: "one for each purpose: the house, the holidays, …")) {
             SetupTableBody {
                 header
                 ForEach(store.flows.filter { matchesFilter($0.name) }, id: \.id) { flow in
