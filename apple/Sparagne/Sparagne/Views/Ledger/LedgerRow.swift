@@ -238,7 +238,22 @@ struct RowButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(Face.label)
+            .rowButtonChrome(tone)
+            .opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
+
+extension View {
+    /// `RowButtonStyle`'s look, for a menu drawn as one of its buttons: a
+    /// plain menu (`plainMenu`) draws only its label, so the label carries it.
+    func rowButtonChrome(_ tone: RowButtonStyle.Tone = .neutral) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 5)
+        let border: Color = switch tone {
+        case .ghost: .clear
+        case .accent: Ink.accent.opacity(0.4)
+        case .neutral: Ink.line2
+        }
+        return font(Face.label)
             .foregroundStyle(tone == .accent ? Ink.accent : Ink.text2)
             .lineLimit(1)
             .fixedSize()
@@ -247,17 +262,6 @@ struct RowButtonStyle: ButtonStyle {
             .background(tone == .ghost ? Color.clear : Ink.card, in: shape)
             .overlay(shape.strokeBorder(border, lineWidth: 1))
             .contentShape(shape)
-            .opacity(configuration.isPressed ? 0.7 : 1)
-    }
-
-    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 5) }
-
-    private var border: Color {
-        switch tone {
-        case .ghost: .clear
-        case .accent: Ink.accent.opacity(0.4)
-        case .neutral: Ink.line2
-        }
     }
 }
 
@@ -407,6 +411,8 @@ struct LedgerRowView: View {
     /// shows: the row is under the pointer and may be deleted alone
     /// (`LedgerGrid.trashAction`).
     var onDelete: (() -> Void)?
+    /// The editor has the row's "Da → A" popover open (`LedgerEditor.endsRowId`).
+    var showsEnds = false
 
     private var columns: LedgerColumnWidths { store.ledgerColumns }
 
@@ -471,17 +477,21 @@ struct LedgerRowView: View {
     }
 
     /// A transfer's envelopes are its two ends, as its wallets are
-    /// (`walletCell`): the cell can be selected, never typed into.
+    /// (`walletCell`), so the cell is never a field. Between envelopes it is
+    /// the cell of the route (`route`).
     private var envelopeCell: some View {
         cell(.flow, width: columns[.flow], editable: !row.isTransfer) {
             EnvelopeSelectCell(placeholder: row.envelopeDisplay, store: store, choices: envelopes, key: key(.flow), edited: edited)
         } shown: {
-            text(row.envelopeColumn, Ink.text2)
+            route(.flow) { text(row.envelopeColumn, Ink.text2) }
         }
+        .transferEndsPopover(for: row, store: store, editor: edited.editor, isPresented: endsAnchor == .flow && showsEnds)
     }
 
+    /// The core takes no category on a transfer, as it takes no person:
+    /// the cell can be selected, never typed into.
     private var categoryCell: some View {
-        cell(.category, width: columns[.category]) {
+        cell(.category, width: columns[.category], editable: !row.isTransfer) {
             CategoryCell(placeholder: "", store: store, completion: completion, key: key(.category), edited: edited)
         } shown: {
             text(row.category, categoryTint)
@@ -506,16 +516,49 @@ struct LedgerRowView: View {
                 }
             }
         }
+        .transferEndsPopover(for: row, store: store, editor: edited.editor, isPresented: endsAnchor == .note && showsEnds)
     }
 
     /// A transfer's wallets are its two ends, not a field: `UpdateTransaction`
-    /// moves them with `from_id`/`to_id`, which the grid does not edit, so the
-    /// cell can be selected, never typed into.
+    /// moves them with `from_id` and `to_id` together, so the cell is never
+    /// typed into. Between wallets it is the cell of the route (`route`).
     private var walletCell: some View {
         cell(.wallet, width: columns[.wallet], editable: !row.isTransfer) {
             CellField(field: .wallet, key: key(.wallet), edited: edited)
         } shown: {
-            text(row.walletDisplay, Ink.text2)
+            route(.wallet) { text(row.walletDisplay, Ink.text2) }
+        }
+        .transferEndsPopover(for: row, store: store, editor: edited.editor, isPresented: endsAnchor == .wallet && showsEnds)
+    }
+
+    /// The cell that writes a transfer's route, ENVELOPE between envelopes
+    /// and WALLET between wallets: ↩ or a double click on it opens the
+    /// "Da → A" popover rather than a field (`LedgerEditor.edit`). `nil` for
+    /// an entry.
+    private var routeField: RowField? { LedgerCursor.routeField(of: row.kind) }
+
+    /// Where the popover hangs: from the route's cell, or while WALLET is
+    /// hidden from DESCRIZIONE, whose tag writes the route too.
+    private var endsAnchor: RowField? {
+        routeField == .wallet && !showsWallet ? .note : routeField
+    }
+
+    /// The route's cell with the cursor on it: the mark of a select after
+    /// it, as an ENVELOPE cell has while typed into, since ↩ opens a choice
+    /// here too. Only where the ends can be changed.
+    @ViewBuilder
+    private func route<Content: View>(_ field: RowField, @ViewBuilder _ content: () -> Content) -> some View {
+        if field == routeField, isSelected(field), store.canWrite, !row.voided {
+            HStack(spacing: 4) {
+                content()
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(Ink.text3)
+                    .accessibilityHidden(true)
+            }
+        } else {
+            content()
         }
     }
 

@@ -115,18 +115,36 @@ struct LedgerCursor {
     /// into one that cannot is a beep.
     ///
     /// Nothing can be typed into a vault only read, nor into a deleted row.
-    /// On a transfer, ENVELOPE, WALLET and PERSONA are its two ends and its
-    /// author, so only DATA, CATEGORIA, DESCRIZIONE and IMPORTO can.
+    /// On a transfer only DATA, DESCRIZIONE and IMPORTO can, and the cell
+    /// that shows its route opens its two ends instead (`opensEnds`). The
+    /// core takes no category and no person on a transfer.
     func isEditable(_ cell: CellFocus) -> Bool {
         guard canWrite, fields.contains(cell.field) else { return false }
         // The new line: every cell it shows.
         guard let id = cell.row else { return true }
         guard let row = rows.first(where: { $0.id == id }), !row.voided else { return false }
         guard row.isTransfer else { return true }
-        return Self.transferFields.contains(cell.field)
+        return Self.transferFields.contains(cell.field) || cell.field == Self.routeField(of: row.kind)
     }
 
-    /// What can be typed into on a transfer: everything but its two ends and
-    /// its author, which is what its open row has always allowed.
-    private static let transferFields: Set<RowField> = [.date, .category, .note, .amount]
+    /// Whether ↩ or a double click on `cell` opens the "Da → A" popover of
+    /// its transfer: the route cell of a live one, which is never typed into.
+    func opensEnds(_ cell: CellFocus) -> Bool {
+        guard isEditable(cell), let id = cell.row, let row = rows.first(where: { $0.id == id }) else { return false }
+        return cell.field == Self.routeField(of: row.kind)
+    }
+
+    /// The cell of the column a transfer's ends belong to: ENVELOPE for one
+    /// between envelopes, WALLET for one between wallets, which opens only
+    /// while that column is shown. `nil` for an entry.
+    static func routeField(of kind: TransactionKind) -> RowField? {
+        switch kind {
+        case .transferFlow: .flow
+        case .transferWallet: .wallet
+        case .income, .expense, .refund: nil
+        }
+    }
+
+    /// What can be typed into on a transfer besides its route.
+    private static let transferFields: Set<RowField> = [.date, .note, .amount]
 }

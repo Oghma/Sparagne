@@ -106,7 +106,10 @@ struct RecurringTab: View {
                         seed = draft
                         picked = .new
                     }
-                ) { _ in }
+                ) { copy in
+                    // A kind change: its copy takes the archived template's place.
+                    if let copy { picked = .template(copy) }
+                }
                 .id(RecurringSelection.template(id))
             }
         case .new:

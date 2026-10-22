@@ -157,13 +157,27 @@ struct LedgerCursorTests {
         #expect(shown.isEditable(Self.cell(nil, .wallet)))
     }
 
-    @Test("A transfer's DATA, CATEGORIA, DESCRIZIONE and IMPORTO can be typed into, its two ends and its author not")
+    @Test("A transfer's DATA, DESCRIZIONE and IMPORTO can be typed into and its route opens its two ends; CATEGORIA, the other column and its author cannot")
     func transferCells() {
-        for kind in [TransactionKind.transferWallet, .transferFlow] {
+        let cases: [(kind: TransactionKind, route: RowField, editable: [RowField])] = [
+            (.transferWallet, .wallet, [.date, .note, .wallet, .amount]),
+            (.transferFlow, .flow, [.date, .flow, .note, .amount]),
+        ]
+        for (kind, route, editable) in cases {
             let cursor = LedgerCursor(rows: [TestRow.make("t", kind: kind)], canWrite: true, showsWallet: true)
-            let editable = cursor.fields.filter { cursor.isEditable(Self.cell("t", $0)) }
-            #expect(editable == [.date, .category, .note, .amount])
+            #expect(cursor.fields.filter { cursor.isEditable(Self.cell("t", $0)) } == editable)
+            #expect(cursor.fields.filter { cursor.opensEnds(Self.cell("t", $0)) } == [route])
+            #expect(LedgerCursor.routeField(of: kind) == route)
         }
+        // A wallet transfer's route is in a column only shown on request.
+        let hidden = LedgerCursor(rows: [TestRow.make("t", kind: .transferWallet)], canWrite: true, showsWallet: false)
+        #expect(hidden.fields.filter { hidden.isEditable(Self.cell("t", $0)) } == [.date, .note, .amount])
+        #expect(!hidden.fields.contains { hidden.opensEnds(Self.cell("t", $0)) })
+        // An entry's cells, the new line's and a deleted transfer's route open no ends.
+        let entry = LedgerCursor(rows: [TestRow.make("e"), TestRow.make("v", kind: .transferFlow, voided: true)], canWrite: true, showsWallet: true)
+        #expect(!entry.fields.contains { entry.opensEnds(Self.cell("e", $0)) || entry.opensEnds(Self.cell(nil, $0)) })
+        #expect(!entry.opensEnds(Self.cell("v", .flow)))
+        #expect(LedgerCursor.routeField(of: .expense) == nil)
     }
 
     @Test("Nothing can be typed into a deleted row, a vault only read, nor a row no longer on screen")

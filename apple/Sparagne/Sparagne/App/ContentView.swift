@@ -119,6 +119,17 @@ struct MainWindow: View {
                 }
             }
             .animation(.default, value: store.allocationUndo)
+            // A kind change that took rows to the other list, last in line:
+            // its Mostra can wait, and ⌘Z needs no toast.
+            .overlay(alignment: .bottom) {
+                if store.pendingUndo == nil, store.allocationUndo?.vaultId != store.currentVault?.id,
+                   let notice = store.kindMoveNotice, notice.vaultId == store.currentVault?.id {
+                    KindMoveToast(notice: notice, store: store)
+                        .padding(.bottom, 48)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.default, value: store.kindMoveNotice)
             .onChange(of: store.needsOnboarding) { _, needed in
                 if needed { sheet = .vault }
             }

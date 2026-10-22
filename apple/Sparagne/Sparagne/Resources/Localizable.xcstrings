@@ -937,6 +937,86 @@
         }
       }
     },
+    "%lld rows moved to Expenses": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Moved to Expenses"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rows moved to Expenses"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Spostata in Uscite"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld righe spostate in Uscite"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld rows moved to Income": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Moved to Income"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rows moved to Income"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Spostata in Entrate"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld righe spostate in Entrate"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld rows selected": {
       "localizations": {
         "en": {
@@ -1329,6 +1409,22 @@
         }
       }
     },
+    "A deleted row cannot change kind": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A deleted row cannot change kind"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una riga eliminata non cambia tipo"
+          }
+        }
+      }
+    },
     "A fixed line needs an amount above zero": {
       "localizations": {
         "en": {
@@ -1453,6 +1549,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Un modello il cui titolare non è più membro di questo vault non registra nulla finché non ne ha un altro. I suoi periodi si possono comunque saltare."
+          }
+        }
+      }
+    },
+    "A transfer cannot change kind": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A transfer cannot change kind"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un trasferimento non cambia tipo"
           }
         }
       }
@@ -1901,6 +2013,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "È richiesto un importo"
+          }
+        }
+      }
+    },
+    "An opening balance cannot change kind": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An opening balance cannot change kind"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un saldo di apertura non cambia tipo"
           }
         }
       }
@@ -2489,6 +2617,22 @@
         }
       }
     },
+    "Change Kind": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change Kind"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambia tipo"
+          }
+        }
+      }
+    },
     "Change Password": {
       "localizations": {
         "en": {
@@ -2517,6 +2661,118 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cambia password…"
+          }
+        }
+      }
+    },
+    "Change to Expense": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change to Expense"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambia in uscita"
+          }
+        }
+      }
+    },
+    "Change to Expense…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change to Expense…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambia in uscita…"
+          }
+        }
+      }
+    },
+    "Change to Income": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change to Income"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambia in entrata"
+          }
+        }
+      }
+    },
+    "Change to Income…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change to Income…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambia in entrata…"
+          }
+        }
+      }
+    },
+    "Change to Refund": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change to Refund"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambia in rimborso"
+          }
+        }
+      }
+    },
+    "Change to an expense?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change to an expense?"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambiare in uscita?"
+          }
+        }
+      }
+    },
+    "Change to an income?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change to an income?"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambiare in entrata?"
           }
         }
       }
@@ -3625,6 +3881,22 @@
         }
       }
     },
+    "Edit From / To…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit From / To…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifica Da / A…"
+          }
+        }
+      }
+    },
     "Edit Row": {
       "localizations": {
         "en": {
@@ -4561,6 +4833,22 @@
         }
       }
     },
+    "From / To": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From / To"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Da / A"
+          }
+        }
+      }
+    },
     "Fund expenses": {
       "localizations": {
         "en": {
@@ -5081,6 +5369,70 @@
         }
       }
     },
+    "It is the balance a wallet or an envelope started from: type its amount without a sign.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It is the balance a wallet or an envelope started from: type its amount without a sign."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "È il saldo con cui è partito un wallet o una busta: scrivi l’importo senza segno."
+          }
+        }
+      }
+    },
+    "It moves money between two wallets or two envelopes: type its amount without a sign.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It moves money between two wallets or two envelopes: type its amount without a sign."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sposta denaro tra due wallet o due buste: scrivi l’importo senza segno."
+          }
+        }
+      }
+    },
+    "It was deleted, on this Mac or another, before the change reached it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It was deleted, on this Mac or another, before the change reached it."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "È stata eliminata, su questo Mac o su un altro, prima che arrivasse il cambio."
+          }
+        }
+      }
+    },
+    "Its owner is no longer a member": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Its owner is no longer a member"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il titolare non è più membro"
+          }
+        }
+      }
+    },
     "Its transfers are deleted and the period is back to share out.": {
       "localizations": {
         "en": {
@@ -5173,6 +5525,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tipo"
+          }
+        }
+      }
+    },
+    "Kind Change": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kind Change"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "cambio tipo"
           }
         }
       }
@@ -6625,6 +6993,22 @@
         }
       }
     },
+    "No periods left before its end": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No periods left before its end"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun periodo rimasto prima della fine"
+          }
+        }
+      }
+    },
     "No recurring templates": {
       "localizations": {
         "en": {
@@ -7601,6 +7985,22 @@
         }
       }
     },
+    "Record or skip the pending periods first": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record or skip the pending periods first"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registra o salta i periodi in attesa"
+          }
+        }
+      }
+    },
     "Recorded by %@": {
       "localizations": {
         "en": {
@@ -8161,6 +8561,22 @@
         }
       }
     },
+    "Restore the template first": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore the template first"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prima ripristina il modello"
+          }
+        }
+      }
+    },
     "Restore wallet": {
       "localizations": {
         "en": {
@@ -8173,6 +8589,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ripristina wallet"
+          }
+        }
+      }
+    },
+    "Restoring it puts %lld missed periods back to confirm": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Restoring it puts its missed period back to confirm"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Restoring it puts %lld missed periods back to confirm"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Se lo ripristini, il periodo mancato torna da confermare"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Se lo ripristini, i %lld periodi mancati tornano da confermare"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Resume it, then record or skip its pending periods": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume it, then record or skip its pending periods"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riattiva il modello, poi registra o salta i periodi in attesa"
           }
         }
       }
@@ -8397,6 +8869,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Salva"
+          }
+        }
+      }
+    },
+    "Save or cancel the changes first": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save or cancel the changes first"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prima salva o annulla le modifiche"
           }
         }
       }
@@ -8781,6 +9269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Condividi…"
+          }
+        }
+      }
+    },
+    "Show": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostra"
           }
         }
       }
@@ -9389,6 +9893,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Riepilogo"
+          }
+        }
+      }
+    },
+    "Swap From and To": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Swap From and To"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scambia Da e A"
           }
         }
       }
@@ -10013,6 +10533,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Il server ha rifiutato la richiesta"
+          }
+        }
+      }
+    },
+    "The template is archived and a new one starts on %@. This cannot be undone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The template is archived and a new one starts on %@. This cannot be undone."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il modello viene archiviato e ne parte uno nuovo dal %@. Non si può annullare."
+          }
+        }
+      }
+    },
+    "The template keeps its kind": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The template keeps its kind"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il modello non cambia tipo"
           }
         }
       }
@@ -11413,6 +11965,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tutto il file"
+          }
+        }
+      }
+    },
+    "With more than one wallet, recording it needs a wallet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With more than one wallet, recording it needs a wallet"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con più wallet serve un wallet per registrarla"
           }
         }
       }
@@ -13009,6 +13577,22 @@
         }
       }
     },
+    "space": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "space"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "spazio"
+          }
+        }
+      }
+    },
     "start": {
       "localizations": {
         "en": {
@@ -13053,6 +13637,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "categoria suggerita"
+          }
+        }
+      }
+    },
+    "swap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "swap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "scambia"
           }
         }
       }

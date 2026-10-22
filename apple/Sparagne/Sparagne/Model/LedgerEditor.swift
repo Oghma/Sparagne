@@ -28,6 +28,9 @@ final class LedgerEditor {
     var text = ""
     /// ENVELOPE's pick while that cell is being edited.
     var flowId: Uuid?
+    /// The transfer whose two ends are being picked: the grid shows its
+    /// "Da → A" popover (`TransferEndsPopover`) while this names it.
+    private(set) var endsRowId: Uuid?
     /// The new line's cells, as they stand while the line is not registered:
     /// what it shows, and what it registers.
     var newLine = RowDraft()
@@ -85,13 +88,19 @@ final class LedgerEditor {
     }
 
     /// A double click, ↩ or F2: `cell` (the cursor's, when `nil`) is typed
-    /// into from what it says. `false` when it cannot be typed into.
+    /// into from what it says, or on a transfer's route its "Da → A" popover
+    /// opens (`LedgerCursor.opensEnds`), the cell left selected and not being
+    /// edited. `false` when it cannot be typed into.
     @discardableResult
     func edit(_ cell: CellFocus? = nil) -> Bool {
         guard let target = cell ?? cursor else { return false }
         // A double click on another cell selects it first, saving the one
         // being left; one that cannot be typed into is still selected.
         guard select(target), layout.isEditable(target) else { return false }
+        if layout.opensEnds(target), let id = target.row {
+            openEnds(of: id)
+            return true
+        }
         if !isEditing { begin(with: content(of: target)) }
         return true
     }
@@ -99,10 +108,11 @@ final class LedgerEditor {
     /// Characters typed. On a selected cell they replace what it says, and
     /// "" empties it (⌫); while the cell is being edited they are appended,
     /// which is how keys typed before the field took the caret are kept.
-    /// `false` when the cell cannot be typed into.
+    /// `false` when the cell cannot be typed into, a transfer's route
+    /// included: its ends are picked, never typed.
     @discardableResult
     func type(_ characters: String) -> Bool {
-        guard let cursor, layout.isEditable(cursor) else { return false }
+        guard let cursor, layout.isEditable(cursor), !layout.opensEnds(cursor) else { return false }
         if isEditing {
             text += characters
         } else {
@@ -153,10 +163,12 @@ final class LedgerEditor {
     }
 
     /// The cursor leaves the grid: the cell being edited is saved and the
-    /// new line registered if it has an amount; the cursor goes. `false`
-    /// when a save was refused, and then nothing moves.
+    /// new line registered if it has an amount; the cursor goes, and the
+    /// "Da → A" popover with it. `false` when a save was refused, and then
+    /// nothing moves.
     @discardableResult
     func finish() -> Bool {
+        closeEnds()
         guard cursor != nil else { return true }
         guard leave(for: nil, wrapping: true) else { return false }
         place(at: nil)
@@ -164,9 +176,11 @@ final class LedgerEditor {
     }
 
     /// The month, the lists, the vault or the role changed: whatever was
-    /// open belongs to rows no longer on screen. No cursor, a blank new line.
+    /// open belongs to rows no longer on screen. No cursor, no popover, a
+    /// blank new line.
     func reset() {
         place(at: nil)
+        closeEnds()
         blankNewLine()
     }
 
@@ -189,6 +203,51 @@ final class LedgerEditor {
         holdsUntouchedCopy = true
         place(at: CellFocus(row: nil, field: .amount))
         begin(with: copy.amount)
+    }
+
+    /// Opens the "Da → A" popover on the transfer with `rowId`: ↩ or a double
+    /// click on the cell that shows its route, or the row's menu. A cell
+    /// being typed into is saved first, as leaving it would save it; one
+    /// refused keeps the caret, and the popover stays shut.
+    func openEnds(of rowId: Uuid) {
+        guard let store, store.canWrite,
+              let row = store.rows.first(where: { $0.id == rowId }), row.isTransfer, !row.voided,
+              saveEditedCell()
+        else { return }
+        endsRowId = rowId
+    }
+
+    /// Closes the popover with nothing written.
+    func closeEnds() {
+        endsRowId = nil
+    }
+
+    /// Writes the transfer's two ends as one cell, both ids together, and
+    /// closes the popover. Says whether the write was sent: `false` for ends
+    /// that equal each other or the stored ones.
+    ///
+    /// The ends the row already has close the popover with nothing to write;
+    /// two equal ones keep it open, since the core would refuse them. The
+    /// row shows its new ends at once, as it shows any saved cell (`shown`),
+    /// and undo puts back the two it had.
+    @discardableResult
+    func saveEnds(of rowId: Uuid, from: Uuid, to: Uuid) -> Bool {
+        guard from != to else { return false }
+        defer { closeEnds() }
+        guard let store, store.canWrite, let stored = store.rows.first(where: { $0.id == rowId }), !stored.voided,
+              let field = LedgerCursor.routeField(of: stored.kind)
+        else { return false }
+        let row = shown(stored)
+        guard let patch = RowDraft.endsPatch(of: row, from: from, to: to) else { return false }
+        // The two ends are one saved cell, under the route's field: the
+        // patch naming both is what the row shows, and a value saved and not
+        // landed yet is what undo puts back, as for any cell.
+        let inverse = saved[rowId]?[field]?.patch ?? store.storedInverse(of: patch, for: rowId)
+        saved[rowId, default: [:]][field, default: SavedCell(patch: patch)].keep(patch)
+        write(cell: (row: rowId, field: field)) { store in
+            await store.update(transactionId: rowId, patch: patch, inverse: inverse)
+        }
+        return true
     }
 
     /// Waits for the writes the editor has sent: `AppStore.settle` and
@@ -214,6 +273,11 @@ final class LedgerEditor {
     func rowsChanged() {
         guard let store else { return }
         forgetSavedCells(deliveredBy: store.deliveredGeneration)
+        // A popover on a transfer gone, deleted or no longer writable has
+        // nothing left to pick for.
+        if let id = endsRowId, !store.canWrite || !store.rows.contains(where: { $0.id == id && !$0.voided }) {
+            closeEnds()
+        }
         guard let at = cursor else { return }
         let gone = if let id = at.row { !store.rows.contains { $0.id == id } } else { !store.canWrite }
         if gone {
@@ -264,6 +328,11 @@ final class LedgerEditor {
         // another cell since the edit began is not undone, and a value put
         // back before the last one landed is still a change.
         let row = shown(stored)
+        // IMPORTO with a sign that names another kind changes the kind; the
+        // row's own sign, or none, changes the amount alone.
+        if at.field == .amount, case let (kind?, number) = KindChange.sign(of: text), kind != row.kind {
+            return saveKindChange(of: row, to: kind, number: number, store: store)
+        }
         var draft = RowDraft(row: row, store: store)
         draft.set(at.field, text: text, flowId: flowId, in: store.month)
         do {
@@ -285,6 +354,54 @@ final class LedgerEditor {
         }
         stopEditing()
         return true
+    }
+
+    /// IMPORTO left with a sign naming another kind: the row is written
+    /// again as that kind at the number typed (`AppStore.changeKind`), which
+    /// may be the amount it had. A missing number, or a row that cannot
+    /// change kind, keeps the cell open with the reason on the alert.
+    ///
+    /// The row comes back under a new id. The cursor follows it there while
+    /// it is still on the row and the row is still on screen; a row gone to
+    /// the other direction leaves the toast that shows it instead.
+    private func saveKindChange(of row: TransactionRow, to kind: TransactionKind, number: String, store: AppStore) -> Bool {
+        guard !store.refusesKindChange(of: row.id, to: kind) else { return false }
+        let amount: Int64
+        do {
+            amount = try parseMoney(text: number, currency: store.currency)
+        } catch {
+            store.report(error)
+            return false
+        }
+        guard amount > 0 else {
+            store.report(DomainError.InvalidAmount(message: String(localized: "Type an amount above zero, such as 250 or 1.000,50.")))
+            return false
+        }
+        let id = row.id
+        // Read now, through the cells saved into the row and not given back
+        // yet: by the write's turn the list on screen may be another, and the
+        // row is then known only from here.
+        let pending = saved[id].map { Array($0.values) } ?? []
+        let loaded = store.transactions.first { $0.id == id }.map { view in
+            pending.reduce(view) { AppStore.view($0, applying: $1.patch) }
+        }
+        stopEditing()
+        write { [weak self] store in
+            let at = self?.cursor
+            guard let created = await store.changeKind(of: id, to: kind, amount: amount, loaded: loaded) else { return }
+            self?.follow(id, to: created, from: at)
+        }
+        return true
+    }
+
+    /// The cursor on the row `old` when its kind change began goes to the
+    /// same cell of `new`, which the reload put on screen in its place. A
+    /// cursor moved elsewhere meanwhile stays where it is.
+    private func follow(_ old: Uuid, to new: Uuid, from at: CellFocus?) {
+        guard let store, let at, at.row == old, cursor == nil || cursor == at,
+              store.rows.contains(where: { $0.id == new })
+        else { return }
+        place(at: CellFocus(row: new, field: at.field))
     }
 
     // MARK: - Leaving a cell
@@ -312,9 +429,10 @@ final class LedgerEditor {
     }
 
     /// Sends the new line as a row, if it has an amount, and blanks it.
-    /// Everything the row is made of is read now, its kind included: a
-    /// change of list registers the line on its way out, and by the time the
-    /// write runs the list on screen is the other one.
+    /// Everything the row is made of is read now, its kind and the list it
+    /// was typed in included: a change of list registers the line on its
+    /// way out, and by the time the write runs the list on screen is the
+    /// other one.
     private func register() -> Registration {
         guard let store else { return .nothing }
         let parsed: Result<RowEntry?, Error> = Result { try newLine.entry(store: store) }
@@ -322,6 +440,7 @@ final class LedgerEditor {
         case .success(let entry):
             guard let entry, entry.amount > 0 else { return .nothing }
             let kind = entry.kind ?? store.direction.newRowKind
+            let list = store.direction
             write { store in
                 await store.addRow(
                     day: entry.day,
@@ -331,7 +450,8 @@ final class LedgerEditor {
                     amount: entry.amount,
                     walletId: entry.walletId,
                     kind: kind,
-                    person: entry.person
+                    person: entry.person,
+                    typedIn: list
                 )
             }
             newLine = Self.next(after: entry, in: store)

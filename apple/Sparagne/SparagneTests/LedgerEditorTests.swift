@@ -910,6 +910,185 @@ struct LedgerEditorTests {
         #expect(!store.rows.contains { $0.note == "pane" })
     }
 
+    // MARK: - A transfer's two ends
+
+    /// The household with envelope `Viaggi` beside Cash, and `Fondo`, which
+    /// may not go below zero, and 10.00 moved from Cash to Viaggi, on screen
+    /// with the transfers shown.
+    private static func withTransfer() async throws -> (store: AppStore, editor: LedgerEditor, transfer: TransactionRow) {
+        let (store, editor) = try await Self.household()
+        await store.createEnvelope(name: "Viaggi", mode: .unlimited, allowNegative: true, openingAllocation: 0)
+        await store.createEnvelope(name: "Fondo", mode: .unlimited, allowNegative: false, openingAllocation: 0)
+        await store.submit(quickAdd: "tf> 10.00 >cash >viaggi")
+        store.showTransfers = true
+        await store.settle()
+        #expect(store.presentedError == nil)
+        return (store, editor, try #require(store.rows.first { $0.isTransfer }))
+    }
+
+    private static func flow(_ name: String, in store: AppStore) throws -> FlowView {
+        try #require(store.flows.first { $0.name == name })
+    }
+
+    @Test("The patch of a transfer's ends always names both, and none for equal ends, the ends it has, or an entry")
+    func endsPatch() {
+        let transfer = TestRow.make(kind: .transferFlow)
+        let from = transfer.fromId ?? "", to = transfer.toId ?? ""
+        #expect(RowDraft.endsPatch(of: transfer, from: to, to: from) == TransactionPatch(fromId: to, toId: from))
+        // One end changed still sends both: the core checks them together.
+        #expect(RowDraft.endsPatch(of: transfer, from: from, to: "altro") == TransactionPatch(fromId: from, toId: "altro"))
+        #expect(RowDraft.endsPatch(of: transfer, from: from, to: to) == nil)
+        #expect(RowDraft.endsPatch(of: transfer, from: "altro", to: "altro") == nil)
+        #expect(RowDraft.endsPatch(of: TestRow.make(kind: .expense), from: from, to: to) == nil)
+    }
+
+    @Test("↩ on a transfer's route opens its two ends and typing there beeps; CATEGORIA no longer opens")
+    func routeOpensTheEnds() async throws {
+        let (store, editor, transfer) = try await Self.withTransfer()
+        editor.select(Self.cell(transfer, .flow))
+        #expect(!editor.type("v"))
+        #expect(!editor.isEditing)
+        #expect(editor.edit())
+        #expect(!editor.isEditing)
+        #expect(editor.endsRowId == transfer.id)
+        #expect(editor.cursor == Self.cell(transfer, .flow))
+        editor.closeEnds()
+        #expect(editor.endsRowId == nil)
+
+        // The core takes no category on a transfer.
+        #expect(!editor.edit(Self.cell(transfer, .category)))
+        #expect(editor.endsRowId == nil)
+        // The row's menu opens them from anywhere, the cell being typed into
+        // saved first.
+        editor.select(Self.cell(transfer, .note))
+        editor.type("giro")
+        editor.openEnds(of: transfer.id)
+        #expect(!editor.isEditing)
+        #expect(editor.endsRowId == transfer.id)
+        await store.settle()
+        #expect(store.rows.first { $0.id == transfer.id }?.note == "giro")
+    }
+
+    @Test("Swapped ends are one write with both ids, shown on the row at once, and one ⌘Z puts both back")
+    func swappedEnds() async throws {
+        let (store, editor, transfer) = try await Self.withTransfer()
+        let manager = try LedgerHistoryTests.attachManager(to: store)
+        let cash = try Self.flow("Cash", in: store)
+        let viaggi = try Self.flow("Viaggi", in: store)
+        #expect(transfer.fromId == cash.id && transfer.toId == viaggi.id)
+
+        editor.openEnds(of: transfer.id)
+        #expect(editor.saveEnds(of: transfer.id, from: viaggi.id, to: cash.id))
+        #expect(editor.endsRowId == nil)
+        // Before any reload: the row reads through the saved ends.
+        let shown = editor.shown(transfer)
+        #expect(shown.fromId == viaggi.id && shown.toId == cash.id)
+        #expect(shown.flowId == viaggi.id)
+        #expect(shown.envelopeDisplay == "Viaggi → Cash")
+        #expect(shown.envelopeColumn == "Viaggi")
+
+        await store.settle()
+        #expect(store.presentedError == nil)
+        let saved = try #require(store.rows.first { $0.id == transfer.id })
+        #expect(saved.fromId == viaggi.id && saved.toId == cash.id)
+        #expect(saved.transferRoute == "Viaggi → Cash")
+        #expect(manager.undoActionName == String(localized: "Edit Row"))
+
+        manager.undo()
+        await store.settle()
+        #expect(store.presentedError == nil)
+        let undone = try #require(store.rows.first { $0.id == transfer.id })
+        #expect(undone.fromId == cash.id && undone.toId == viaggi.id)
+    }
+
+    @Test("Equal ends keep the popover open, the ends it has close it, and neither writes anything")
+    func endsWithNothingToWrite() async throws {
+        let (store, editor, transfer) = try await Self.withTransfer()
+        let cash = try Self.flow("Cash", in: store)
+        let viaggi = try Self.flow("Viaggi", in: store)
+        let gate = ExecutedCount()
+        await store.core.setOnExecuted { gate.record() }
+
+        editor.openEnds(of: transfer.id)
+        #expect(!editor.saveEnds(of: transfer.id, from: cash.id, to: cash.id))
+        #expect(editor.endsRowId == transfer.id)
+        #expect(!editor.saveEnds(of: transfer.id, from: cash.id, to: viaggi.id))
+        #expect(editor.endsRowId == nil)
+        await store.settle()
+        #expect(gate.count == 0)
+    }
+
+    @Test("Ends the core refuses leave the row on the ends it had, the refusal on the alert")
+    func refusedEnds() async throws {
+        let (store, editor, transfer) = try await Self.withTransfer()
+        let cash = try Self.flow("Cash", in: store)
+        let fondo = try Self.flow("Fondo", in: store)
+        let viaggi = try Self.flow("Viaggi", in: store)
+
+        // Fondo holds nothing and may not go below zero.
+        #expect(editor.saveEnds(of: transfer.id, from: fondo.id, to: viaggi.id))
+        await store.settle()
+        #expect(store.presentedError?.code == "insufficient_funds")
+        let stored = try #require(store.rows.first { $0.id == transfer.id })
+        #expect(stored.fromId == cash.id)
+        #expect(editor.shown(stored).fromId == cash.id)
+    }
+
+    @Test("The popover goes with its transfer, deleted or off screen, with a change of month and with the tab")
+    func popoverGoesWithTheRow() async throws {
+        let (store, editor, transfer) = try await Self.withTransfer()
+        editor.openEnds(of: transfer.id)
+        await store.void(transactionId: transfer.id)
+        #expect(editor.endsRowId == nil)
+        store.undo()
+
+        editor.openEnds(of: transfer.id)
+        #expect(editor.endsRowId == transfer.id)
+        store.month = store.month.adding(months: -1)
+        #expect(editor.endsRowId == nil)
+        store.month = store.month.adding(months: 1)
+        await store.settle()
+
+        editor.openEnds(of: transfer.id)
+        store.tab = .summary
+        #expect(editor.endsRowId == nil)
+        store.tab = .ledger
+
+        // A deleted transfer has none to open.
+        await store.void(transactionId: transfer.id)
+        await store.flushPendingUndo()
+        store.showVoided = true
+        await store.settle()
+        editor.openEnds(of: transfer.id)
+        #expect(editor.endsRowId == nil)
+    }
+
+    @Test("A wallet transfer's route is its WALLET, which opens only while the column is shown")
+    func walletRoute() async throws {
+        let (store, editor) = try await Self.household()
+        await store.createWallet(name: "Contanti", openingBalance: 0)
+        await store.submit(quickAdd: "tw> 10.00 @conto @contanti")
+        store.showTransfers = true
+        await store.settle()
+        let transfer = try #require(store.rows.first { $0.isTransfer })
+
+        #expect(!editor.edit(Self.cell(transfer, .flow)))
+        #expect(editor.endsRowId == nil)
+        store.showWalletColumn = true
+        #expect(editor.edit(Self.cell(transfer, .wallet)))
+        #expect(editor.endsRowId == transfer.id)
+
+        let conto = try #require(store.wallets.first { $0.name == "Conto" })
+        let contanti = try #require(store.wallets.first { $0.name == "Contanti" })
+        #expect(editor.saveEnds(of: transfer.id, from: contanti.id, to: conto.id))
+        #expect(editor.shown(transfer).walletDisplay == "Contanti → Conto")
+        await store.settle()
+        #expect(store.presentedError == nil)
+        let saved = try #require(store.rows.first { $0.id == transfer.id })
+        #expect(saved.walletId == contanti.id)
+        #expect(saved.walletDisplay == "Contanti → Conto")
+    }
+
     // MARK: - Undo
 
     @Test("Undo of a cell saved again before its first save landed puts back the first, one step at a time")

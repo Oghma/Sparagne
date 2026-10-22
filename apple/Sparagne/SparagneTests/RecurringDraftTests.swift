@@ -93,7 +93,7 @@ struct RecurringDraftTests {
 
     @Test("The wallet alone")
     func wallet() {
-        #expect(patch { $0.setWallet(Self.otherWallet, template: Self.rent) } == RecurringPatch(walletId: Self.otherWallet))
+        #expect(patch { $0.setWallet(Self.otherWallet, template: Self.rent, wallets: 2) } == RecurringPatch(walletId: Self.otherWallet))
     }
 
     @Test("The envelope alone")
@@ -167,11 +167,11 @@ struct RecurringDraftTests {
 
     @Test("A template with a wallet and an envelope cannot be set back to none")
     func noneIsRefused() {
-        #expect(!RecurringDraft.mayClearWallet(Self.rent))
+        #expect(!RecurringDraft.mayClearWallet(Self.rent, wallets: 1))
         #expect(!RecurringDraft.mayClearFlow(Self.rent))
 
         var draft = RecurringDraft(template: Self.rent)
-        draft.setWallet(nil, template: Self.rent)
+        draft.setWallet(nil, template: Self.rent, wallets: 1)
         draft.setFlow(nil, template: Self.rent)
         #expect(draft.walletId == Self.wallet)
         #expect(draft.flowId == Self.flow)
@@ -182,17 +182,37 @@ struct RecurringDraftTests {
         #expect(draft.patch(against: Self.rent, currency: .eur).isEmpty)
     }
 
-    @Test("A template without a wallet or an envelope may keep none, or get one")
+    @Test("In a one-wallet vault, a template without a wallet or an envelope may keep none, or get one")
     func noneIsKeptWhereItWas() {
-        #expect(RecurringDraft.mayClearWallet(Self.netflix))
+        #expect(RecurringDraft.offersAnyWallet(wallets: 1))
+        #expect(RecurringDraft.mayClearWallet(Self.netflix, wallets: 1))
         #expect(RecurringDraft.mayClearFlow(Self.netflix))
-        #expect(RecurringDraft.mayClearWallet(nil))
+        #expect(RecurringDraft.mayClearWallet(nil, wallets: 1))
+        #expect(RecurringDraft.mayClearWallet(nil, wallets: 0))
 
         var draft = RecurringDraft(template: Self.netflix)
-        draft.setWallet(Self.wallet, template: Self.netflix)
+        draft.setWallet(Self.wallet, template: Self.netflix, wallets: 1)
         #expect(draft.patch(against: Self.netflix, currency: .eur) == RecurringPatch(walletId: Self.wallet))
-        draft.setWallet(nil, template: Self.netflix)
+        draft.setWallet(nil, template: Self.netflix, wallets: 1)
         #expect(draft.patch(against: Self.netflix, currency: .eur).isEmpty)
+    }
+
+    @Test("With two wallets or more, any wallet is not on offer, for a new template or one that has none")
+    func anyWalletGoneWithSeveral() {
+        #expect(!RecurringDraft.offersAnyWallet(wallets: 2))
+        #expect(!RecurringDraft.mayClearWallet(nil, wallets: 2))
+        #expect(!RecurringDraft.mayClearWallet(Self.netflix, wallets: 3))
+
+        // A wallet picked on a template that had none stays picked.
+        var draft = RecurringDraft(template: Self.netflix)
+        draft.setWallet(Self.wallet, template: Self.netflix, wallets: 2)
+        draft.setWallet(nil, template: Self.netflix, wallets: 2)
+        #expect(draft.walletId == Self.wallet)
+        #expect(draft.patch(against: Self.netflix, currency: .eur) == RecurringPatch(walletId: Self.wallet))
+
+        var new = RecurringDraft(today: "2026-10-07", walletId: Self.wallet)
+        new.setWallet(nil, template: nil, wallets: 2)
+        #expect(new.walletId == Self.wallet)
     }
 
     // MARK: - Validity
@@ -231,6 +251,22 @@ struct RecurringDraftTests {
         // No amount yet.
         #expect(!draft.isValid(currency: .eur))
         #expect(draft.creation(currency: .eur) == nil)
+    }
+
+    @Test("A new template lands on the vault's default wallet, and is created with it")
+    func newTemplateOnTheDefaultWallet() {
+        var draft = RecurringDraft(today: "2026-10-07", owner: "matteo", walletId: Self.otherWallet)
+        #expect(draft.walletId == Self.otherWallet)
+        draft.amountText = "12,99"
+        #expect(draft.creation(currency: .eur)?.walletId == Self.otherWallet)
+    }
+
+    @Test("A duplicate of a template without a wallet takes the default one; one with a wallet keeps its own")
+    func duplicateTakesTheDefaultWallet() {
+        #expect(RecurringDraft(duplicating: Self.netflix, today: "2026-10-08", defaultWalletId: Self.wallet).walletId == Self.wallet)
+        // A one-wallet vault's default is none, which is that wallet.
+        #expect(RecurringDraft(duplicating: Self.netflix, today: "2026-10-08", defaultWalletId: nil).walletId == nil)
+        #expect(RecurringDraft(duplicating: Self.rent, today: "2026-10-08", defaultWalletId: Self.otherWallet).walletId == Self.wallet)
     }
 
     @Test("The End field offers today, or a saved template's end or start, wherever the start moves")

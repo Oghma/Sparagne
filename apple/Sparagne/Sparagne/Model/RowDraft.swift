@@ -30,7 +30,7 @@ struct RowDraft {
     var day = Date()
     /// Picked from the ENVELOPE cell's list, never typed (`EnvelopeSelectCell`).
     /// `nil` on the empty line is the sticky default; on a transfer it is
-    /// nothing, since the cell does not open there.
+    /// nothing, since the cell opens the transfer's two ends there.
     var flowId: Uuid?
     var category = ""
     var note = ""
@@ -63,15 +63,13 @@ struct RowDraft {
     init(row: TransactionRow, store: AppStore) {
         kind = row.kind
         day = row.occurredAt
-        // A transfer's ENVELOPE cell is an arrow between two envelopes, not
-        // one envelope: it stays read-only, and the commit leaves the legs
-        // alone, as the WALLET cell does.
+        // A transfer's ENVELOPE and WALLET cells are two ends, not one
+        // envelope or one wallet: they open its "Da → A" popover, which sends
+        // both ends together (`endsPatch`), and the commit leaves the legs
+        // alone.
         flowId = row.isTransfer ? nil : row.flowId
         category = row.category
         note = row.note
-        // A transfer's WALLET cell is an arrow between two wallets, not a
-        // name: nothing the cell could resolve, so it opens empty and the
-        // commit leaves the legs alone.
         wallet = row.isTransfer || row.walletDisplay == TransactionRow.placeholder ? "" : row.walletDisplay
         person = row.person
         amount = LedgerMoney.editable(row.absoluteAmount)
@@ -92,7 +90,8 @@ struct RowDraft {
 
     /// `row` copied into the empty line, dated today, ready to be tweaked and
     /// saved (⌘D and the context menu). `nil` for a transfer: the line has one
-    /// wallet and one envelope, and a transfer's two ends fit neither.
+    /// wallet and one envelope, and a transfer's two ends fit neither, so its
+    /// menu writes the copy at once (`AppStore.duplicateTransfer`).
     static func duplicate(of row: TransactionRow, store: AppStore) -> RowDraft? {
         guard !row.isTransfer else { return nil }
         var draft = RowDraft(row: row, store: store)
@@ -100,14 +99,28 @@ struct RowDraft {
         return draft
     }
 
+    /// The patch that gives a transfer the ends `from` and `to`, always both
+    /// ids: the core checks that they differ on the result, so a swap sent
+    /// one end at a time would be refused. `nil` for an entry, for two equal
+    /// ends, or for the ends the row already has.
+    static func endsPatch(of row: TransactionRow, from: Uuid, to: Uuid) -> TransactionPatch? {
+        guard row.isTransfer, from != to, from != row.fromId || to != row.toId else { return nil }
+        return TransactionPatch(fromId: from, toId: to)
+    }
+
     /// The fields of a new row, resolved and parsed. `nil` when the amount
     /// cell is still empty: tabbing to the end of a blank line and pressing ↩
     /// is not an error, it is nothing.
+    ///
+    /// A sign before the amount names the kind, as on the quick-add line,
+    /// over the direction on screen and over a copy's own: `+50` typed in
+    /// USCITE is an income (`KindChange.sign`).
     func entry(store: AppStore) throws -> RowEntry? {
         guard !amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let resolvedWallet = try cell(.wallet) { try store.resolveWallet(named: wallet) }
         let resolvedPerson = try cell(.person) { try store.resolvePerson(named: person) }
-        let parsedAmount = try cell(.amount) { try parseMoney(text: amount, currency: store.currency) }
+        let signed = KindChange.sign(of: amount)
+        let parsedAmount = try cell(.amount) { try parseMoney(text: signed.number, currency: store.currency) }
         let trimmed = category.trimmingCharacters(in: .whitespacesAndNewlines)
         return (
             day: day,
@@ -117,7 +130,7 @@ struct RowDraft {
             note: note,
             amount: parsedAmount,
             walletId: resolvedWallet,
-            kind: kind,
+            kind: signed.kind ?? kind,
             person: resolvedPerson
         )
     }
@@ -153,8 +166,11 @@ struct RowDraft {
         case .amount:
             // An emptied amount cell leaves the amount alone: clearing it is
             // not a way to say zero, and the core would refuse zero anyway.
+            // A sign is read past: one naming another kind is a kind change,
+            // which the editor makes before it asks for a patch.
             guard !amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-            let parsed = try cell(.amount) { try parseMoney(text: amount, currency: store.currency) }
+            let number = KindChange.sign(of: amount).number
+            let parsed = try cell(.amount) { try parseMoney(text: number, currency: store.currency) }
             if parsed != row.absoluteAmount, parsed > 0 { patch.amount = parsed }
 
         case .category:

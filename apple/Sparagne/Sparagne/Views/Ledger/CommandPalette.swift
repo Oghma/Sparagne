@@ -219,6 +219,7 @@ extension CommandPaletteModel {
                 String(localized: "Move Between Envelopes\u{2026}"),
                 ["move", "transfer", "sposta", "trasferisci", "buste", "envelope", "riparto", "allocation"]
             ))
+            actions.append(contentsOf: kindActions(store: store))
         }
 
         actions.append(contentsOf: [
@@ -286,6 +287,55 @@ extension CommandPaletteModel {
         ])
 
         return actions
+    }
+
+    /// "Cambia in entrata", "in uscita", "in rimborso", on what the Mastro
+    /// has in hand: the rows picked, or with none the row the cursor is on.
+    /// None on another tab, where neither is on screen.
+    private static func kindActions(store: AppStore) -> [PaletteAction] {
+        guard store.tab == .ledger else { return [] }
+        let picked = store.selectedRows.map(\.id)
+        if !picked.isEmpty {
+            return kindActions(targets: store.kindTargets(rows: picked)) { kind in
+                await store.changeKind(rows: picked, to: kind)
+            }
+        }
+        guard let rowId = store.ledgerEditor.cursor?.row else { return [] }
+        return kindActions(targets: store.kindTargets(of: rowId)) { kind in
+            await ChangeKindMenu.change(rowId, to: kind, in: store)
+        }
+    }
+
+    /// An entry for each kind of `targets`, the kinds the rows can become, in
+    /// their order; `change` turns the rows into the one run. No targets, no
+    /// entries: a transfer, a deleted row or an opening has nothing to offer.
+    static func kindActions(
+        targets: [TransactionKind],
+        change: @escaping @MainActor (TransactionKind) async -> Void
+    ) -> [PaletteAction] {
+        targets.compactMap { kind in
+            let keywords: [String] = switch kind {
+            case .income: ["income", "entrata", "kind", "tipo"]
+            case .expense: ["expense", "spesa", "uscita", "kind", "tipo"]
+            case .refund: ["refund", "rimborso", "kind", "tipo"]
+            case .transferWallet, .transferFlow: []
+            }
+            guard !keywords.isEmpty else { return nil }
+            return PaletteAction(id: "kind.\(kind)", title: kindTitle(kind), keywords: keywords) {
+                await change(kind)
+            }
+        }
+    }
+
+    /// "Cambia in entrata": the entry for `kind`, and the row's VoiceOver
+    /// action of the same name.
+    static func kindTitle(_ kind: TransactionKind) -> String {
+        switch kind {
+        case .income: String(localized: "Change to Income")
+        case .expense: String(localized: "Change to Expense")
+        case .refund: String(localized: "Change to Refund")
+        case .transferWallet, .transferFlow: QuickAddTokens.kindName(kind)
+        }
     }
 }
 

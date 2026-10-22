@@ -105,6 +105,34 @@ struct ReadOnlyLedgerTests {
         #expect(store.rows.first { $0.id == pizza.id }?.person == "tester")
     }
 
+    @Test("A row offers no other kind and a transfer no ends to pick; a change of kind and a transfer's copy are refused before the core")
+    func kindAndTransferEditsAreRefused() async throws {
+        let (store, gate) = try await Self.viewer()
+        let vault = try #require(store.currentVault).id
+        // A transfer to copy, made while the vault could still be written.
+        store.setReadOnlyVaults([])
+        await store.createWallet(name: "Bank", openingBalance: 0)
+        await store.submit(quickAdd: "tw> 1.00 @cash @bank")
+        store.setReadOnlyVaults([vault])
+        store.showTransfers = true
+        await store.settle()
+        let pizza = try #require(store.rows.first { $0.note == "pizza" })
+        let transfer = try #require(store.rows.first { $0.isTransfer })
+        let before = await gate.calls
+
+        #expect(store.kindTargets(of: pizza.id).isEmpty)
+        #expect(store.kindTargets(rows: [pizza.id]).isEmpty)
+        store.ledgerEditor.openEnds(of: transfer.id)
+        #expect(store.ledgerEditor.endsRowId == nil)
+
+        #expect(await store.changeKind(of: pizza.id, to: .income) == nil)
+        #expect(store.presentedError?.code == "forbidden")
+        store.presentedError = nil
+        #expect(await store.duplicateTransfer(transfer.id) == nil)
+        #expect(store.presentedError?.code == "forbidden")
+        #expect(await gate.calls == before)
+    }
+
     @Test("Another vault of the same account is writable again")
     func writableFollowsTheVaultOnScreen() async throws {
         let (store, _) = try await Self.viewer()

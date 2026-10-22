@@ -39,6 +39,7 @@ struct SelectionBar: View {
                 .popover(isPresented: $showsEnvelope, arrowEdge: .top) {
                     BulkEnvelopePopover(store: store, isPresented: $showsEnvelope)
                 }
+            ChangeKindMenu(selectionOf: store, asButton: true)
             Spacer()
             KeyHint(key: "\u{232B}", label: String(localized: "delete"))
             KeyHint(key: "esc", label: String(localized: "clear"))
@@ -47,6 +48,74 @@ struct SelectionBar: View {
         .frame(height: 30)
         .background(Ink.bg)
         .overlay(alignment: .top) { Hairline() }
+    }
+}
+
+/// "Cambia tipo ▸": the kinds in `targets`, each by its singular name
+/// (`QuickAddTokens.kindName`), as a submenu of a context menu or as one of
+/// the selection bar's buttons. Not there at all while there is nothing to
+/// change into: a transfer, a deleted row, an opening, a vault only read.
+struct ChangeKindMenu: View {
+    let targets: [TransactionKind]
+    var asButton = false
+    let change: (TransactionKind) -> Void
+
+    var body: some View {
+        if !targets.isEmpty {
+            if asButton {
+                Menu {
+                    items
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(title)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 7, weight: .semibold))
+                            .foregroundStyle(Ink.text3)
+                    }
+                    .rowButtonChrome()
+                }
+                .plainMenu()
+                .fixedSize()
+            } else {
+                Menu(title) { items }
+            }
+        }
+    }
+
+    private var title: String { String(localized: "Change Kind") }
+
+    private var items: some View {
+        ForEach(targets, id: \.self) { kind in
+            Button(QuickAddTokens.kindName(kind)) { change(kind) }
+        }
+    }
+}
+
+extension ChangeKindMenu {
+    /// For the selection, from the bar or a selected row's menu: every row of
+    /// it that can change, in one batch and one undo step; the others are
+    /// passed over.
+    init(selectionOf store: AppStore, asButton: Bool = false) {
+        let ids = store.selectedRows.map(\.id)
+        self.init(targets: store.kindTargets(rows: ids), asButton: asButton) { kind in
+            Task { await store.changeKind(rows: ids, to: kind) }
+        }
+    }
+
+    /// For the one row, from its menu, VoiceOver or ⌘K: `rowId` turned into
+    /// `kind`. A cursor on it follows it to the new row, on the same cell,
+    /// while that row is on screen, as an expense turned into a refund stays
+    /// in USCITE; one that went to the other list leaves the cursor behind,
+    /// and the toast offers to show it (`KindMoveToast`).
+    static func change(_ rowId: Uuid, to kind: TransactionKind, in store: AppStore) async {
+        let editor = store.ledgerEditor
+        // Read before the write: the reload after it takes the cursor off
+        // the row it voids.
+        let cell = editor.cursor?.row == rowId ? editor.cursor : nil
+        guard let id = await store.changeKind(of: rowId, to: kind), let cell,
+              store.rows.contains(where: { $0.id == id })
+        else { return }
+        editor.select(CellFocus(row: id, field: cell.field))
     }
 }
 

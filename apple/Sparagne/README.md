@@ -82,6 +82,64 @@ with an amount in it.
 With no cell selected, `⌫` deletes the rows picked with `⌘`-click and
 `⇧`-click (`⌘A` picks them all), or the row under the pointer.
 
+### Changing an entry's kind
+
+A sign in the IMPORTO cell names the kind, by ⌘K's grammar: `+` income, `-` or
+`−` expense, `r` refund. On a stored row a sign naming another kind changes the
+kind (and the amount, if the number changed too); the row's own sign, or none,
+changes the amount alone. On the new line a sign wins over the list on screen.
+The other ways in are the row's context menu (Change Kind), the selection's menu
+and the selection bar (several rows at once), and ⌘K's Change to Income /
+Expense / Refund. ⌘Z undoes the change. When rows move to the other list a toast
+says so, and its Show button goes to them.
+
+It is not offered for transfers, deleted rows, opening balances or a read-only
+vault. The row is voided and recreated with the same fields in one local batch,
+the void first, so the new row is checked against the final balance. The new row
+has a new id, and "recorded by" becomes whoever made the change.
+
+Known limits:
+
+- Two devices changing the same row at the same time leave two rows.
+- The new row carries the fields this device had: an edit to the same row made
+  on another device and not pulled yet is overwritten, where a patch would have
+  kept it.
+- The batch is all-or-nothing only on this device: the server judges each command
+  on its own. If the void is accepted and the new row refused (its wallet,
+  envelope or category archived elsewhere meanwhile), the row disappears into the
+  refused changes, as with a statement replacement.
+- A recreated income counts toward the next allocation (Riparto).
+- A re-import of the same statement does not bring the old row back, but the new
+  row is no longer linked to the import.
+- A recurring period stays recorded, and the new row is not linked to its template.
+- Changing the same row's kind twice: ⌘Z only goes back one change.
+
+### Transfers
+
+A transfer's two ends are picked in a From / To popover, opened with `↩` or a
+double click on its route cell (ENVELOPE for a transfer between envelopes, WALLET,
+when that column is shown, for one between wallets) or from the row menu's Edit
+From / To…. `⇄` or space swaps the two; both ends are always saved together. The
+row menu's Duplicate copies a transfer dated today; `⌘D` still skips transfers. A
+transfer's CATEGORY and PERSON cells cannot be typed into.
+
+### Recurring templates
+
+The inspector's "…" menu has Change to Income… / Change to Expense…. It asks for
+confirmation and has no undo: the template is archived, and a copy of the other
+kind starts from the first period after the last one recorded or skipped.
+It is refused while periods are waiting, when the owner has left, with unsaved
+edits, for an archived template, in a read-only vault, and when no periods are
+left. Restoring the archived original brings its missed periods back. As with
+an entry, the server judges the archive and the copy on their own: if it takes
+the archive and refuses the copy, the template is left archived with no copy, the
+refusal is in the sync review, and Restore brings it back.
+
+With two or more wallets "Any wallet" is no longer offered and a new template
+takes the default wallet; an existing template without one shows a warning,
+because the core cannot record it. A template with an envelope still cannot go
+back to Unallocated.
+
 ## Commands
 
 ```sh

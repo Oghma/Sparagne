@@ -7,7 +7,8 @@ struct RecurringDraft: Equatable {
     var kind: TransactionKind = .expense
     /// What the amount field holds, parsed by the core (`parseMoney`).
     var amountText = ""
-    /// `nil` = any active wallet when a period is recorded.
+    /// `nil` = the only active wallet when a period is recorded: with
+    /// several, the core refuses to record it (`offersAnyWallet`).
     var walletId: Uuid?
     /// `nil` = Unallocated.
     var flowId: Uuid?
@@ -22,11 +23,14 @@ struct RecurringDraft: Equatable {
     var owner = ""
 
     /// A new template: monthly, from today, on today's day, owned by
-    /// `owner`, the author who creates it unless the picker says otherwise.
-    /// A template that starts today has today as its first period, which is
-    /// what "every month from today" says.
-    init(today: NaiveDate, owner: String = "") {
+    /// `owner`, the author who creates it unless the picker says otherwise,
+    /// on `walletId`, where a new row lands (`AppStore.defaultWalletId`:
+    /// none in a one-wallet vault, where none is that wallet). A template
+    /// that starts today has today as its first period, which is what
+    /// "every month from today" says.
+    init(today: NaiveDate, owner: String = "", walletId: Uuid? = nil) {
         self.owner = owner
+        self.walletId = walletId
         when = ScheduleDraft(today: today)
         // The End field offers today, wherever the start moves.
         when.shownEndDate = today
@@ -54,9 +58,13 @@ struct RecurringDraft: Equatable {
     /// among them, running, but starting today. Starting where the original
     /// did would put every period since then due at once, and an end date
     /// already behind today would make the copy invalid, so it is dropped.
-    init(duplicating template: RecurringView, today: NaiveDate) {
+    /// A template without a wallet hands its copy `defaultWalletId`, as a
+    /// new template gets: none in a one-wallet vault, a wallet where there
+    /// are more and none could not be recorded.
+    init(duplicating template: RecurringView, today: NaiveDate, defaultWalletId: Uuid? = nil) {
         self.init(template: template)
         enabled = true
+        walletId = walletId ?? defaultWalletId
         when.startDate = today
         if let parts = NaiveDay.components(today) {
             if when.cadence != .weekly { when.weekday = parts.isoWeekday }
@@ -94,16 +102,24 @@ struct RecurringDraft: Equatable {
 
     // MARK: - Editing a saved template
 
-    /// Whether "any wallet" may be chosen: only while the template has no
-    /// wallet, since a patch cannot take one away.
-    static func mayClearWallet(_ template: RecurringView?) -> Bool { template?.walletId == nil }
+    /// Whether "any wallet" is on offer at all: the core reads no wallet as
+    /// the only active one, and refuses to record a period with none once
+    /// the vault has more (`core/src/engine/mod.rs`).
+    static func offersAnyWallet(wallets: Int) -> Bool { wallets < 2 }
+
+    /// Whether "any wallet" may be chosen: only while it is on offer and the
+    /// template has no wallet, since a patch cannot take one away.
+    static func mayClearWallet(_ template: RecurringView?, wallets: Int) -> Bool {
+        offersAnyWallet(wallets: wallets) && template?.walletId == nil
+    }
 
     /// Whether Unallocated may be chosen, for the same reason.
     static func mayClearFlow(_ template: RecurringView?) -> Bool { template?.flowId == nil }
 
-    /// Sets the wallet, refusing "none" on a template that has one.
-    mutating func setWallet(_ id: Uuid?, template: RecurringView?) {
-        if id == nil, !Self.mayClearWallet(template) { return }
+    /// Sets the wallet, refusing "none" on a template that has one and in a
+    /// vault of several `wallets`.
+    mutating func setWallet(_ id: Uuid?, template: RecurringView?, wallets: Int) {
+        if id == nil, !Self.mayClearWallet(template, wallets: wallets) { return }
         walletId = id
     }
 

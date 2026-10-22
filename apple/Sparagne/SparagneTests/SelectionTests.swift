@@ -6,8 +6,8 @@ import Testing
 @testable import Sparagne
 
 /// Counts `CoreActor`'s "a command was applied" hook: once per `execute`, once
-/// per whole `executeBatch`.
-private nonisolated final class ExecutedCount: Sendable {
+/// per whole `executeBatch`. The kind change's tests count with it too.
+nonisolated final class ExecutedCount: Sendable {
     private let value = Mutex(0)
 
     var count: Int { value.withLock { $0 } }

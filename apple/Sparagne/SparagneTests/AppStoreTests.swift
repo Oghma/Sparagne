@@ -314,12 +314,19 @@ struct AppStoreTests {
         store.showTransfers = true
         await store.settle()
         let row = try #require(store.rows.first { $0.kind == .transferWallet })
+        let cash = try #require(store.wallets.first { $0.name == "Cash" })
+        let bank = try #require(store.wallets.first { $0.name == "Bank" })
         #expect(row.walletDisplay == "Cash → Bank")
         #expect(row.envelopeDisplay == TransactionRow.placeholder)
         #expect(row.isTransfer)
-        #expect(row.walletId == store.wallets.first { $0.name == "Cash" }?.id)
+        #expect(row.walletId == cash.id)
         #expect(row.flowId == nil)
-        #expect(store.wallets.first { $0.name == "Bank" }?.balance == 2000)
+        #expect(row.fromId == cash.id)
+        #expect(row.toId == bank.id)
+        #expect(bank.balance == 2000)
+        // An entry has no ends.
+        let entry = TestRow.make(kind: .expense)
+        #expect(entry.fromId == nil && entry.toId == nil)
     }
 
     // MARK: - Wallet and envelope management

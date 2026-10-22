@@ -209,4 +209,43 @@ struct CommandPaletteTests {
         let store = try await Self.store()
         #expect(!CommandPaletteModel.ledgerActions(store: store, engine: nil).contains { $0.id == "sync.now" })
     }
+
+    // MARK: - Changing the kind
+
+    @Test("Each kind the rows can become is an entry, in the order given, and running one changes to it")
+    func kindEntries() async throws {
+        let box = Box()
+        let actions = CommandPaletteModel.kindActions(targets: [.income, .refund]) { box.value = "\($0)" }
+        #expect(actions.map(\.id) == ["kind.income", "kind.refund"])
+        #expect(actions.map(\.title) == [String(localized: "Change to Income"), String(localized: "Change to Refund")])
+
+        await (try #require(actions.last)).run()
+        #expect(box.value == "refund")
+    }
+
+    @Test("No kind to change into, no entry")
+    func noKindEntries() {
+        #expect(CommandPaletteModel.kindActions(targets: []) { _ in }.isEmpty)
+    }
+
+    @Test("Spesa finds the change to an expense, whose title says uscita")
+    func kindEntryKeywords() {
+        let actions = CommandPaletteModel.kindActions(targets: [.expense, .income, .refund]) { _ in }
+        #expect(CommandPaletteModel.filter(actions, query: "spesa").map(\.id) == ["kind.expense"])
+        #expect(CommandPaletteModel.filter(actions, query: "tipo").map(\.id) == ["kind.expense", "kind.income", "kind.refund"])
+    }
+
+    @Test("With nothing picked and no cursor, or on another tab, the palette changes no kind")
+    func kindEntriesNeedARow() async throws {
+        let store = try await Self.store()
+        await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "coop", amount: 1_250)
+        store.tab = .ledger
+        #expect(!CommandPaletteModel.ledgerActions(store: store, engine: nil).contains { $0.id.hasPrefix("kind.") })
+
+        // A row picked, but the Mastro is not on screen.
+        let row = try #require(store.rows.first)
+        store.toggleSelection(row.id)
+        store.tab = .summary
+        #expect(!CommandPaletteModel.ledgerActions(store: store, engine: nil).contains { $0.id.hasPrefix("kind.") })
+    }
 }
