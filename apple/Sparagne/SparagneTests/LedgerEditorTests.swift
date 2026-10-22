@@ -81,7 +81,7 @@ struct LedgerEditorTests {
 
         editor.type("rata")
         #expect(editor.move(.tab))
-        #expect(editor.cursor == Self.cell(mutuo, .person))
+        #expect(editor.cursor == Self.cell(mutuo, .amount))
 
         editor.select(Self.cell(coop, .amount))
         editor.type("12.30")
@@ -356,8 +356,7 @@ struct LedgerEditorTests {
         editor.move(.tab)
         editor.type("forno")
         #expect(editor.move(.tab))
-        #expect(editor.cursor == Self.newLine(.person))
-        editor.move(.right)
+        #expect(editor.cursor == Self.newLine(.amount))
         editor.type("3.20")
 
         let last = try Self.row("coop", in: store)
@@ -377,7 +376,7 @@ struct LedgerEditorTests {
         #expect(added.person == "matteo")
     }
 
-    @Test("A click on a stored row registers the new line, as ⇥ off its IMPORTO does, landing on its DATA again")
+    @Test("A click on a stored row registers the new line, as ⇥ off its PERSONA does, landing on its DATA again")
     func newLineRegistersOnClickAndTab() async throws {
         let (store, editor) = try await Self.household()
         let mutuo = try Self.row("mutuo", in: store)
@@ -393,6 +392,10 @@ struct LedgerEditorTests {
         editor.type("latte")
         editor.select(Self.newLine(.amount))
         editor.type("1.5")
+        // ⇥ off IMPORTO is still on the line: PERSONA comes after it.
+        #expect(editor.move(.tab))
+        #expect(editor.cursor == Self.newLine(.person))
+        #expect(editor.newLine.note == "latte")
         #expect(editor.move(.tab))
         #expect(editor.cursor == Self.newLine(.date))
         #expect(!editor.isEditing)
@@ -421,7 +424,7 @@ struct LedgerEditorTests {
 
         // Without an amount the line is left as typed.
         editor.type("")
-        editor.move(.left)
+        editor.move(.right)
         editor.type("pane")
         #expect(editor.move(.up))
         #expect(editor.cursor == Self.cell(coop, .person))
@@ -823,7 +826,7 @@ struct LedgerEditorTests {
         #expect(editor.cursor == Self.cell(coop, .category))
     }
 
-    @Test("Hiding WALLET moves a cursor on it to PERSONA and takes the sticky wallet off the new line")
+    @Test("Hiding WALLET moves a cursor on it to ENVELOPE and takes the sticky wallet off the new line")
     func walletColumnToggled() async throws {
         let (store, editor) = try await Self.household()
         store.showWalletColumn = true
@@ -833,7 +836,7 @@ struct LedgerEditorTests {
         editor.type("Con")
 
         store.showWalletColumn = false
-        #expect(editor.cursor == Self.cell(coop, .person))
+        #expect(editor.cursor == Self.cell(coop, .flow))
         #expect(!editor.isEditing)
         #expect(editor.newLine.wallet.isEmpty)
         await store.settle()

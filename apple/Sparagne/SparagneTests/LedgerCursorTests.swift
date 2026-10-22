@@ -35,54 +35,57 @@ struct LedgerCursorTests {
     @Test("⇥ walks a line left to right without WALLET while the column is hidden, then DATA of the next row")
     func tabOrderWithoutWallet() {
         let cursor = Self.cursor()
-        #expect(cursor.fields == [.date, .flow, .category, .note, .person, .amount])
+        #expect(cursor.fields == [.date, .flow, .category, .note, .amount, .person])
         let cells = Self.walk(cursor, .tab, from: Self.cell("a", .date), times: 7)
         #expect(cells == [
             Self.cell("a", .flow),
             Self.cell("a", .category),
             Self.cell("a", .note),
-            Self.cell("a", .person),
             Self.cell("a", .amount),
+            Self.cell("a", .person),
             Self.cell("b", .date),
             Self.cell("b", .flow),
         ])
     }
 
-    @Test("⇥ goes through WALLET between DESCRIZIONE and PERSONA while the column is shown")
+    @Test("⇥ goes through WALLET between DATA and ENVELOPE while the column is shown")
     func tabOrderWithWallet() {
         let cursor = Self.cursor(showsWallet: true)
-        #expect(cursor.fields == [.date, .flow, .category, .note, .wallet, .person, .amount])
-        let cells = Self.walk(cursor, .tab, from: Self.cell("b", .note), times: 4)
+        #expect(cursor.fields == [.date, .wallet, .flow, .category, .note, .amount, .person])
+        let cells = Self.walk(cursor, .tab, from: Self.cell("b", .date), times: 7)
         #expect(cells == [
             Self.cell("b", .wallet),
-            Self.cell("b", .person),
+            Self.cell("b", .flow),
+            Self.cell("b", .category),
+            Self.cell("b", .note),
             Self.cell("b", .amount),
+            Self.cell("b", .person),
             Self.cell("c", .date),
         ])
     }
 
-    @Test("⇧⇥ walks back, from DATA to IMPORTO of the row above, and stops on the first row's DATA")
+    @Test("⇧⇥ walks back, from DATA to PERSONA of the row above, and stops on the first row's DATA")
     func backTabOrder() {
         let cursor = Self.cursor(showsWallet: true)
         let cells = Self.walk(cursor, .backTab, from: Self.cell("b", .flow), times: 3)
-        #expect(cells == [Self.cell("b", .date), Self.cell("a", .amount), Self.cell("a", .person)])
+        #expect(cells == [Self.cell("b", .wallet), Self.cell("b", .date), Self.cell("a", .person)])
         #expect(cursor.target(of: .backTab, from: Self.cell("a", .date)) == Self.cell("a", .date))
         // From the new line, back onto the last stored row.
-        #expect(cursor.target(of: .backTab, from: Self.cell(nil, .date)) == Self.cell("c", .amount))
+        #expect(cursor.target(of: .backTab, from: Self.cell(nil, .date)) == Self.cell("c", .person))
     }
 
-    @Test("⇥ off the last stored row's IMPORTO lands on the new line's DATA, and off the new line's on its own DATA")
+    @Test("⇥ off the last stored row's PERSONA lands on the new line's DATA, and off the new line's on its own DATA")
     func tabIntoAndAroundTheNewLine() {
         let cursor = Self.cursor()
-        #expect(cursor.target(of: .tab, from: Self.cell("c", .amount)) == Self.cell(nil, .date))
-        #expect(cursor.target(of: .tab, from: Self.cell(nil, .amount)) == Self.cell(nil, .date))
-        #expect(cursor.target(of: .tab, from: Self.cell(nil, .note)) == Self.cell(nil, .person))
+        #expect(cursor.target(of: .tab, from: Self.cell("c", .person)) == Self.cell(nil, .date))
+        #expect(cursor.target(of: .tab, from: Self.cell(nil, .person)) == Self.cell(nil, .date))
+        #expect(cursor.target(of: .tab, from: Self.cell(nil, .note)) == Self.cell(nil, .amount))
     }
 
-    @Test("A vault only read has no new line: the last row's IMPORTO is the end of ⇥ and ↓")
+    @Test("A vault only read has no new line: the last row's PERSONA is the end of ⇥ and ↓")
     func readOnlyHasNoNewLine() {
         let cursor = Self.cursor(canWrite: false)
-        #expect(cursor.target(of: .tab, from: Self.cell("c", .amount)) == Self.cell("c", .amount))
+        #expect(cursor.target(of: .tab, from: Self.cell("c", .person)) == Self.cell("c", .person))
         #expect(cursor.target(of: .down, from: Self.cell("c", .note)) == Self.cell("c", .note))
         // Selecting still moves: only typing is refused.
         #expect(cursor.target(of: .up, from: Self.cell("c", .note)) == Self.cell("b", .note))
@@ -123,13 +126,13 @@ struct LedgerCursorTests {
     func leftAndRight() {
         let hidden = Self.cursor()
         #expect(hidden.target(of: .left, from: Self.cell("b", .date)) == Self.cell("b", .date))
-        #expect(hidden.target(of: .right, from: Self.cell("b", .amount)) == Self.cell("b", .amount))
-        #expect(hidden.target(of: .right, from: Self.cell("b", .note)) == Self.cell("b", .person))
+        #expect(hidden.target(of: .right, from: Self.cell("b", .person)) == Self.cell("b", .person))
+        #expect(hidden.target(of: .right, from: Self.cell("b", .note)) == Self.cell("b", .amount))
         #expect(hidden.target(of: .left, from: Self.cell(nil, .flow)) == Self.cell(nil, .date))
 
         let shown = Self.cursor(showsWallet: true)
-        #expect(shown.target(of: .right, from: Self.cell("b", .note)) == Self.cell("b", .wallet))
-        #expect(shown.target(of: .left, from: Self.cell("b", .person)) == Self.cell("b", .wallet))
+        #expect(shown.target(of: .right, from: Self.cell("b", .date)) == Self.cell("b", .wallet))
+        #expect(shown.target(of: .left, from: Self.cell("b", .flow)) == Self.cell("b", .wallet))
     }
 
     @Test("A cell of a row no longer on screen goes nowhere")
@@ -160,7 +163,7 @@ struct LedgerCursorTests {
     @Test("A transfer's DATA, DESCRIZIONE and IMPORTO can be typed into and its route opens its two ends; CATEGORIA, the other column and its author cannot")
     func transferCells() {
         let cases: [(kind: TransactionKind, route: RowField, editable: [RowField])] = [
-            (.transferWallet, .wallet, [.date, .note, .wallet, .amount]),
+            (.transferWallet, .wallet, [.date, .wallet, .note, .amount]),
             (.transferFlow, .flow, [.date, .flow, .note, .amount]),
         ]
         for (kind, route, editable) in cases {

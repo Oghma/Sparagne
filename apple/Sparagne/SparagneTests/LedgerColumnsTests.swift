@@ -45,7 +45,7 @@ struct LedgerColumnsTests {
 
     @Test("The columns after the description grow to the left, so their edge follows the pointer")
     func handleSides() {
-        #expect(LedgerColumn.allCases.filter(\.growsLeft) == [.wallet, .person, .amount])
+        #expect(LedgerColumn.allCases.filter(\.growsLeft) == [.amount, .person])
     }
 
     // MARK: - Over a store

@@ -10,15 +10,15 @@ struct CellFocus: Hashable, Sendable {
 /// The cells a row is typed into, in column order, which is the order ⇥ walks.
 enum RowField: Hashable, CaseIterable, Sendable {
     case date
+    /// Only in the hierarchy while the optional WALLET column is on.
+    case wallet
     case flow
     case category
     case note
-    /// Only in the hierarchy while the optional WALLET column is on.
-    case wallet
+    case amount
     /// Who the row is for: one of `AppStore.assignablePeople`. Not a field on
     /// a transfer, which is always its author's.
     case person
-    case amount
 
     /// The column heading, which is what VoiceOver calls the cell: an open
     /// row's fields have no placeholder to be read instead.
@@ -67,7 +67,7 @@ struct LedgerCursor {
 
     /// The cell `move` lands on from `cell`. At an edge the cursor stays
     /// where it is: ↑ on the first row, ← on DATA, ⇧⇥ on the first row's
-    /// DATA. ⇥ from IMPORTO goes to DATA of the next line; from the last
+    /// DATA. ⇥ from PERSONA goes to DATA of the next line; from the last
     /// stored row that is the new line, and from the new line it is the new
     /// line's own DATA, which by then is a blank line again (`LedgerEditor`).
     func target(of move: CursorMove, from cell: CellFocus) -> CellFocus {
