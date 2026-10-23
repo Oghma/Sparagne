@@ -46,9 +46,7 @@ struct YearModelTests {
         upTo: MonthKey = upTo,
         vaultPeople: [String] = [],
         person: String? = nil,
-        today: MonthKey? = nil,
-        wallets: [WalletView] = [],
-        walletBalances: [BucketTargetTotals] = []
+        today: MonthKey? = nil
     ) -> YearSummary {
         YearSummary.build(
             year: year,
@@ -57,9 +55,7 @@ struct YearModelTests {
             previousRows: previousRows,
             vaultPeople: vaultPeople,
             person: person,
-            today: today,
-            wallets: wallets,
-            walletBalances: walletBalances
+            today: today
         )
     }
 
@@ -627,125 +623,6 @@ struct YearModelTests {
         let year = Self.build(rows: [Self.row(0, "elisa", opening: 1_000), Self.row(1, "elisa", expense: 500)])
         #expect(year.personFigures == [PersonYear(person: "elisa", income: 0, expenses: 500, growth: -500)])
         #expect(year.personFigures[0].rate == nil)
-    }
-
-    // MARK: - Wallet columns
-
-    private static func wallet(_ name: String, archived: Bool = false) -> WalletView {
-        WalletView(id: name, name: name, balance: 0, archived: archived)
-    }
-
-    private static func delta(_ bucket: UInt32, _ wallet: String, _ delta: Int64) -> BucketTargetTotals {
-        BucketTargetTotals(bucket: bucket, targetId: wallet, delta: delta)
-    }
-
-    /// The household's money, wallet by wallet: Conto and Cash before the
-    /// year, a move from Conto to Cash in February, Carta opened in March,
-    /// and an old wallet that never moves.
-    private static var householdWallets: [WalletView] {
-        [wallet("Cash"), wallet("Conto"), wallet("Carta"), wallet("Vecchio", archived: true)]
-    }
-
-    private static var householdBalances: [BucketTargetTotals] {
-        [
-            delta(0, "Conto", 550_000),
-            delta(0, "Cash", 200_000),
-            delta(1, "Conto", 400_000),
-            delta(1, "Cash", -65_000),
-            delta(2, "Conto", -50_000),
-            delta(2, "Cash", 50_000),
-            delta(3, "Conto", 200_000),
-            delta(3, "Carta", 100_000),
-            delta(9, "Cash", 95_000),
-        ]
-    }
-
-    @Test("Every wallet with money in the year has a column, and the columns add up to TOTALE")
-    func walletColumnsAddUp() {
-        let year = Self.build(
-            rows: Self.household, wallets: Self.householdWallets, walletBalances: Self.householdBalances
-        )
-        // The vault's order; the wallet that never moved has no column.
-        #expect(year.walletColumns.map(\.name) == ["Cash", "Conto", "Carta"])
-        #expect(year.walletColumns.map(\.initial) == [200_000, 550_000, 0])
-        #expect(year.walletColumns.map(\.initial).reduce(0, +) == year.initial)
-        for (index, month) in year.elapsed.enumerated() {
-            #expect(year.walletColumns.reduce(0) { $0 + $1.balances[index] } == month.total)
-        }
-        #expect(year.walletColumns.allSatisfy { $0.balances.count == 12 })
-        #expect(Array(year.walletColumns[0].balances[0...2]) == [135_000, 185_000, 185_000])
-        #expect(Array(year.walletColumns[1].balances[0...2]) == [950_000, 900_000, 1_100_000])
-        // A month after the one on screen carries the running balance.
-        #expect(year.walletColumns[0].balances[11] == 280_000)
-    }
-
-    @Test("The table's wallet cells: the opening balances, each month's and where the year ended")
-    func walletCellsOfTheTable() {
-        let rows = Self.build(
-            rows: Self.household, wallets: Self.householdWallets, walletBalances: Self.householdBalances
-        ).tableRows
-        #expect(rows[0].byWallet == [200_000, 550_000, 0])
-        #expect(rows[3].byWallet == [185_000, 1_100_000, 100_000])
-        #expect(rows[10].byWallet.isEmpty)
-        #expect(rows[13].byWallet == [280_000, 1_100_000, 100_000])
-    }
-
-    @Test("One wallet in the year has no column: TOTALE already is its balance")
-    func oneWalletHasNoColumn() {
-        let one = Self.build(
-            rows: Self.household,
-            wallets: [Self.wallet("Conto")],
-            walletBalances: [Self.delta(0, "Conto", 750_000)]
-        )
-        #expect(one.walletColumns.isEmpty)
-        let noCells = one.tableRows.allSatisfy { $0.byWallet.isEmpty }
-        #expect(noCells)
-        // A second wallet whose legs net to nothing before the year, and one
-        // the vault does not list, do not make two.
-        let still = Self.build(
-            rows: Self.household,
-            wallets: [Self.wallet("Conto"), Self.wallet("Chiuso")],
-            walletBalances: [
-                Self.delta(0, "Conto", 750_000),
-                Self.delta(0, "Chiuso", 0),
-                Self.delta(1, "Altrove", 5_000),
-                Self.delta(13, "Chiuso", 5_000),
-            ]
-        )
-        #expect(still.walletColumns.isEmpty)
-    }
-
-    @Test("A wallet whose first movement is after the month on screen has no column yet")
-    func walletOpenedLaterHasNoColumnYet() {
-        let wallets = Self.householdWallets + [Self.wallet("Nuovo")]
-        let balances = Self.householdBalances + [Self.delta(11, "Nuovo", 50_000)]
-        let march = Self.build(
-            rows: Self.household, upTo: MonthKey(year: 2026, month: 3), wallets: wallets, walletBalances: balances
-        )
-        #expect(march.walletColumns.map(\.name) == ["Cash", "Conto", "Carta"])
-        // The running sums still go on to December.
-        #expect(march.walletColumns[0].balances[11] == 280_000)
-        // Carta opened in March: with February on screen it is not there
-        // either, and two wallets are left.
-        let february = Self.build(
-            rows: Self.household, upTo: MonthKey(year: 2026, month: 2), wallets: wallets, walletBalances: balances
-        )
-        #expect(february.walletColumns.map(\.name) == ["Cash", "Conto"])
-        // December on screen: November has happened.
-        let december = Self.build(
-            rows: Self.household, upTo: MonthKey(year: 2026, month: 12), wallets: wallets, walletBalances: balances
-        )
-        #expect(december.walletColumns.map(\.name) == ["Cash", "Conto", "Carta", "Nuovo"])
-    }
-
-    @Test("Under PERSONA the wallets have no column: their balance is the family's, not the person's")
-    func noWalletColumnsUnderPersonFilter() {
-        let filtered = Self.build(
-            rows: Self.household, person: "elisa",
-            wallets: Self.householdWallets, walletBalances: Self.householdBalances
-        )
-        #expect(filtered.walletColumns.isEmpty)
-        #expect(filtered.tableRows.allSatisfy { $0.byWallet.isEmpty })
     }
 
     // MARK: - Chart scale

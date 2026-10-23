@@ -86,7 +86,7 @@ flow (its balance at the end of the month, what came in and went out in
 the month, moves between flows included, and the bar of its cap: the capped
 flows still filling first, then the open ones and the full ones;
 Unallocated has none), the month-by-month table (with a column per
-wallet when two or more move in the year, and one per person), the people
+person), the people
 and the flows of the year (what came into each and went out, moves
 between flows included), income and expenses and the cash fund as charts,
 the year's expenses by category beside its ten heaviest (a click opens the

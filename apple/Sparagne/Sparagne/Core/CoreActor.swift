@@ -450,11 +450,6 @@ actor CoreActor {
                     bounds: request.yearBounds,
                     person: request.person
                 ),
-                walletBalances: try handle.balanceBreakdown(
-                    vaultId: vaultId,
-                    bounds: request.yearBounds,
-                    target: .wallet
-                ),
                 flowBalances: try handle.balanceBreakdown(
                     vaultId: vaultId,
                     bounds: request.yearBounds,
@@ -654,10 +649,8 @@ struct VaultLoad: Sendable {
     let recurringTemplates: [RecurringView]
     /// Bucket x category net expense on `yearBounds`, for the PERSONA filter.
     let categoryBuckets: [BucketCategoryTotals]
-    /// Bucket x wallet signed movement on `yearBounds`: summed up, each
-    /// wallet's balance at the end of every month.
-    let walletBalances: [BucketTargetTotals]
-    /// The same for the envelopes.
+    /// Bucket x envelope signed movement on `yearBounds`: summed up, each
+    /// envelope's balance at the end of every month.
     let flowBalances: [BucketTargetTotals]
 }
 

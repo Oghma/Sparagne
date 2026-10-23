@@ -800,9 +800,7 @@ final class AppStore {
             previousRows: loaded.previousYear,
             vaultPeople: loaded.people,
             person: person,
-            today: today,
-            wallets: loaded.snapshot.wallets,
-            walletBalances: loaded.walletBalances
+            today: today
         )
     }
 

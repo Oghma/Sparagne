@@ -4,16 +4,13 @@ import SwiftUI
 /// cash fund, twelve months, the year's sums. It is drawing only; which row
 /// is on screen, blank or going down comes from `YearSummary.tableRows`.
 ///
-/// After TOTALE, one column per wallet when the vault has two or more (with
-/// one, TOTALE already is its balance), then one per person, unless the
-/// PERSONA filter is on: the one column left would repeat TOTALE.
+/// After TOTALE, one column per person, unless the PERSONA filter is on: the
+/// one column left would repeat TOTALE.
 struct YearTable: View {
     let year: YearSummary
 
     private static let monthWidth: CGFloat = 116
-    /// `-12.345,67` and its padding. Two wallets and two people make nine
-    /// figures across: at this width they still fit the narrowest window
-    /// without scrolling.
+    /// `-12.345,67` and its padding.
     private static let figureWidth: CGFloat = 88
     /// TASSO holds `-26%` at most, `< -100%` at worst: it sits close to
     /// RISPARMIO, the figure it is the share of, at the same width in a wide
@@ -49,9 +46,9 @@ struct YearTable: View {
         .frame(minWidth: minWidth)
     }
 
-    /// The month, five figures, TASSO, the wallets and the people.
+    /// The month, five figures, TASSO and the people.
     private var minWidth: CGFloat {
-        let figures = 5 + year.walletColumns.count + people.count
+        let figures = 5 + people.count
         return Self.monthWidth + 2 * Metrics.cellPad + CGFloat(figures) * Self.figureWidth + Self.rateWidth
     }
 
@@ -69,16 +66,13 @@ struct YearTable: View {
                 .tableCell(width: Self.rateWidth, alignment: .trailing)
             headerTitle(String(localized: "Cash fund"), flexible: flexible)
             headerTitle(String(localized: "Total"), flexible: flexible)
-            ForEach(year.walletColumns) { wallet in
-                headerTitle(wallet.name, flexible: flexible)
-            }
             ForEach(Array(people.enumerated()), id: \.offset) { _, person in
                 headerTitle(person, flexible: flexible)
             }
         }
     }
 
-    /// A long title (a wallet's name, "Cash fund") narrows a little rather
+    /// A long title (a person's name, "Cash fund") narrows a little rather
     /// than lose its end on the narrowest window.
     private func headerTitle(_ title: String, flexible: Bool) -> some View {
         Text(title)
@@ -106,12 +100,6 @@ struct YearTable: View {
             rateCell(row)
             figure(row.carried, row: row, flexible: flexible, weight: weight, tint: Ink.text2)
             totalCell(row, flexible: flexible)
-            ForEach(Array(year.walletColumns.enumerated()), id: \.offset) { index, _ in
-                figure(
-                    row.byWallet.indices.contains(index) ? row.byWallet[index] : nil,
-                    row: row, flexible: flexible, weight: weight, tint: isSum ? Ink.text : Ink.text2
-                )
-            }
             ForEach(Array(people.enumerated()), id: \.offset) { index, _ in
                 figure(
                     row.totalByPerson.indices.contains(index) ? row.totalByPerson[index] : nil,
@@ -251,9 +239,6 @@ struct YearTable: View {
         }
         add(String(localized: "Cash fund"), row.carried)
         add(String(localized: "Total"), row.total)
-        for (index, wallet) in year.walletColumns.enumerated() where row.byWallet.indices.contains(index) {
-            figures.append((wallet.name, LedgerMoney.amount(row.byWallet[index])))
-        }
         for (index, person) in people.enumerated() where row.totalByPerson.indices.contains(index) {
             figures.append((person, LedgerMoney.amount(row.totalByPerson[index])))
         }
