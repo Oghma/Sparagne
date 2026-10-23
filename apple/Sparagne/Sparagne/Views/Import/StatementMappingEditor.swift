@@ -74,8 +74,8 @@ struct StatementMappingEditor: View {
             FormRow(String(localized: "Wallet")) {
                 FormPicker(label: String(localized: "Wallet"), selection: $model.walletId, options: wallets, title: walletName)
             }
-            FormRow(String(localized: "Envelope")) {
-                FormPicker(label: String(localized: "Envelope"), selection: $model.flowId, options: flows, title: flowName)
+            FormRow(String(localized: "Flow")) {
+                FormPicker(label: String(localized: "Flow"), selection: $model.flowId, options: flows, title: flowName)
             }
             FormRow(String(localized: "Duplicates also in")) { alsoCheck }
             FormNote(String(localized: "Only wallets kept by hand, such as Cash while you move to statements; never one you import a statement into."))

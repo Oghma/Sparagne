@@ -37,7 +37,7 @@ struct EnvelopeMoveSheet: View {
     var body: some View {
         let check = draft.check(flows: store.flows, currency: store.currency, balances: balances)
         FormSheet(
-            String(localized: "Move between envelopes"),
+            String(localized: "Move between flows"),
             subtitle: String(localized: "Once only: the allocation plan and its periods stay as they are."),
             width: 680
         ) {
@@ -266,7 +266,7 @@ struct EnvelopeMoveSheet: View {
                 Image(systemName: "plus")
                     .font(.system(size: 9, weight: .semibold))
                     .accessibilityHidden(true)
-                Text(String(localized: "Add envelope…"))
+                Text(String(localized: "Add flow…"))
             }
             .foregroundStyle(Ink.text3)
             .padding(.horizontal, MoveColumn.padding)
@@ -341,7 +341,7 @@ struct EnvelopeMoveSheet: View {
         case nil:
             nil
         case .noLines:
-            (String(localized: "Add an envelope to move money to"), false)
+            (String(localized: "Add a flow to move money to"), false)
         case .line(let flowId, .empty):
             (String(localized: "Type an amount for \(name(flowId))"), false)
         case .line(_, .gone):
@@ -351,7 +351,7 @@ struct EnvelopeMoveSheet: View {
         case .sourceShort:
             (String(localized: "Lower the amounts to move"), true)
         case .sourceGone:
-            (String(localized: "The envelope to move from is no longer there"), true)
+            (String(localized: "The flow to move from is no longer there"), true)
         }
         return Text(words?.0 ?? "")
             .font(Face.ui(11.5))
@@ -396,7 +396,7 @@ private struct IssueText {
             sentence = String(localized: "Type an amount above zero, such as 250 or 1.000,50.")
         case .tooLarge:
             tag = String(localized: "too large")
-            sentence = String(localized: "No envelope can hold that much.")
+            sentence = String(localized: "No flow can hold that much.")
         case .gone:
             tag = String(localized: "no longer there")
             sentence = String(localized: "Remove its line to move the rest.")

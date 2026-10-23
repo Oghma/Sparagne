@@ -68,7 +68,7 @@ struct AllocationPlanTable: View {
     private var header: some View {
         SetupHeaderRow(horizontalPadding: 4, accessibilityHeader: true) {
             Text(verbatim: "#").tableCell(width: PlanColumn.order, alignment: .center, hitTestable: true)
-            Text(String(localized: "Envelope")).tableCell(minWidth: PlanColumn.envelopeMinimum, hitTestable: true)
+            Text(String(localized: "Flow")).tableCell(minWidth: PlanColumn.envelopeMinimum, hitTestable: true)
             Text(String(localized: "Rule")).tableCell(width: PlanColumn.rule, hitTestable: true)
             Text(String(localized: "Room")).tableCell(width: PlanColumn.room, alignment: .trailing, hitTestable: true)
             Text(String(localized: "Gets")).tableCell(width: PlanColumn.gets, alignment: .trailing, hitTestable: true)
@@ -211,7 +211,7 @@ struct AllocationPlanTable: View {
                 }
             }
             if offered.isEmpty {
-                Text(String(localized: "No envelope left to add"))
+                Text(String(localized: "No flow left to add"))
             }
         } label: {
             HStack(spacing: 4) {
@@ -227,7 +227,7 @@ struct AllocationPlanTable: View {
             .contentShape(Rectangle())
         }
         .plainMenu()
-        .accessibilityLabel(String(localized: "Envelope"))
+        .accessibilityLabel(String(localized: "Flow"))
         .accessibilityValue(chosen ?? "")
         .tableCell(minWidth: PlanColumn.envelopeMinimum, hitTestable: true)
     }
@@ -293,7 +293,7 @@ struct AllocationPlanTable: View {
                 .foregroundStyle(Ink.text3)
                 .accessibilityHidden(true)
                 .tableCell(width: PlanColumn.order, alignment: .center, hitTestable: true)
-            envelopeMenu(draft: $newLine, key: nil, placeholder: String(localized: "Add envelope\u{2026}"))
+            envelopeMenu(draft: $newLine, key: nil, placeholder: String(localized: "Add flow\u{2026}"))
             if active {
                 ruleEditor(draft: $newLine, focusKey: .newLine)
             } else {

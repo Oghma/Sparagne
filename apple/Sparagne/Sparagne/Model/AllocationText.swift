@@ -100,7 +100,7 @@ enum AllocationText {
 
     /// `"5 buste"`.
     static func envelopes(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
-        String(localized: "\(count) envelopes", bundle: bundle, locale: locale)
+        String(localized: "\(count) flows", bundle: bundle, locale: locale)
     }
 
     /// The tab's count, as VoiceOver reads it: `"1 da distribuire"`.

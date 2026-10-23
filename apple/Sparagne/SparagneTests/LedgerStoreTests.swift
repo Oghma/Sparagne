@@ -441,7 +441,7 @@ struct LedgerStoreTests {
         #expect(label.hasPrefix(row.occurredAt.formatted(date: .long, time: .omitted)))
         #expect(label.contains(String(localized: "expense \(LedgerMoney.amount(95_000))")))
         #expect(label.contains("Casa, Mutuo"))
-        #expect(label.contains(String(localized: "envelope \(envelope.name)")))
+        #expect(label.contains(String(localized: "flow \(envelope.name)")))
         // matteo's own row: who it is for, and nobody else who recorded it.
         #expect(label.hasSuffix(LedgerAccessibility.person("matteo")))
 

@@ -25,7 +25,7 @@ enum RowField: Hashable, CaseIterable, Sendable {
     var label: String {
         switch self {
         case .date: String(localized: "Date")
-        case .flow: String(localized: "Envelope")
+        case .flow: String(localized: "Flow")
         case .category: String(localized: "Category")
         case .note: String(localized: "Description")
         case .wallet: String(localized: "Wallet")

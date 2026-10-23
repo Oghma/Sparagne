@@ -138,7 +138,7 @@ struct ManagementSheet: View {
     private var links: some View {
         Panel(padding: 0) {
             VStack(spacing: 0) {
-                TabLink(title: String(localized: "Wallets, envelopes and categories"), tab: .setup, go: go)
+                TabLink(title: String(localized: "Wallets, flows and categories"), tab: .setup, go: go)
                 Hairline()
                 TabLink(title: LedgerTab.recurring.label, tab: .recurring, go: go)
             }

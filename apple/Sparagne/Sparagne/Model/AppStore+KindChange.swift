@@ -232,13 +232,13 @@ extension AppStore {
         switch refusal {
         case .transfer:
             headline = String(localized: "A transfer cannot change kind")
-            message = String(localized: "It moves money between two wallets or two envelopes: type its amount without a sign.")
+            message = String(localized: "It moves money between two wallets or two flows: type its amount without a sign.")
         case .voided:
             headline = String(localized: "A deleted row cannot change kind")
             message = String(localized: "It was deleted, on this Mac or another, before the change reached it.")
         case .opening:
             headline = String(localized: "An opening balance cannot change kind")
-            message = String(localized: "It is the balance a wallet or an envelope started from: type its amount without a sign.")
+            message = String(localized: "It is the balance a wallet or a flow started from: type its amount without a sign.")
         case .sameKind:
             return nil
         }

@@ -121,13 +121,13 @@ struct SparagneApp: App {
                 post(String(localized: "Manage\u{2026}"), .openManagement)
                     .keyboardShortcut("m", modifiers: [.command, .shift])
 
-                Button(String(localized: "Wallets, Envelopes & Categories\u{2026}")) { store?.tab = .setup }
+                Button(String(localized: "Wallets, Flows & Categories\u{2026}")) { store?.tab = .setup }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
 
                 Button(String(localized: "New Recurring\u{2026}")) { store?.requestNewRecurring() }
                 .disabled(store?.canWrite != true)
 
-                post(String(localized: "Move Between Envelopes\u{2026}"), .moveBetweenEnvelopes)
+                post(String(localized: "Move Between Flows\u{2026}"), .moveBetweenEnvelopes)
                     .disabled(store?.canWrite != true)
             }
         }

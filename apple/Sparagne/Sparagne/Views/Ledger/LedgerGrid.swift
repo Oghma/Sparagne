@@ -719,7 +719,7 @@ struct LedgerGrid: View {
         let targets = store.bulkTargets.count
         Button(String(localized: "Set Category\u{2026}")) { showsBulkCategory = true }
             .disabled(targets == 0)
-        Button(String(localized: "Set Envelope\u{2026}")) { showsBulkEnvelope = true }
+        Button(String(localized: "Set Flow\u{2026}")) { showsBulkEnvelope = true }
             .disabled(targets == 0)
         ChangeKindMenu(selectionOf: store)
         Divider()

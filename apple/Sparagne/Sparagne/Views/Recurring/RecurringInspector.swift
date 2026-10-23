@@ -280,9 +280,9 @@ struct RecurringInspector: View {
                     .foregroundStyle(Ink.negative)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            FormRow(String(localized: "Envelope")) {
+            FormRow(String(localized: "Flow")) {
                 FormMenu(
-                    label: String(localized: "Envelope"),
+                    label: String(localized: "Flow"),
                     value: draft.flowId.map { names.flow($0) ?? TransactionRow.placeholder }
                         ?? NameBook.unallocatedLabel
                 ) {

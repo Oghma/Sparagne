@@ -82,12 +82,12 @@ with the last twelve months' under it and each month's figure with the
 month before's; the year's row ends with the months of autonomy, the total
 over the average month of expenses of the last twelve finished months, the
 month's with the fixed costs the recurring expenses commit), the capped
-envelopes with their bars, the month-by-month table (with a column per
+flows with their bars, the month-by-month table (with a column per
 wallet when two or more move in the year, and one per person), the people
-and the envelopes of the year (what came into each and went out, moves
-between envelopes included), the cash flow and the cash fund as charts,
+and the flows of the year (what came into each and went out, moves
+between flows included), the cash flow and the cash fund as charts,
 the year's expenses by category beside its ten heaviest (a click opens the
-row in the Mastro), and a months × categories grid. Every envelope's
+row in the Mastro), and a months × categories grid. Every flow's
 expenses are expenses of the month, whatever its cap. Only the month today
 falls in is drawn as still going, its last segment dashed and the cash fund
 projected to December at the pace of the finished months; a past month is a
@@ -96,12 +96,12 @@ fact. The person chosen in the Mastro's filter is chosen here too.
 ### Allocation plan
 
 The Riparto tab (⌘4) shares out the incomes that reached Unallocated among
-the envelopes, once per period of a schedule (usually monthly). A plan is an
-ordered list of lines, each an envelope with a fixed amount, a percentage of
+the flows, once per period of a schedule (usually monthly). A plan is an
+ordered list of lines, each a flow with a fixed amount, a percentage of
 the total or whatever fills it up to its cap; the order is the priority when
 the total runs short. Nothing moves by itself: when a period is due the tab
 shows what each line would get, and you share it out (one transfer per
-envelope), skip the period, or reopen the latest decision to undo it. The
+flow), skip the period, or reopen the latest decision to undo it. The
 tabs are Riepilogo (⌘1), Mastro (⌘2), Ricorrenze (⌘3), Riparto (⌘4) and
 Setup (⌘5). The plan lives in the vault, so every member sees it and a
 period is decided once; before creating one, upgrade every Mac that syncs
@@ -109,11 +109,11 @@ period is decided once; before creating one, upgrade every Mac that syncs
 deleted after its period was shared out, it is not shared again; reopen the
 period to redo it.
 
-For a one-off share, Move Between Envelopes… (the Riparto tab's top bar, the
-Vault menu or the palette) moves money from one envelope, Unallocated by
+For a one-off share, Move Between Flows… (the Riparto tab's top bar, the
+Vault menu or the palette) moves money from one flow, Unallocated by
 default, into several at once: one transfer per line, with the same date and
 note, sent all together or not at all (on a shared vault the server still
-judges each transfer on its own). A line over its envelope's cap, or a
+judges each transfer on its own). A line over its flow's cap, or a
 source that would go below zero when it may not, keeps it from moving;
 Unallocated below zero is only pointed out. The balances are those of the
 date chosen: a move dated in the past can take only what the source held
@@ -128,11 +128,11 @@ the plan as it is. Each transfer is an ordinary ledger row, the same as
 File › Import Statement… (⇧⌘I) reads a bank or card CSV (UTF-8, falling back
 to Windows-1252/Latin-1). It recognises the built-in `card-transactions`
 preset from the header, or reopens the mapping last used for the same vault
-and header, with that import's wallet, envelope and start day (two banks
+and header, with that import's wallet, flow and start day (two banks
 exporting the same header share them, wallet included). Pick the
 columns, the date and amount format, what each row type becomes (expense,
 income, refund, transfer from or to another wallet, skip, by sign), the
-statuses to skip, and the target wallet and envelope. Description rules come
+statuses to skip, and the target wallet and flow. Description rules come
 before the types: the first one whose text the bank's description holds, case
 aside, decides the row's kind, category and a cleaner note, so
 `PAGAMENTO POS; BAR CENTRALE MILANO` can become an expense under Bar noted
@@ -143,7 +143,7 @@ before the start day never do.
 
 The preview shows what happens to every row. Each row can be given another
 kind (a transfer names the other wallet), note, category (prefilled from the
-vault's history) and envelope, or be left out; its context menu makes a
+vault's history) and flow, or be left out; its context menu makes a
 description rule from it. A row with the same amount going the same way as a
 transaction already in the vault (an expense for money out, an income or a
 refund for money in), at most 3 days apart, in the statement's wallet or in

@@ -90,7 +90,7 @@ struct RecurringTemplateTable: View {
             Text(String(localized: "Cadence")).tableCell(minWidth: TemplateColumn.cadenceMinimum)
             Text(String(localized: "Next")).tableCell(width: TemplateColumn.next)
             Text(String(localized: "Wallet")).tableCell(width: TemplateColumn.wallet)
-            Text(String(localized: "Envelope")).tableCell(width: TemplateColumn.envelope)
+            Text(String(localized: "Flow")).tableCell(width: TemplateColumn.envelope)
             Text(RecurringInspector.ownerLabel).tableCell(width: TemplateColumn.owner)
             Text(String(localized: "Category")).tableCell(minWidth: TemplateColumn.categoryMinimum)
         }

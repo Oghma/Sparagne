@@ -49,7 +49,7 @@ enum QuickAddTokens {
                 )
             )
             if let flow = nonEmpty(flow) {
-                fields.append(QuickAddToken(role: .envelope, label: String(localized: "envelope"), value: flow))
+                fields.append(QuickAddToken(role: .envelope, label: String(localized: "flow"), value: flow))
             }
             if let wallet = nonEmpty(wallet) {
                 fields.append(QuickAddToken(role: .wallet, label: String(localized: "wallet"), value: wallet))
@@ -59,7 +59,7 @@ enum QuickAddTokens {
             fields = [QuickAddToken(role: .wallet, label: String(localized: "wallet"), value: "\(from) \u{2192} \(to)")]
         case .transferFlow(let transferAmount, let from, let to, _, let date):
             (kind, amount, when) = (.transferFlow, transferAmount, date)
-            fields = [QuickAddToken(role: .envelope, label: String(localized: "envelope"), value: "\(from) \u{2192} \(to)")]
+            fields = [QuickAddToken(role: .envelope, label: String(localized: "flow"), value: "\(from) \u{2192} \(to)")]
         }
 
         var tokens = [

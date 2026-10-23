@@ -69,7 +69,7 @@ struct TransferEndsPopover: View {
     private var title: String {
         row.kind == .transferWallet
             ? String(localized: "Transfer between wallets")
-            : String(localized: "Transfer between envelopes")
+            : String(localized: "Transfer between flows")
     }
 
     /// Da or A: its label over a menu of every end on offer, the one it is on

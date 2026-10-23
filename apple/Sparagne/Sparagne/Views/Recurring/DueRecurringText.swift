@@ -35,8 +35,8 @@ enum DueRecurringText {
     static func detail(_ template: RecurringView, names: NameBook) -> String {
         let envelope = envelope(template, names: names)
         let route = template.walletId == nil
-            ? String(localized: "from any wallet, envelope \(envelope)")
-            : String(localized: "from \(wallet(template, names: names)), envelope \(envelope)")
+            ? String(localized: "from any wallet, flow \(envelope)")
+            : String(localized: "from \(wallet(template, names: names)), flow \(envelope)")
         let category = template.category?.trimmingCharacters(in: .whitespaces) ?? ""
         guard !category.isEmpty, category != RecurringTitle.of(template) else { return route }
         return "\(category) \u{00B7} \(route)"

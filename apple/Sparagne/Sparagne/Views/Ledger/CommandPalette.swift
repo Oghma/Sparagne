@@ -190,7 +190,7 @@ extension CommandPaletteModel {
         actions.append(contentsOf: [
             PaletteAction(
                 id: "open.setup",
-                title: String(localized: "Wallets, Envelopes & Categories\u{2026}"),
+                title: String(localized: "Wallets, Flows & Categories\u{2026}"),
                 keywords: ["setup", "wallet", "flow", "buste", "categorie"]
             ) {
                 store.tab = .setup
@@ -216,8 +216,8 @@ extension CommandPaletteModel {
             actions.append(post(
                 .moveBetweenEnvelopes,
                 "envelopes.move",
-                String(localized: "Move Between Envelopes\u{2026}"),
-                ["move", "transfer", "sposta", "trasferisci", "buste", "envelope", "riparto", "allocation"]
+                String(localized: "Move Between Flows\u{2026}"),
+                ["move", "transfer", "sposta", "trasferisci", "flussi", "flow", "buste", "envelope", "riparto", "allocation"]
             ))
             actions.append(contentsOf: kindActions(store: store))
         }

@@ -1,7 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// One envelope of the "Buste" table: its balance at the month's end and its year by person.
+/// One envelope of the "Flussi" table: its balance at the month's end and its year by person.
 struct EnvelopeYearRow: Identifiable, Hashable, Sendable {
     let id: Uuid
     let name: String
@@ -23,7 +23,7 @@ struct EnvelopeYearRow: Identifiable, Hashable, Sendable {
     let expenseByPerson: [Int64]
 }
 
-/// The "Buste" table: every active envelope, Unallocated first.
+/// The "Flussi" table: every active envelope, Unallocated first.
 struct EnvelopeYear: Hashable, Sendable {
     /// The vault's people, the columns of the expense split.
     let people: [String]

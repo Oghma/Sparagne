@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// "Buste": every active envelope, Unallocated first, with its balance at
+/// "Flussi": every active envelope, Unallocated first, with its balance at
 /// the end of the month on screen, what came in and went out in the year,
 /// moves between envelopes included, and who took it out. An envelope with
 /// a cap carries the tag its card has, so the two read as the same envelope.
@@ -24,7 +24,7 @@ struct EnvelopeYearTable: View {
         Panel {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline) {
-                    SectionLabel(text: String(localized: "Envelopes"), tint: Ink.text2)
+                    SectionLabel(text: String(localized: "Flows"), tint: Ink.text2)
                         .accessibilityAddTraits(.isHeader)
                     Spacer(minLength: 8)
                     Text(String(localized: "balance at month end \u{00B7} in and out in the year, moves included"))
@@ -60,7 +60,7 @@ struct EnvelopeYearTable: View {
         ]
         titles.append(contentsOf: people)
         return SetupHeaderRow {
-            Text(String(localized: "Envelope"))
+            Text(String(localized: "Flow"))
                 .fittedCell(Self.nameWidth, flexible: flexible)
             ForEach(Array(titles.enumerated()), id: \.offset) { _, title in
                 Text(title)

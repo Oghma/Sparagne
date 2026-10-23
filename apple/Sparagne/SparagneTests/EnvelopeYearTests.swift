@@ -4,7 +4,7 @@ import Testing
 
 @testable import Sparagne
 
-/// The RIEPILOGO's "Buste" table: every active envelope's balance at the end
+/// The RIEPILOGO's "Flussi" table: every active envelope's balance at the end
 /// of the month on screen, and what the year put in and took out of it.
 struct EnvelopeYearTests {
     private static let june = MonthKey(year: 2026, month: 6)

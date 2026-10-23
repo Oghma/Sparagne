@@ -609,7 +609,7 @@
         }
       }
     },
-    "%lld envelopes": {
+    "%lld flows": {
       "localizations": {
         "en": {
           "variations": {
@@ -617,13 +617,13 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld envelope"
+                  "value": "%lld flow"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld envelopes"
+                  "value": "%lld flows"
                 }
               }
             }
@@ -635,13 +635,13 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld busta"
+                  "value": "%lld flusso"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld buste"
+                  "value": "%lld flussi"
                 }
               }
             }
@@ -1425,18 +1425,18 @@
         }
       }
     },
-    "A capped envelope needs a cap amount": {
+    "A capped flow needs a cap amount": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A capped envelope needs a cap amount"
+            "value": "A capped flow needs a cap amount"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Una busta con tetto ha bisogno di un importo"
+            "value": "Un flusso con tetto ha bisogno di un importo"
           }
         }
       }
@@ -1617,18 +1617,18 @@
         }
       }
     },
-    "A vault holds your wallets, envelopes and transactions. A wallet is where the money sits; an envelope is what it is meant for.": {
+    "A vault holds your wallets, flows and transactions. A wallet is where the money sits; a flow is what it is meant for.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A vault holds your wallets, envelopes and transactions. A wallet is where the money sits; an envelope is what it is meant for."
+            "value": "A vault holds your wallets, flows and transactions. A wallet is where the money sits; a flow is what it is meant for."
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un vault contiene i tuoi wallet, le tue buste e le transazioni. Il wallet è dove i soldi stanno, la busta è a cosa sono destinati."
+            "value": "Un vault contiene i tuoi wallet, i tuoi flussi e le transazioni. Il wallet è dove i soldi stanno, il flusso è a cosa sono destinati."
           }
         }
       }
@@ -1745,6 +1745,22 @@
         }
       }
     },
+    "Add a flow to move money to": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a flow to move money to"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi un flusso a cui spostare i soldi"
+          }
+        }
+      }
+    },
     "Add alias": {
       "localizations": {
         "en": {
@@ -1761,38 +1777,6 @@
         }
       }
     },
-    "Add an envelope to move money to": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add an envelope to move money to"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aggiungi una busta a cui spostare i soldi"
-          }
-        }
-      }
-    },
-    "Add envelope…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add envelope…"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aggiungi busta…"
-          }
-        }
-      }
-    },
     "Add expense": {
       "localizations": {
         "en": {
@@ -1805,6 +1789,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aggiungi uscita"
+          }
+        }
+      }
+    },
+    "Add flow…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add flow…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi flusso…"
           }
         }
       }
@@ -2177,18 +2177,18 @@
         }
       }
     },
-    "Archive envelope": {
+    "Archive flow": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Archive envelope"
+            "value": "Archive flow"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Archivia busta"
+            "value": "Archivia flusso"
           }
         }
       }
@@ -3217,18 +3217,18 @@
         }
       }
     },
-    "Create envelope": {
+    "Create flow": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Create envelope"
+            "value": "Create flow"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Crea busta"
+            "value": "Crea flusso"
           }
         }
       }
@@ -3993,18 +3993,18 @@
         }
       }
     },
-    "Edit envelope": {
+    "Edit flow": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Edit envelope"
+            "value": "Edit flow"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Modifica busta"
+            "value": "Modifica flusso"
           }
         }
       }
@@ -4101,94 +4101,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fine"
-          }
-        }
-      }
-    },
-    "Envelope": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Envelope"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Busta"
-          }
-        }
-      }
-    },
-    "Envelope Change": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Envelope Change"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "cambio busta"
-          }
-        }
-      }
-    },
-    "Envelope of %lld rows": {
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Envelope of %lld row"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Envelope of %lld rows"
-                }
-              }
-            }
-          }
-        },
-        "it": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Busta di %lld riga"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Busta di %lld righe"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "Envelopes": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Envelopes"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Buste"
           }
         }
       }
@@ -4833,6 +4745,94 @@
         }
       }
     },
+    "Flow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flow"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flusso"
+          }
+        }
+      }
+    },
+    "Flow Change": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flow Change"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "cambio flusso"
+          }
+        }
+      }
+    },
+    "Flow of %lld rows": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Flow of %lld row"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Flow of %lld rows"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Flusso di %lld riga"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Flusso di %lld righe"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Flows": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flows"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flussi"
+          }
+        }
+      }
+    },
     "Format": {
       "localizations": {
         "en": {
@@ -5353,18 +5353,18 @@
         }
       }
     },
-    "Invalid envelope": {
+    "Invalid flow": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Invalid envelope"
+            "value": "Invalid flow"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Busta non valida"
+            "value": "Flusso non valido"
           }
         }
       }
@@ -5401,34 +5401,34 @@
         }
       }
     },
-    "It is the balance a wallet or an envelope started from: type its amount without a sign.": {
+    "It is the balance a wallet or a flow started from: type its amount without a sign.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "It is the balance a wallet or an envelope started from: type its amount without a sign."
+            "value": "It is the balance a wallet or a flow started from: type its amount without a sign."
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "È il saldo con cui è partito un wallet o una busta: scrivi l’importo senza segno."
+            "value": "È il saldo con cui è partito un wallet o un flusso: scrivi l’importo senza segno."
           }
         }
       }
     },
-    "It moves money between two wallets or two envelopes: type its amount without a sign.": {
+    "It moves money between two wallets or two flows: type its amount without a sign.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "It moves money between two wallets or two envelopes: type its amount without a sign."
+            "value": "It moves money between two wallets or two flows: type its amount without a sign."
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sposta denaro tra due wallet o due buste: scrivi l’importo senza segno."
+            "value": "Sposta denaro tra due wallet o due flussi: scrivi l’importo senza segno."
           }
         }
       }
@@ -5481,18 +5481,18 @@
         }
       }
     },
-    "Its wallets, envelopes, transactions and recurring templates go with it. It disappears from every device of every member as they sync; the server keeps its history only to bring the deletion to them. This cannot be undone.": {
+    "Its wallets, flows, transactions and recurring templates go with it. It disappears from every device of every member as they sync; the server keeps its history only to bring the deletion to them. This cannot be undone.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Its wallets, envelopes, transactions and recurring templates go with it. It disappears from every device of every member as they sync; the server keeps its history only to bring the deletion to them. This cannot be undone."
+            "value": "Its wallets, flows, transactions and recurring templates go with it. It disappears from every device of every member as they sync; the server keeps its history only to bring the deletion to them. This cannot be undone."
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Con lui se ne vanno i wallet, le buste, le transazioni e le ricorrenze che contiene. Sparisce da ogni dispositivo di ogni membro man mano che si sincronizzano; il server ne conserva la cronologia solo per portare loro la cancellazione. Non si può annullare."
+            "value": "Con lui se ne vanno i wallet, i flussi, le transazioni e le ricorrenze che contiene. Sparisce da ogni dispositivo di ogni membro man mano che si sincronizzano; il server ne conserva la cronologia solo per portare loro la cancellazione. Non si può annullare."
           }
         }
       }
@@ -6273,18 +6273,18 @@
         }
       }
     },
-    "Move Between Envelopes…": {
+    "Move Between Flows…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Move Between Envelopes…"
+            "value": "Move Between Flows…"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sposta tra buste…"
+            "value": "Sposta tra flussi…"
           }
         }
       }
@@ -6321,34 +6321,34 @@
         }
       }
     },
-    "Move between envelopes": {
+    "Move between flows": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Move between envelopes"
+            "value": "Move between flows"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sposta tra buste"
+            "value": "Sposta tra flussi"
           }
         }
       }
     },
-    "Move between envelopes…": {
+    "Move between flows…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Move between envelopes…"
+            "value": "Move between flows…"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sposta tra buste…"
+            "value": "Sposta tra flussi…"
           }
         }
       }
@@ -6577,18 +6577,18 @@
         }
       }
     },
-    "New envelope…": {
+    "New flow…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "New envelope…"
+            "value": "New flow…"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nuova busta…"
+            "value": "Nuovo flusso…"
           }
         }
       }
@@ -6817,18 +6817,18 @@
         }
       }
     },
-    "No allocation plan yet: add an envelope to the plan below to start one.": {
+    "No allocation plan yet: add a flow to the plan below to start one.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No allocation plan yet: add an envelope to the plan below to start one."
+            "value": "No allocation plan yet: add a flow to the plan below to start one."
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ancora nessun piano di riparto: aggiungi una busta al piano qui sotto per crearlo."
+            "value": "Ancora nessun piano di riparto: aggiungi un flusso al piano qui sotto per crearlo."
           }
         }
       }
@@ -6881,54 +6881,6 @@
         }
       }
     },
-    "No envelope can hold that much.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No envelope can hold that much."
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nessuna busta può contenere tanto."
-          }
-        }
-      }
-    },
-    "No envelope left to add": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No envelope left to add"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nessuna busta da aggiungere"
-          }
-        }
-      }
-    },
-    "No envelope matches “%@”": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No envelope matches “%@”"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nessuna busta corrisponde a “%@”"
-          }
-        }
-      }
-    },
     "No expenses this year": {
       "localizations": {
         "en": {
@@ -6941,6 +6893,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessuna uscita quest'anno"
+          }
+        }
+      }
+    },
+    "No flow can hold that much.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No flow can hold that much."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun flusso può contenere tanto."
+          }
+        }
+      }
+    },
+    "No flow left to add": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No flow left to add"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun flusso da aggiungere"
+          }
+        }
+      }
+    },
+    "No flow matches “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No flow matches “%@”"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun flusso corrisponde a “%@”"
           }
         }
       }
@@ -7841,18 +7841,18 @@
         }
       }
     },
-    "Pick an envelope for the line": {
+    "Pick a flow for the line": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pick an envelope for the line"
+            "value": "Pick a flow for the line"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Scegli la busta della riga"
+            "value": "Scegli il flusso della riga"
           }
         }
       }
@@ -8561,18 +8561,18 @@
         }
       }
     },
-    "Restore envelope": {
+    "Restore flow": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Restore envelope"
+            "value": "Restore flow"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ripristina busta"
+            "value": "Ripristina flusso"
           }
         }
       }
@@ -9193,34 +9193,34 @@
         }
       }
     },
-    "Set Envelope": {
+    "Set Flow": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Set Envelope"
+            "value": "Set Flow"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Imposta busta"
+            "value": "Imposta flusso"
           }
         }
       }
     },
-    "Set Envelope…": {
+    "Set Flow…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Set Envelope…"
+            "value": "Set Flow…"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Imposta busta…"
+            "value": "Imposta flusso…"
           }
         }
       }
@@ -9273,18 +9273,18 @@
         }
       }
     },
-    "Share out to envelopes": {
+    "Share out to flows": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Share out to envelopes"
+            "value": "Share out to flows"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Distribuisci alle buste"
+            "value": "Distribuisci ai flussi"
           }
         }
       }
@@ -10153,18 +10153,18 @@
         }
       }
     },
-    "That envelope already has a line in the plan": {
+    "That flow already has a line in the plan": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "That envelope already has a line in the plan"
+            "value": "That flow already has a line in the plan"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Quella busta ha già una riga nel piano"
+            "value": "Quel flusso ha già una riga nel piano"
           }
         }
       }
@@ -10281,22 +10281,6 @@
         }
       }
     },
-    "The envelope to move from is no longer there": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The envelope to move from is no longer there"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "La busta di partenza non c'è più"
-          }
-        }
-      }
-    },
     "The first allocation counts the incomes from the start date; the later ones those that arrived after the last allocation, shared out or skipped.": {
       "localizations": {
         "en": {
@@ -10325,6 +10309,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "La prima riga del file non nomina nessuna colonna"
+          }
+        }
+      }
+    },
+    "The flow to move from is no longer there": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The flow to move from is no longer there"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il flusso di partenza non c'è più"
           }
         }
       }
@@ -11233,18 +11233,18 @@
         }
       }
     },
-    "Transfer between envelopes": {
+    "Transfer between flows": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Transfer between envelopes"
+            "value": "Transfer between flows"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Trasferimento tra buste"
+            "value": "Trasferimento tra flussi"
           }
         }
       }
@@ -11857,34 +11857,34 @@
         }
       }
     },
-    "Wallets, Envelopes & Categories…": {
+    "Wallets, Flows & Categories…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wallets, Envelopes & Categories…"
+            "value": "Wallets, Flows & Categories…"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wallet, buste e categorie…"
+            "value": "Wallet, flussi e categorie…"
           }
         }
       }
     },
-    "Wallets, envelopes and categories": {
+    "Wallets, flows and categories": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wallets, envelopes and categories"
+            "value": "Wallets, flows and categories"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wallet, buste e categorie"
+            "value": "Wallet, flussi e categorie"
           }
         }
       }
@@ -12452,7 +12452,7 @@
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "archiviata"
+            "value": "in archivio"
           }
         }
       }
@@ -12873,54 +12873,6 @@
         }
       }
     },
-    "envelope": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "envelope"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "busta"
-          }
-        }
-      }
-    },
-    "envelope %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "envelope %@"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "busta %@"
-          }
-        }
-      }
-    },
-    "envelopes with a cap": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "envelopes with a cap"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "buste con un tetto"
-          }
-        }
-      }
-    },
     "every": {
       "localizations": {
         "en": {
@@ -12969,6 +12921,54 @@
         }
       }
     },
+    "flow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "flow"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "flusso"
+          }
+        }
+      }
+    },
+    "flow %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "flow %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "flusso %@"
+          }
+        }
+      }
+    },
+    "flows with a cap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "flows with a cap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "flussi con un tetto"
+          }
+        }
+      }
+    },
     "from %@ to %@": {
       "localizations": {
         "en": {
@@ -12985,34 +12985,34 @@
         }
       }
     },
-    "from %@, envelope %@": {
+    "from %@, flow %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "from %@, envelope %@"
+            "value": "from %@, flow %@"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "da %@, busta %@"
+            "value": "da %@, flusso %@"
           }
         }
       }
     },
-    "from any wallet, envelope %@": {
+    "from any wallet, flow %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "from any wallet, envelope %@"
+            "value": "from any wallet, flow %@"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "da qualsiasi wallet, busta %@"
+            "value": "da qualsiasi wallet, flusso %@"
           }
         }
       }
@@ -13140,7 +13140,7 @@
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "è archiviata, quindi la sua riga non riceve nulla."
+            "value": "è archiviato, quindi la sua riga non riceve nulla."
           }
         }
       }

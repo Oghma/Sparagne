@@ -155,7 +155,7 @@ struct FundCards: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 SectionLabel(text: String(localized: "Caps"), tint: Ink.text2)
-                Text(String(localized: "envelopes with a cap"))
+                Text(String(localized: "flows with a cap"))
                     .font(Face.label)
                     .foregroundStyle(Ink.text3)
                 Spacer(minLength: 0)

@@ -215,9 +215,9 @@ struct EnvelopeChoiceList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            FloatingListGroup(title: String(localized: "Envelopes"))
+            FloatingListGroup(title: String(localized: "Flows"))
             if list.items.isEmpty {
-                Text(String(localized: "No envelope matches \u{201C}\(choices.query)\u{201D}"))
+                Text(String(localized: "No flow matches \u{201C}\(choices.query)\u{201D}"))
                     .foregroundStyle(Ink.text3)
                     .floatingListRow(active: false)
             } else if list.items.count > Self.visibleRows {

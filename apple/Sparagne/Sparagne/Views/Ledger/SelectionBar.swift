@@ -33,7 +33,7 @@ struct SelectionBar: View {
                 .popover(isPresented: $showsCategory, arrowEdge: .top) {
                     BulkCategoryPopover(store: store, isPresented: $showsCategory)
                 }
-            Button(String(localized: "Set Envelope\u{2026}")) { showsEnvelope = true }
+            Button(String(localized: "Set Flow\u{2026}")) { showsEnvelope = true }
                 .buttonStyle(RowButtonStyle())
                 .disabled(targets == 0)
                 .popover(isPresented: $showsEnvelope, arrowEdge: .top) {
@@ -187,8 +187,8 @@ struct BulkEnvelopePopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(text: String(localized: "Envelope of \(store.bulkTargets.count) rows"))
-            TextField(String(localized: "Envelope"), text: $query)
+            SectionLabel(text: String(localized: "Flow of \(store.bulkTargets.count) rows"))
+            TextField(String(localized: "Flow"), text: $query)
                 .textFieldStyle(.plain)
                 .font(Face.row)
                 .foregroundStyle(Ink.text)
@@ -217,7 +217,7 @@ struct BulkEnvelopePopover: View {
             HStack {
                 Spacer()
                 Button(String(localized: "Cancel"), role: .cancel) { isPresented = false }
-                Button(String(localized: "Set Envelope")) { choices.list.pick() }
+                Button(String(localized: "Set Flow")) { choices.list.pick() }
                     .disabled(choices.list.selected == nil)
             }
         }

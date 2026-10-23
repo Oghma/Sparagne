@@ -270,10 +270,10 @@ struct AllocationPlanningTests {
         let en = try AllocationCatalog.english()
         let it = try AllocationCatalog.italian()
 
-        #expect(AllocationText.envelopes(1, bundle: en, locale: english) == "1 envelope")
-        #expect(AllocationText.envelopes(5, bundle: en, locale: english) == "5 envelopes")
-        #expect(AllocationText.envelopes(1, bundle: it, locale: italian) == "1 busta")
-        #expect(AllocationText.envelopes(5, bundle: it, locale: italian) == "5 buste")
+        #expect(AllocationText.envelopes(1, bundle: en, locale: english) == "1 flow")
+        #expect(AllocationText.envelopes(5, bundle: en, locale: english) == "5 flows")
+        #expect(AllocationText.envelopes(1, bundle: it, locale: italian) == "1 flusso")
+        #expect(AllocationText.envelopes(5, bundle: it, locale: italian) == "5 flussi")
         #expect(AllocationText.missed(1, bundle: it, locale: italian) == "comprende 1 periodo precedente")
         #expect(AllocationText.missed(2, bundle: it, locale: italian) == "comprende 2 periodi precedenti")
         #expect(AllocationText.toShareOut(1, bundle: it, locale: italian) == "1 da distribuire")
@@ -312,7 +312,7 @@ private enum AllocationCatalog {
         try CatalogBundle.make(
             language: "en",
             plurals: [
-                "%lld envelopes": ("%lld envelope", "%lld envelopes"),
+                "%lld flows": ("%lld flow", "%lld flows"),
                 "%lld incomes reached Unallocated": ("%lld income reached Unallocated", "%lld incomes reached Unallocated"),
             ],
             strings: [
@@ -326,7 +326,7 @@ private enum AllocationCatalog {
         try CatalogBundle.make(
             language: "it",
             plurals: [
-                "%lld envelopes": ("%lld busta", "%lld buste"),
+                "%lld flows": ("%lld flusso", "%lld flussi"),
                 "%lld earlier periods included": ("comprende %lld periodo precedente", "comprende %lld periodi precedenti"),
                 "%lld to share out": ("%lld da distribuire", "%lld da distribuire"),
                 "%lld incomes reached Unallocated": ("%lld entrata arrivata in Non allocato", "%lld entrate arrivate in Non allocato"),

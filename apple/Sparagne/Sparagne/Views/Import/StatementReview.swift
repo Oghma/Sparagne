@@ -68,7 +68,7 @@ struct StatementReview: View {
             GridCell(width: ReviewColumn.kind) { heading(String(localized: "Kind")) }
             GridCell(width: ReviewColumn.status) { heading(String(localized: "Status")) }
             GridCell(width: ReviewColumn.category) { heading(String(localized: "Category")) }
-            GridCell(width: ReviewColumn.envelope) { heading(String(localized: "Envelope")) }
+            GridCell(width: ReviewColumn.envelope) { heading(String(localized: "Flow")) }
         }
     }
 
@@ -404,7 +404,7 @@ private struct StatementReviewRow: View {
     private var envelope: some View {
         if StatementImportModel.takesCategory(row) {
             FormPicker(
-                label: String(localized: "Envelope"),
+                label: String(localized: "Flow"),
                 selection: Binding(
                     get: { model.flow(for: row) },
                     set: { if let flow = $0 { model.setFlow(flow, for: row) } }

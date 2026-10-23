@@ -23,7 +23,7 @@ struct EnvelopeTable: View {
     @FocusState private var focus: EnvelopeCell?
 
     var body: some View {
-        SetupCard(title: String(localized: "Envelopes"), hint: String(localized: "one for each purpose: the house, the holidays, …")) {
+        SetupCard(title: String(localized: "Flows"), hint: String(localized: "one for each purpose: the house, the holidays, …")) {
             SetupTableBody {
                 header
                 ForEach(store.flows.filter { matchesFilter($0.name) }, id: \.id) { flow in
@@ -206,7 +206,7 @@ struct EnvelopeTable: View {
         return SetupRow(highlighted: active, editing: active) {
             SetupCell {
                 SetupTextField(
-                    placeholder: String(localized: "New envelope…"), text: $newLine.name,
+                    placeholder: String(localized: "New flow…"), text: $newLine.name,
                     focus: $focus, key: EnvelopeCell(row: nil, field: .name), submit: commitFocusedLine
                 )
             }
@@ -520,7 +520,7 @@ struct EnvelopeDraft: Equatable {
             throw EnvelopeDraftError(
                 field: .cap,
                 underlying: DomainError.InvalidCommand(
-                    message: String(localized: "A capped envelope needs a cap amount")
+                    message: String(localized: "A capped flow needs a cap amount")
                 )
             )
         }

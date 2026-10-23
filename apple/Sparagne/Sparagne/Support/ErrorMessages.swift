@@ -21,7 +21,7 @@ nonisolated enum ErrorMessages {
         case "already_exists": String(localized: "Already exists")
         case "invalid_amount": String(localized: "Invalid amount")
         case "invalid_name": String(localized: "Invalid name")
-        case "invalid_flow": String(localized: "Invalid envelope")
+        case "invalid_flow": String(localized: "Invalid flow")
         case "currency_mismatch": String(localized: "Currency mismatch")
         case "invalid_command": String(localized: "That action is not allowed")
         case "invalid_cursor": String(localized: "Could not load more")

@@ -94,7 +94,7 @@ enum SheetStatus {
         [
             StatusItem(label: String(localized: "Wallets"), value: store.wallets.count.formatted(.number)),
             StatusItem(
-                label: String(localized: "Envelopes"),
+                label: String(localized: "Flows"),
                 value: store.flows.filter { !$0.isUnallocated }.count.formatted(.number)
             ),
             StatusItem(label: String(localized: "Categories"), value: store.categories.count.formatted(.number)),

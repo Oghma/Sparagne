@@ -37,7 +37,7 @@ struct BulkEnvelopeTests {
         #expect(store.presentedError == nil)
         #expect(store.rows.allSatisfy { $0.flowId == unallocated })
         #expect(store.bulkEnvelope == unallocated)
-        #expect(manager.undoActionName == String(localized: "Envelope Change"))
+        #expect(manager.undoActionName == String(localized: "Flow Change"))
 
         manager.undo()
         await store.settle()
@@ -84,7 +84,7 @@ struct BulkEnvelopeTests {
         await store.setSelectionEnvelope(risparmi)
 
         #expect(store.presentedError?.code == "insufficient_funds")
-        #expect(manager.undoActionName != String(localized: "Envelope Change"))
+        #expect(manager.undoActionName != String(localized: "Flow Change"))
         store.presentedError = nil
         await store.reload()
         #expect(store.rows.allSatisfy { $0.flowId == spesa })

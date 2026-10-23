@@ -201,7 +201,7 @@ struct AllocationDueCard: View {
     private var quietText: String {
         guard let plan = store.allocationPlan else {
             return store.canWrite
-                ? String(localized: "No allocation plan yet: add an envelope to the plan below to start one.")
+                ? String(localized: "No allocation plan yet: add a flow to the plan below to start one.")
                 : String(localized: "This vault has no allocation plan.")
         }
         guard plan.enabled else { return String(localized: "Nothing to share out: the plan is paused.") }

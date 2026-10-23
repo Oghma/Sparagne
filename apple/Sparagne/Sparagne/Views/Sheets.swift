@@ -33,7 +33,7 @@ struct OnboardingSheet: View {
             isFirstRun ? String(localized: "Welcome to Sparagne") : String(localized: "New Vault"),
             // The three concepts, once, before the first one is named.
             subtitle: isFirstRun
-                ? String(localized: "A vault holds your wallets, envelopes and transactions. A wallet is where the money sits; an envelope is what it is meant for.")
+                ? String(localized: "A vault holds your wallets, flows and transactions. A wallet is where the money sits; a flow is what it is meant for.")
                 : nil
         ) {
             FormGroup {
@@ -124,7 +124,7 @@ struct DeleteVaultSheet: View {
         FormSheet(String(localized: "Delete Vault")) {
             ConfirmationText(
                 question: String(localized: "Delete \u{201C}\(vault.name)\u{201D}?"),
-                consequences: String(localized: "Its wallets, envelopes, transactions and recurring templates go with it. It disappears from every device of every member as they sync; the server keeps its history only to bring the deletion to them. This cannot be undone.")
+                consequences: String(localized: "Its wallets, flows, transactions and recurring templates go with it. It disappears from every device of every member as they sync; the server keeps its history only to bring the deletion to them. This cannot be undone.")
             )
         } footer: {
             FormCancelButton { dismiss() }

@@ -87,7 +87,7 @@ struct TopBar: View {
                     store.requestNewRecurring()
                 }
             case .allocation:
-                TabActionButton(symbol: "arrow.left.arrow.right", title: String(localized: "Move between envelopes\u{2026}")) {
+                TabActionButton(symbol: "arrow.left.arrow.right", title: String(localized: "Move between flows\u{2026}")) {
                     NotificationCenter.default.post(name: .moveBetweenEnvelopes, object: nil)
                 }
             case .setup:

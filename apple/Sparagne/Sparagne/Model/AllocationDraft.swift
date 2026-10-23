@@ -123,7 +123,7 @@ struct AllocationLineDraft: Equatable {
         guard let flowId else {
             throw AllocationDraftError(
                 field: .envelope,
-                underlying: DomainError.InvalidCommand(message: String(localized: "Pick an envelope for the line"))
+                underlying: DomainError.InvalidCommand(message: String(localized: "Pick a flow for the line"))
             )
         }
         return AllocationLine(flowId: flowId, rule: try rule(currency: currency))
@@ -157,7 +157,7 @@ struct AllocationLineDraft: Equatable {
             throw AllocationDraftError(
                 field: .envelope,
                 underlying: DomainError.InvalidCommand(
-                    message: String(localized: "That envelope already has a line in the plan")
+                    message: String(localized: "That flow already has a line in the plan")
                 )
             )
         }

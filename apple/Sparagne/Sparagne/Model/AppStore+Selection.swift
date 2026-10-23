@@ -73,7 +73,7 @@ extension AppStore {
     func setSelectionEnvelope(_ flowId: Uuid) async {
         await patchTargets(
             bulkTargets.filter { $0.flowId != flowId }.map { RowPatch(id: $0.id, patch: TransactionPatch(flowId: flowId)) },
-            step: String(localized: "Envelope Change")
+            step: String(localized: "Flow Change")
         )
     }
 

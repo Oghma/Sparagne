@@ -223,7 +223,7 @@ transfer. Then, oldest first, every flagged row left out is recorded:
 
 - a duplicate whose choice is `MoveExisting` is moved into the imported
   wallet (`move-existing`): an `UpdateTransaction` of its `wallet_id`
-  alone, so its kind, note, category, envelope, date and person stay;
+  alone, so its kind, note, category, flow, date and person stay;
 - a duplicate whose choice is `Skip` is claimed (`claim`): an
   `UpdateTransaction` naming the `wallet_id` it already has;
 - the other side of a transfer whose choice is `Skip` is claimed: an
@@ -242,7 +242,7 @@ side of the transfer on the wallet it names; once both banks of a transfer
 are imported, both its sides are claimed.
 
 Refused rows, replacements, claims and moves land in the report on their
-line (a claim is refused, like any update, on an entry whose envelope or
+line (a claim is refused, like any update, on an entry whose flow or
 wallet is archived, or on a transfer touching an archived wallet; a refused
 replacement writes nothing at all); a storage
 error stops the import, every command before it stays, and a new run
@@ -262,7 +262,7 @@ stay what they were, and changing what a row is never makes it new again);
 the amount in minor units signed as
 the file wrote it; the payee lowercased; and `n` the number of rows with
 the same key earlier in the file, so two identical rows in the same second
-both import. The start day, the envelope or a match never change an id.
+both import. The start day, the flow or a match never change an id.
 With an account column the wallet part is `acct:` and the row's account,
 trimmed and lowercased, never the wallet the account goes to. The namespace
 (`STATEMENT_NAMESPACE`) and the format are frozen: changing either would
@@ -312,7 +312,7 @@ first.
 - The server applies a replacement one command at a time, as it does every
   batch: if another device archives either wallet first, it may refuse the
   transfer and accept the void. What to do: type the movement again.
-- Replacing an income that was already shared out into envelopes takes it
+- Replacing an income that was already shared out into flows takes it
   out of Unallocated, which can go below zero. What to do: move the money
   back, or decide the allocation again.
 - A transfer row replaces one entry only: a bonifico typed by hand into one

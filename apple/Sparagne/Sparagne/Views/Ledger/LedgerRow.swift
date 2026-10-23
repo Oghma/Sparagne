@@ -133,7 +133,7 @@ enum LedgerAccessibility {
         ]
         if !row.note.isEmpty { parts.append(row.note) }
         if row.envelopeDisplay != TransactionRow.placeholder {
-            parts.append(String(localized: "envelope \(row.envelopeDisplay)"))
+            parts.append(String(localized: "flow \(row.envelopeDisplay)"))
         }
         // A wallet transfer's route is on screen whatever the column, in
         // the description's tag (`TransactionRow.transferRoute`).
@@ -887,7 +887,7 @@ struct NewRowView: View {
             if isEdited(.flow) {
                 GridCell(width: columns[.flow]) {
                     EnvelopeSelectCell(
-                        placeholder: String(localized: "Envelope"),
+                        placeholder: String(localized: "Flow"),
                         store: store,
                         choices: envelopes,
                         key: key(.flow),
@@ -946,7 +946,7 @@ struct NewRowView: View {
     /// No envelope picked yet: the line lands on the sticky one, which it
     /// names while the vault has one.
     private var envelopePlaceholder: String {
-        store.defaultFlowId.map { store.envelopeName($0) } ?? String(localized: "Envelope")
+        store.defaultFlowId.map { store.envelopeName($0) } ?? String(localized: "Flow")
     }
 
     /// A plain text cell: the field while it is typed into, its text or its
