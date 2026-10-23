@@ -76,10 +76,12 @@ cargo clippy --workspace --all-targets
 The Riepilogo tab (⌘1) is the year at a glance, up to the month on screen:
 a strip of what needs doing (recurring periods to decide, an allocation
 period waiting, rows without a category; a click opens the tab that deals
-with it), six cards of the month (income, expenses, savings, the savings
-rate with the last twelve months' under it, the fixed costs the recurring
-expenses commit, and the months of autonomy: the total over the average
-month of expenses of the last twelve finished months), the capped
+with it), two rows of cards, the year so far over the month on screen
+(income, expenses, savings and the savings rate in both, the year's rate
+with the last twelve months' under it and each month's figure with the
+month before's; the year's row ends with the months of autonomy, the total
+over the average month of expenses of the last twelve finished months, the
+month's with the fixed costs the recurring expenses commit), the capped
 envelopes with their bars, the month-by-month table (with a column per
 wallet when two or more move in the year, and one per person), the people
 and the envelopes of the year (what came into each and went out, moves

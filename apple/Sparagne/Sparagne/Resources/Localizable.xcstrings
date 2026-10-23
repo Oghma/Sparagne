@@ -8969,18 +8969,18 @@
         }
       }
     },
-    "Savings rate": {
+    "Savings rate · %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Savings rate"
+            "value": "Savings rate · %@"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tasso di risparmio"
+            "value": "Tasso di risparmio · %@"
           }
         }
       }

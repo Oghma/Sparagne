@@ -1,60 +1,82 @@
 import SwiftUI
 
-// MARK: - The month's cards
+// MARK: - The cards
 
-/// The six numbers of the month on screen: income, expenses, savings and
-/// the rate, each with a line under it that compares it with the month
-/// before or the last twelve months, what the recurring expenses commit
-/// every month, and how many months the money would last. Only savings is
-/// colored: expenses are the ordinary run of a month, not an alarm.
-struct MonthCards: View {
+/// Two rows of five: the year so far above and the month on screen under
+/// it, so a column reads one figure twice. Income, expenses, savings and
+/// the rate in both; the year's row ends with how many months the money
+/// would last, the month's with what the recurring expenses commit every
+/// month. A line under a month's figure compares it with the month before,
+/// the one under the year's rate gives the last twelve months. Only savings
+/// is colored: expenses are the ordinary run of a month, not an alarm.
+struct SummaryCards: View {
+    let year: YearSummary
     let kpis: MonthKPIs
-    let month: MonthKey
-    /// `nil` without an enabled recurring expense: the fifth card says so.
+    /// `nil` without an enabled recurring expense: its card says so.
     let fixedCosts: FixedCosts?
-    /// `nil` with no expense to measure it on: the sixth card is a dash.
-    let autonomy: Autonomy?
 
     var body: some View {
-        // Always six across: an adaptive grid opens a seventh, empty column on
-        // a wide window, and the window is never narrower than six cards.
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 150), spacing: 8), count: 6), spacing: 8) {
-            KPICard(
-                title: String(localized: "Income \u{00B7} \(name)"),
-                value: LedgerMoney.bare(kpis.income),
-                caption: kpis.previous.map { String(localized: "\(LedgerMoney.bare($0.income)) in \(previousName)") }
-            )
-            KPICard(
-                title: String(localized: "Expenses \u{00B7} \(name)"),
-                value: LedgerMoney.bare(kpis.expenses),
-                caption: kpis.previous.map { String(localized: "\(LedgerMoney.bare($0.expenses)) in \(previousName)") }
-            )
-            KPICard(
-                title: String(localized: "Savings \u{00B7} \(name)"),
-                value: LedgerMoney.bare(kpis.savings),
-                tint: kpis.savings >= 0 ? Ink.positive : Ink.negative,
-                caption: deltaCaption,
-                captionTint: (kpis.savingsDelta ?? 0) >= 0 ? Ink.positive : Ink.negative
-            )
-            KPICard(
-                title: String(localized: "Savings rate"),
-                value: rate(kpis.savings, of: kpis.income),
-                caption: String(localized: "\(rate(kpis.trailingSavings, of: kpis.trailingIncome)) in the last 12 months"),
-                help: SummaryText.trailingRateHelp
-            )
-            KPICard(
-                title: String(localized: "Fixed costs \u{00B7} monthly"),
-                value: fixedCosts.map { "\u{2248} " + LedgerMoney.bare($0.monthly) } ?? TransactionRow.placeholder,
-                caption: fixedCaption
-            )
-            KPICard(
-                title: String(localized: "Autonomy"),
-                value: autonomy.map { "\u{2248} " + String(localized: "\(SummaryText.months($0.months)) months") }
-                    ?? TransactionRow.placeholder,
-                caption: autonomy.map { String(localized: "\(LedgerMoney.bare($0.monthlyExpense)) of expenses a month") },
-                help: SummaryText.autonomyHelp
-            )
+        // Always five across: an adaptive grid opens a sixth, empty column on
+        // a wide window, and the window is never narrower than five cards.
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 150), spacing: 8), count: 5), spacing: 8) {
+            yearCards
+            monthCards
         }
+    }
+
+    @ViewBuilder
+    private var yearCards: some View {
+        KPICard(title: String(localized: "Income \u{00B7} \(yearName)"), value: LedgerMoney.bare(year.yearIncome))
+        KPICard(title: String(localized: "Expenses \u{00B7} \(yearName)"), value: LedgerMoney.bare(year.yearExpense))
+        KPICard(
+            title: String(localized: "Savings \u{00B7} \(yearName)"),
+            value: LedgerMoney.bare(year.yearSavings),
+            tint: year.yearSavings >= 0 ? Ink.positive : Ink.negative
+        )
+        KPICard(
+            title: String(localized: "Savings rate \u{00B7} \(yearName)"),
+            value: rate(year.yearSavings, of: year.yearIncome),
+            caption: String(localized: "\(rate(kpis.trailingSavings, of: kpis.trailingIncome)) in the last 12 months"),
+            help: SummaryText.trailingRateHelp
+        )
+        KPICard(
+            title: String(localized: "Autonomy"),
+            value: year.autonomy.map { "\u{2248} " + String(localized: "\(SummaryText.months($0.months)) months") }
+                ?? TransactionRow.placeholder,
+            caption: year.autonomy.map { String(localized: "\(LedgerMoney.bare($0.monthlyExpense)) of expenses a month") },
+            help: SummaryText.autonomyHelp
+        )
+    }
+
+    @ViewBuilder
+    private var monthCards: some View {
+        KPICard(
+            title: String(localized: "Income \u{00B7} \(name)"),
+            value: LedgerMoney.bare(kpis.income),
+            caption: kpis.previous.map { String(localized: "\(LedgerMoney.bare($0.income)) in \(previousName)") }
+        )
+        KPICard(
+            title: String(localized: "Expenses \u{00B7} \(name)"),
+            value: LedgerMoney.bare(kpis.expenses),
+            caption: kpis.previous.map { String(localized: "\(LedgerMoney.bare($0.expenses)) in \(previousName)") }
+        )
+        KPICard(
+            title: String(localized: "Savings \u{00B7} \(name)"),
+            value: LedgerMoney.bare(kpis.savings),
+            tint: kpis.savings >= 0 ? Ink.positive : Ink.negative,
+            caption: deltaCaption,
+            captionTint: (kpis.savingsDelta ?? 0) >= 0 ? Ink.positive : Ink.negative
+        )
+        KPICard(
+            title: String(localized: "Savings rate \u{00B7} \(name)"),
+            value: rate(kpis.savings, of: kpis.income),
+            caption: kpis.previous.map { String(localized: "\(rate($0.savings, of: $0.income)) in \(previousName)") }
+        )
+        KPICard(
+            title: String(localized: "Fixed costs \u{00B7} monthly"),
+            value: fixedCosts.map { "\u{2248} " + LedgerMoney.bare($0.monthly) } ?? TransactionRow.placeholder,
+            caption: fixedCaption
+        )
     }
 
     /// "≈" as the Ricorrenze status line writes it: a weekly template is
@@ -67,9 +89,12 @@ struct MonthCards: View {
         return String(localized: "\(SummaryText.percent(share)) of average income")
     }
 
-    private var name: String { SummaryText.monthName(month.month) }
+    /// `"2026"`, as a string: a number would be grouped, `"2.026"`.
+    private var yearName: String { String(year.year) }
 
-    private var previousName: String { SummaryText.monthName(month.adding(months: -1).month) }
+    private var name: String { SummaryText.monthName(year.upTo.month) }
+
+    private var previousName: String { SummaryText.monthName(year.upTo.adding(months: -1).month) }
 
     /// "▼ 180,14 vs September": the arrow says which way, the figure how much.
     /// January has no month to compare with, so no line.
@@ -85,13 +110,13 @@ struct MonthCards: View {
     }
 }
 
-/// One of the five numbers across the top.
+/// One of the ten numbers across the top.
 private struct KPICard: View {
     let title: String
     let value: String
     var tint: Color = Ink.text
     /// `nil` leaves the line blank, so the cards keep their height.
-    let caption: String?
+    var caption: String?
     var captionTint: Color = Ink.text2
     /// What the figure counts, on hover.
     var help: String?
