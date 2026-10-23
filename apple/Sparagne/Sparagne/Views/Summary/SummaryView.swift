@@ -28,7 +28,7 @@ struct SummaryView: View {
             }
 
             if let kpis = year.kpis {
-                MonthCards(kpis: kpis, month: year.upTo, fixedCosts: store.fixedCosts)
+                MonthCards(kpis: kpis, month: year.upTo, fixedCosts: store.fixedCosts, autonomy: year.autonomy)
             }
 
             if !year.funds.isEmpty {

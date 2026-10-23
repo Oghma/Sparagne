@@ -42,6 +42,7 @@ struct YearModelTests {
     private static func build(
         year: Int = 2026,
         rows: [BucketPersonTotals],
+        previousRows: [BucketPersonTotals] = [],
         flows: [FlowView] = [],
         upTo: MonthKey = upTo,
         vaultPeople: [String] = [],
@@ -54,6 +55,7 @@ struct YearModelTests {
             year: year,
             upTo: upTo,
             rows: rows,
+            previousRows: previousRows,
             flows: flows,
             vaultPeople: vaultPeople,
             person: person,
@@ -331,7 +333,7 @@ struct YearModelTests {
     func kpiDelta() {
         let kpis = MonthKPIs(
             income: 185_000, expenses: 61_994, previous: .init(income: 425_000, expenses: 284_000),
-            yearIncome: 1_000_000, yearSavings: 290_000
+            trailingIncome: 1_000_000, trailingSavings: 290_000
         )
         #expect(kpis.savings == 123_006)
         #expect(kpis.previous?.savings == 141_000)
@@ -356,9 +358,10 @@ struct YearModelTests {
         #expect(kpis.expenses == 122_000)
         #expect(kpis.previous == .init(income: 400_000, expenses: 250_000))
         #expect(kpis.savingsDelta == Int64(228_000))
-        // The year to date counts the same way.
-        #expect(kpis.yearSavings == year.yearSavings)
-        #expect(kpis.yearRate == Double(year.yearSavings) / Double(year.yearIncome))
+        // With nothing in the year before, the last twelve months are the
+        // year so far, counted the same way.
+        #expect(kpis.trailingSavings == year.yearSavings)
+        #expect(kpis.trailingRate == Double(year.yearSavings) / Double(year.yearIncome))
     }
 
     @Test("January has no month before it to compare with")
@@ -382,15 +385,113 @@ struct YearModelTests {
     func kpiRates() {
         let kpis = MonthKPIs(
             income: 200_000, expenses: 50_000, previous: nil,
-            yearIncome: 1_000_000, yearSavings: 290_000
+            trailingIncome: 1_000_000, trailingSavings: 290_000
         )
         #expect(kpis.rate == 0.75)
-        #expect(kpis.yearRate == 0.29)
+        #expect(kpis.trailingRate == 0.29)
         let none = MonthKPIs(
-            income: 0, expenses: 10, previous: nil, yearIncome: 0, yearSavings: 0
+            income: 0, expenses: 10, previous: nil, trailingIncome: 0, trailingSavings: 0
         )
         #expect(none.rate == nil)
-        #expect(none.yearRate == nil)
+        #expect(none.trailingRate == nil)
+    }
+
+    // MARK: - The last twelve months
+
+    @Test("The rate's last twelve months reach into the year before and stop a year back")
+    func trailingRateReachesTheYearBefore() throws {
+        let march = MonthKey(year: 2026, month: 3)
+        let year = Self.build(
+            rows: [
+                Self.row(1, "matteo", income: 400_000, expense: 100_000),
+                Self.row(3, "matteo", income: 400_000, expense: 100_000),
+            ],
+            previousRows: [
+                // March 2025 is thirteen months back: out.
+                Self.row(2, "matteo", income: 1_000_000),
+                // August 2025, the holidays: in.
+                Self.row(7, "matteo", income: 400_000, expense: 300_000),
+            ],
+            upTo: march
+        )
+        let kpis = try #require(year.kpis)
+        #expect(kpis.rate == 0.75)
+        #expect(kpis.trailingIncome == 1_200_000)
+        #expect(kpis.trailingSavings == 700_000)
+        // The table's year is still January to March.
+        #expect(year.yearRate == 0.75)
+    }
+
+    @Test("Under PERSONA the year before is that person's too")
+    func trailingFollowsPersona() throws {
+        let year = Self.build(
+            rows: [Self.row(1, "elisa", income: 100_000, expense: 50_000)],
+            previousRows: [
+                Self.row(11, "elisa", income: 100_000, expense: 90_000),
+                Self.row(11, "matteo", income: 900_000, expense: 10_000),
+            ],
+            upTo: MonthKey(year: 2026, month: 1),
+            person: "elisa"
+        )
+        let kpis = try #require(year.kpis)
+        #expect(kpis.trailingIncome == 200_000)
+        #expect(kpis.trailingSavings == 60_000)
+        #expect(year.previousYear.count == 12)
+    }
+
+    @Test("Autonomy is TOTALE over the average month of the last twelve finished, from the first that moved money")
+    func autonomy() throws {
+        let april = MonthKey(year: 2026, month: 4)
+        let year = Self.build(
+            rows: [
+                Self.row(0, "matteo", opening: 2_000_000),
+                Self.row(1, "matteo", income: 300_000, expense: 150_000),
+                // February moved nothing: a month of no spending, counted.
+                Self.row(3, "matteo", income: 300_000, expense: 150_000),
+                // April is still going: TOTALE has it, the average does not.
+                Self.row(4, "matteo", income: 300_000, expense: 900_000),
+            ],
+            previousRows: [
+                // Thirteen months back from March: out.
+                Self.row(2, "matteo", income: 1_000_000, expense: 5_000_000),
+                // The vault's first months; April to October 2025 are empty
+                // and before them, so they are no months of no spending.
+                Self.row(10, "matteo", income: 300_000, expense: 200_000),
+                Self.row(11, "matteo", income: 300_000, expense: 400_000),
+            ],
+            upTo: april,
+            today: april
+        )
+        let autonomy = try #require(year.autonomy)
+        // November to March: 900,00 over five months.
+        #expect(autonomy == Autonomy(total: 1_700_000, monthlyExpense: 180_000))
+        #expect(autonomy.months == 1_700_000.0 / 180_000.0)
+    }
+
+    @Test("A live January reads the whole year before, and a vault in the red lasts no months")
+    func autonomyInJanuary() throws {
+        let january = MonthKey(year: 2026, month: 1)
+        let year = Self.build(
+            rows: [
+                Self.row(0, "matteo", opening: 1_500_000),
+                Self.row(1, "matteo", income: 300_000, expense: 2_000_000),
+            ],
+            previousRows: (0..<12).map { Self.row(UInt32($0), "matteo", income: 300_000, expense: $0 == 5 ? 700_000 : 100_000) },
+            upTo: january,
+            today: january
+        )
+        let autonomy = try #require(year.autonomy)
+        #expect(autonomy.monthlyExpense == 150_000)
+        #expect(autonomy.total == -200_000)
+        #expect(autonomy.months == 0)
+    }
+
+    @Test("No autonomy without an expense to measure it on, nor in a year to come")
+    func noAutonomy() {
+        #expect(Self.build(rows: [Self.row(1, "matteo", income: 100_000)]).autonomy == nil)
+        #expect(Self.build(year: 2027, rows: Self.household).autonomy == nil)
+        // Nobody said what today is: every month drawn is finished.
+        #expect(Self.build(rows: Self.household).autonomy == Autonomy(total: 1_480_000, monthlyExpense: 30_000))
     }
 
     @Test("A fund knows whether its cap is on the balance or on the income")

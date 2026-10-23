@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// "Buste": every active envelope, Unallocated first, with its balance at
-/// the end of the month on screen, the year's income and expenses, and who
-/// spent from it. A fund carries the tag its card has, so the two read as
-/// the same envelope.
+/// the end of the month on screen, what came in and went out in the year,
+/// moves between envelopes included, and who took it out. An envelope with
+/// a cap carries the tag its card has, so the two read as the same envelope.
 ///
 /// Not drawn without an envelope (`SummaryView`); the split by person goes
 /// under the PERSONA filter, where it would be one column repeating USCITE.
@@ -27,7 +27,7 @@ struct EnvelopeYearTable: View {
                     SectionLabel(text: String(localized: "Envelopes"), tint: Ink.text2)
                         .accessibilityAddTraits(.isHeader)
                     Spacer(minLength: 8)
-                    Text(String(localized: "balance at month end \u{00B7} income and expenses of the year"))
+                    Text(String(localized: "balance at month end \u{00B7} in and out in the year, moves included"))
                         .font(Face.label)
                         .foregroundStyle(Ink.text3)
                         .lineLimit(1)

@@ -433,6 +433,12 @@ actor CoreActor {
                     from: request.yearFrom,
                     to: request.yearTo
                 ),
+                yearFlowTransfers: try handle.flowTransferTotals(
+                    vaultId: vaultId,
+                    from: request.yearFrom,
+                    to: request.yearTo
+                ),
+                previousYear: try handle.yearBreakdown(vaultId: vaultId, bounds: request.previousYearBounds),
                 recurringTemplates: try handle.listRecurring(vaultId: vaultId, includeArchived: true),
                 categoryBuckets: try handle.categoryBucketTotals(
                     vaultId: vaultId,
@@ -588,6 +594,9 @@ struct VaultLoadRequest: Sendable {
     /// Fourteen boundaries: the epoch plus the thirteen month starts, so
     /// bucket 0 is everything before January.
     let yearBounds: [UtcDateTime]
+    /// The thirteen month starts of the year before, so bucket 0 is its
+    /// January: the last twelve months of any month reach into it.
+    let previousYearBounds: [UtcDateTime]
     /// `[January 1st, the end of the month on screen)` of the year on screen:
     /// the range of the RIEPILOGO's categories, top expenses and envelopes.
     let yearFrom: UtcDateTime
@@ -626,6 +635,11 @@ struct VaultLoad: Sendable {
     let yearTopExpenses: [TopExpense]
     /// The envelope x person matrix of the year so far, unfiltered.
     let yearFlowPerson: [FlowPersonTotals]
+    /// The moves between envelopes of the year so far, by envelope and person.
+    let yearFlowTransfers: [FlowTransferTotals]
+    /// `year_breakdown` over `previousYearBounds`: the year before by month
+    /// and person, for the rate and the average of the last twelve months.
+    let previousYear: [BucketPersonTotals]
     /// Every template, archived included: the fixed costs card reads the
     /// enabled ones, the Ricorrenze tab the lot.
     let recurringTemplates: [RecurringView]
