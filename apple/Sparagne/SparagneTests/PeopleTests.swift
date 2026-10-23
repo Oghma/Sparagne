@@ -142,8 +142,8 @@ struct PeopleTests {
         await store.submit(quickAdd: "-24 cena !eli")
         await store.submit(quickAdd: "-3 caffè !ELISA")
         #expect(store.presentedError == nil)
-        #expect(store.rows.first { $0.note == "cena" }?.person == "elisa")
-        #expect(store.rows.first { $0.note == "caffè" }?.person == "elisa")
+        #expect(store.rows.first { $0.note == "Cena" }?.person == "elisa")
+        #expect(store.rows.first { $0.note == "Caffè" }?.person == "elisa")
     }
 
     @Test("Logged out under the local name Matteo, with rows by the username matteo, !matteo is not ambiguous")
@@ -154,7 +154,7 @@ struct PeopleTests {
 
         await store.submit(quickAdd: "-24 cena !matteo")
         #expect(store.presentedError == nil)
-        #expect(store.rows.contains { $0.note == "cena" })
+        #expect(store.rows.contains { $0.note == "Cena" })
     }
 
     @Test("Spellings that differ only in case are folded into the lowercase one, at the first one's place")
@@ -180,7 +180,7 @@ struct PeopleTests {
 
         await store.submit(quickAdd: "-24 cena !eli")
         #expect(store.presentedError == nil)
-        let row = try #require(store.rows.first { $0.note == "cena" })
+        let row = try #require(store.rows.first { $0.note == "Cena" })
         #expect(row.person == "elisa")
         #expect(row.recordedBy == "matteo")
         #expect(store.transactions.first { $0.id == row.id }?.createdBy == "matteo")
@@ -196,7 +196,7 @@ struct PeopleTests {
         let error = try #require(store.presentedError)
         #expect(error.code == "unknown_name")
         #expect(error.summary == ErrorMessages.unknownPerson("paolo"))
-        #expect(!store.rows.contains { $0.note == "cena" })
+        #expect(!store.rows.contains { $0.note == "Cena" })
     }
 
     @Test("A !name for the author sends no person, whatever its case, as the PERSONA cell does")
@@ -209,9 +209,9 @@ struct PeopleTests {
         await store.submit(quickAdd: "-5 pane !elisa")
         #expect(store.presentedError == nil)
         let commands = try await Self.outbox(store)
-        let dinner = try #require(commands.first { $0["note"] as? String == "cena" })
+        let dinner = try #require(commands.first { $0["note"] as? String == "Cena" })
         #expect(dinner["person"] == nil)
-        let bread = try #require(commands.first { $0["note"] as? String == "pane" })
+        let bread = try #require(commands.first { $0["note"] as? String == "Pane" })
         #expect(bread["person"] as? String == "elisa")
 
         // Logged out under the local name, the username its synced rows
@@ -220,7 +220,7 @@ struct PeopleTests {
         await local.setAuthor("Matteo")
         await local.submit(quickAdd: "-24 cena !matteo")
         #expect(local.presentedError == nil)
-        #expect(local.rows.first { $0.note == "cena" }?.person == "Matteo")
+        #expect(local.rows.first { $0.note == "Cena" }?.person == "Matteo")
         #expect(local.explicitPerson("MATTEO") == nil)
     }
 
@@ -253,7 +253,7 @@ struct PeopleTests {
 
         await store.resolveAmbiguous(error, choosing: "elisa")
         #expect(store.presentedError == nil)
-        #expect(store.rows.first { $0.note == "cena" }?.person == "elisa")
+        #expect(store.rows.first { $0.note == "Cena" }?.person == "elisa")
         #expect(store.categories.contains { $0.name == "elettricità" })
     }
 
@@ -271,7 +271,7 @@ struct PeopleTests {
 
         await store.resolveAmbiguous(error, choosing: "elisa")
         #expect(store.presentedError == nil)
-        #expect(store.rows.first { $0.note == "cena" }?.person == "elisa")
+        #expect(store.rows.first { $0.note == "Cena" }?.person == "elisa")
     }
 
     @Test("Rewriting a choice keeps each marker and finds the whole token")

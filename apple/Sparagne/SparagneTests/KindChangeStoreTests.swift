@@ -21,7 +21,7 @@ struct KindChangeStoreTests {
         await store.addRow(day: Date(), flowId: spesa.id, category: "Spesa", note: "coop", amount: 5_000)
         store.tab = .ledger
         #expect(store.presentedError == nil)
-        #expect(store.rows.map(\.note) == ["mutuo", "coop"])
+        #expect(store.rows.map(\.note) == ["Mutuo", "Coop"])
         return (store, try LedgerHistoryTests.attachManager(to: store))
     }
 
@@ -46,7 +46,7 @@ struct KindChangeStoreTests {
     @Test("An expense turned into an income comes back the same row under a new id, and the balances turn with it")
     func expenseToIncome() async throws {
         let (store, _) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         let before = try Self.view(coop.id, in: store)
         #expect(store.kindTargets(of: coop.id) == [.income, .refund])
 
@@ -66,7 +66,7 @@ struct KindChangeStoreTests {
         #expect(income.walletId == before.walletId)
         #expect(income.flowId == before.flowId)
         #expect(income.categoryId == before.categoryId)
-        #expect(income.note == "coop")
+        #expect(income.note == "Coop")
         #expect(income.person == before.person)
 
         // The old row is deleted, not edited.
@@ -82,7 +82,7 @@ struct KindChangeStoreTests {
         store.direction = .income
         await store.settle()
         await store.addRow(day: Date(), flowId: try Self.flow("Fondo", in: store).id, category: "Regali", note: "regalo", amount: 5_000)
-        let gift = try Self.row("regalo", in: store)
+        let gift = try Self.row("Regalo", in: store)
         #expect(gift.kind == .income)
 
         // Voided first, the income leaves Fondo at zero, and the expense
@@ -100,7 +100,7 @@ struct KindChangeStoreTests {
     @Test("The amount typed with the kind is the new row's; the same amount is no change of it")
     func amountWithTheKind() async throws {
         let (store, _) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
 
         let refund = try #require(await store.changeKind(of: coop.id, to: .refund, amount: 6_000))
         #expect(try Self.view(refund, in: store).amount == 6_000)
@@ -119,9 +119,9 @@ struct KindChangeStoreTests {
         store.showTransfers = true
         await store.settle()
         #expect(store.presentedError == nil)
-        let mutuo = try Self.row("mutuo", in: store)
-        let coop = try Self.row("coop", in: store)
-        let reso = try Self.row("reso", in: store)
+        let mutuo = try Self.row("Mutuo", in: store)
+        let coop = try Self.row("Coop", in: store)
+        let reso = try Self.row("Reso", in: store)
         let transfer = try #require(store.rows.first { $0.isTransfer })
         store.selectAllRows()
         // Any row at least can become each of them.
@@ -145,7 +145,7 @@ struct KindChangeStoreTests {
         await store.settle()
         #expect(store.presentedError == nil)
         #expect(executed.count == 2)
-        let expenses = store.rows.filter { $0.note == "mutuo" || $0.note == "coop" }
+        let expenses = store.rows.filter { $0.note == "Mutuo" || $0.note == "Coop" }
         #expect(expenses.count == 2)
         #expect(expenses.allSatisfy { $0.kind == .expense })
         #expect(manager.canRedo)
@@ -155,7 +155,7 @@ struct KindChangeStoreTests {
     @Test("⌘Z and ⇧⌘Z go back and forth, each time under a new id, the toast going with the row it shows")
     func undoAndRedo() async throws {
         let (store, manager) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         let income = try #require(await store.changeKind(of: coop.id, to: .income, amount: 6_000))
         #expect(store.kindMoveNotice?.transactionId == income)
         #expect(store.wallets.first?.balance == 11_000)
@@ -165,7 +165,7 @@ struct KindChangeStoreTests {
         #expect(store.presentedError == nil)
         // What the toast would show is deleted: the toast goes.
         #expect(store.kindMoveNotice == nil)
-        let back = try Self.row("coop", in: store)
+        let back = try Self.row("Coop", in: store)
         #expect(back.id != coop.id && back.id != income)
         #expect(back.kind == .expense)
         #expect(back.absoluteAmount == 5_000)
@@ -174,20 +174,20 @@ struct KindChangeStoreTests {
         manager.redo()
         await store.settle()
         #expect(store.presentedError == nil)
-        #expect(!store.rows.contains { $0.note == "coop" })
+        #expect(!store.rows.contains { $0.note == "Coop" })
         #expect(store.wallets.first?.balance == 11_000)
 
         manager.undo()
         await store.settle()
         #expect(store.presentedError == nil)
-        #expect(try Self.row("coop", in: store).absoluteAmount == 5_000)
+        #expect(try Self.row("Coop", in: store).absoluteAmount == 5_000)
         #expect(store.wallets.first?.balance == 0)
     }
 
     @Test("The steps about the row deleted by the change are forgotten, and so are the new row's once undo deletes it")
     func oldStepsAreForgotten() async throws {
         let (store, manager) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         await store.update(transactionId: coop.id, patch: TransactionPatch(note: "conad"))
         #expect(manager.undoActionName == String(localized: "Edit Row"))
 
@@ -198,7 +198,7 @@ struct KindChangeStoreTests {
         manager.undo()
         await store.settle()
         #expect(store.presentedError == nil)
-        let back = try Self.row("conad", in: store)
+        let back = try Self.row("Conad", in: store)
         #expect(back.kind == .expense)
         // The edit made before the change could only be refused now.
         #expect(!manager.canUndo)
@@ -208,14 +208,14 @@ struct KindChangeStoreTests {
         manager.redo()
         await store.settle()
         #expect(store.presentedError == nil)
-        #expect(try Self.row("conad", in: store).kind == .refund)
+        #expect(try Self.row("Conad", in: store).kind == .refund)
         #expect(!manager.canRedo)
     }
 
     @Test("The toast's Mostra opens the list the rows went to, the row selected, and goes")
     func showMovedRow() async throws {
         let (store, _) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         let income = try #require(await store.changeKind(of: coop.id, to: .income))
         let notice = try #require(store.kindMoveNotice)
         #expect(notice.direction == .income)
@@ -231,7 +231,7 @@ struct KindChangeStoreTests {
         // Closed or elapsed, a toast goes; an older toast's id leaves it.
         store.direction = .expenses
         await store.settle()
-        let mutuo = try Self.row("mutuo", in: store)
+        let mutuo = try Self.row("Mutuo", in: store)
         let again = try #require(await store.changeKind(of: mutuo.id, to: .income))
         let shown = try #require(store.kindMoveNotice)
         #expect(shown.transactionId == again)
@@ -247,20 +247,20 @@ struct KindChangeStoreTests {
     func plusOnAnExpense() async throws {
         let (store, _) = try await Self.household()
         let editor = store.ledgerEditor
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         editor.select(Self.cell(coop.id, .amount))
         editor.type("+60")
         editor.confirm()
         await store.settle()
 
         #expect(store.presentedError == nil)
-        #expect(!store.rows.contains { $0.note == "coop" })
+        #expect(!store.rows.contains { $0.note == "Coop" })
         #expect(editor.cursor == nil)
         let notice = try #require(store.kindMoveNotice)
         #expect(notice.direction == .income)
         store.direction = .income
         await store.settle()
-        let income = try #require(store.rows.first { $0.note == "coop" })
+        let income = try #require(store.rows.first { $0.note == "Coop" })
         #expect(income.id == notice.transactionId)
         #expect(income.absoluteAmount == 6_000)
     }
@@ -269,14 +269,14 @@ struct KindChangeStoreTests {
     func refundFollowsTheCursor() async throws {
         let (store, _) = try await Self.household()
         let editor = store.ledgerEditor
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         editor.select(Self.cell(coop.id, .amount))
         editor.type("r50")
         editor.confirm()
         await store.settle()
 
         #expect(store.presentedError == nil)
-        let refund = try Self.row("coop", in: store)
+        let refund = try Self.row("Coop", in: store)
         #expect(refund.kind == .refund)
         #expect(refund.id != coop.id)
         #expect(refund.absoluteAmount == 5_000)
@@ -288,15 +288,15 @@ struct KindChangeStoreTests {
     func ownSignIsTheAmount() async throws {
         let (store, _) = try await Self.household()
         let editor = store.ledgerEditor
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         for (text, amount) in [("-60", Int64(6_000)), ("\u{2212}70", 7_000), ("80", 8_000)] {
             editor.select(Self.cell(coop.id, .amount))
             editor.type(text)
             editor.confirm()
             await store.settle()
             #expect(store.presentedError == nil)
-            #expect(try Self.row("coop", in: store).id == coop.id)
-            #expect(try Self.row("coop", in: store).absoluteAmount == amount)
+            #expect(try Self.row("Coop", in: store).id == coop.id)
+            #expect(try Self.row("Coop", in: store).absoluteAmount == amount)
         }
     }
 
@@ -304,7 +304,7 @@ struct KindChangeStoreTests {
     func refusedSigns() async throws {
         let (store, _) = try await Self.household()
         let editor = store.ledgerEditor
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
 
         for text in ["r", "+0"] {
             editor.select(Self.cell(coop.id, .amount))
@@ -316,7 +316,7 @@ struct KindChangeStoreTests {
             editor.cancel()
             store.presentedError = nil
         }
-        #expect(try Self.row("coop", in: store).id == coop.id)
+        #expect(try Self.row("Coop", in: store).id == coop.id)
 
         // The wallet's opening balance, on ENTRATE.
         store.direction = .income
@@ -369,20 +369,20 @@ struct KindChangeStoreTests {
         await store.settle()
         #expect(store.presentedError == nil)
 
-        #expect(try #require(store.rows.first { $0.note == "stipendio" }).absoluteAmount == 30_000)
+        #expect(try #require(store.rows.first { $0.note == "Stipendio" }).absoluteAmount == 30_000)
         store.direction = .expenses
         await store.settle()
-        #expect(try Self.row("reso", in: store).kind == .refund)
-        #expect(try Self.row("pane", in: store).kind == .expense)
-        #expect(try Self.row("multa", in: store).kind == .expense)
-        #expect(try Self.row("multa", in: store).absoluteAmount == 4_000)
+        #expect(try Self.row("Reso", in: store).kind == .refund)
+        #expect(try Self.row("Pane", in: store).kind == .expense)
+        #expect(try Self.row("Multa", in: store).kind == .expense)
+        #expect(try Self.row("Multa", in: store).absoluteAmount == 4_000)
     }
 
     @Test("Cells saved just before a sign in IMPORTO, still on their way, go into the new row though another month is on screen by its turn")
     func cellsSavedBeforeTheSign() async throws {
         let (store, _) = try await Self.household()
         let editor = store.ledgerEditor
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         editor.select(Self.cell(coop.id, .note))
         editor.type("conad")
         editor.move(.tab)
@@ -399,11 +399,11 @@ struct KindChangeStoreTests {
         store.direction = .income
         await store.settle()
         let income = try #require(store.rows.first { $0.absoluteAmount == 6_000 })
-        #expect(income.note == "conad")
+        #expect(income.note == "Conad")
         #expect(income.category == "Altro")
         store.direction = .expenses
         await store.settle()
-        #expect(!store.rows.contains { $0.note == "coop" || $0.note == "conad" })
+        #expect(!store.rows.contains { $0.note == "Coop" || $0.note == "Conad" })
     }
 
     @Test("A cell's patch folded into the stored row reads as the core will store it: blank for Uncategorized and for the recorder")
@@ -463,7 +463,7 @@ struct KindChangeStoreTests {
         await store.settle()
         #expect(store.direction == .income)
         #expect(store.selection.ids == [shown.transactionId])
-        #expect(store.rows.first { $0.id == shown.transactionId }?.note == "premio")
+        #expect(store.rows.first { $0.id == shown.transactionId }?.note == "Premio")
 
         // Typed in USCITE and registered as ENTRATE comes on: where it was typed.
         store.direction = .expenses
@@ -478,6 +478,6 @@ struct KindChangeStoreTests {
         #expect(store.kindMoveNotice == nil)
         store.direction = .expenses
         await store.settle()
-        #expect(try Self.row("pane", in: store).kind == .expense)
+        #expect(try Self.row("Pane", in: store).kind == .expense)
     }
 }

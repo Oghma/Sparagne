@@ -116,17 +116,24 @@ impl CoreHandle {
         }))
     }
 
-    /// Applies one command: the only way to change a vault.
-    pub fn execute(&self, envelope: CommandEnvelope) -> Result<Receipt, DomainError> {
+    /// Applies one command: the only way to change a vault. Its note is
+    /// capitalized first ([`Command::capitalize_note`]); the server and a
+    /// replay go through [`Core::execute`] and take the note as logged.
+    pub fn execute(&self, mut envelope: CommandEnvelope) -> Result<Receipt, DomainError> {
+        envelope.command.capitalize_note();
         self.lock()?.execute(envelope)
     }
 
     /// Applies several commands in one local transaction, all or none. Each
-    /// keeps its own log row and syncs on its own.
+    /// keeps its own log row and syncs on its own. Notes are capitalized as
+    /// in [`Self::execute`].
     pub fn execute_batch(
         &self,
-        envelopes: Vec<CommandEnvelope>,
+        mut envelopes: Vec<CommandEnvelope>,
     ) -> Result<Vec<Receipt>, DomainError> {
+        for envelope in &mut envelopes {
+            envelope.command.capitalize_note();
+        }
         self.lock()?.execute_batch(envelopes)
     }
 
@@ -669,7 +676,7 @@ fn to_usize(value: u32) -> usize {
 #[expect(clippy::unwrap_used, reason = "tests")]
 mod tests {
     use super::*;
-    use crate::recurring::Frequency;
+    use crate::{Entry, recurring::Frequency};
 
     fn open_ended_daily() -> Schedule {
         Schedule {
@@ -687,5 +694,69 @@ mod tests {
         assert_eq!(all.len(), to_usize(MAX_OCCURRENCES_PREVIEW));
         let few = schedule_occurrences(open_ended_daily(), from, 3).unwrap();
         assert_eq!(few.len(), 3);
+    }
+
+    fn expense(note: &str) -> Command {
+        Command::Expense(Entry {
+            amount: 500,
+            wallet_id: None,
+            flow_id: None,
+            category: None,
+            note: Some(note.to_string()),
+            occurred_at: DateTime::parse_from_rfc3339("2026-10-23T12:00:00+02:00").unwrap(),
+            person: None,
+        })
+    }
+
+    #[test]
+    fn the_app_logs_its_notes_capitalized_and_a_replay_keeps_them_as_logged() {
+        let handle = CoreHandle::open_in_memory().unwrap();
+        let envelope =
+            create_vault_envelope("alice".to_string(), "Main".to_string(), Currency::Eur);
+        let vault = handle.execute(envelope).unwrap().result_id.unwrap();
+        let wallet = Command::CreateWallet {
+            name: "Cash".to_string(),
+            opening_balance: 10_000,
+            occurred_at: DateTime::parse_from_rfc3339("2026-10-01T00:00:00+02:00").unwrap(),
+        };
+        let envelope = |command| new_envelope(vault, "alice".to_string(), command);
+        handle.execute(envelope(wallet)).unwrap();
+
+        let pharmacy = handle.execute(envelope(expense("farmacia"))).unwrap();
+        let batch = handle
+            .execute_batch(vec![
+                envelope(expense("hotel Roma")),
+                envelope(expense("iPhone")),
+            ])
+            .unwrap();
+        // A command logged before the rule, as the server or a replay sees it.
+        let older = handle
+            .lock()
+            .unwrap()
+            .execute(envelope(expense("pizza")))
+            .unwrap();
+
+        let core = handle.lock().unwrap();
+        let note = |receipt: &Receipt| {
+            core.transaction(vault, receipt.result_id.unwrap())
+                .unwrap()
+                .note
+        };
+        assert_eq!(note(&pharmacy).as_deref(), Some("Farmacia"));
+        assert_eq!(note(&batch[0]).as_deref(), Some("Hotel Roma"));
+        assert_eq!(note(&batch[1]).as_deref(), Some("iPhone"));
+        assert_eq!(note(&older).as_deref(), Some("pizza"));
+
+        let log = core.commands_since(vault, 0).unwrap();
+        let mut fresh = Core::open_in_memory().unwrap();
+        crate::replay(&log, &mut fresh).unwrap();
+        let replayed = |receipt: &Receipt| {
+            fresh
+                .transaction(vault, receipt.result_id.unwrap())
+                .unwrap()
+                .note
+        };
+        assert_eq!(replayed(&pharmacy).as_deref(), Some("Farmacia"));
+        assert_eq!(replayed(&older).as_deref(), Some("pizza"));
     }
 }

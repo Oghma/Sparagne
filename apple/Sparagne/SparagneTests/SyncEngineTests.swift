@@ -613,8 +613,8 @@ struct SyncEngineTests {
         await bob.engine.syncNow()
 
         #expect(alice.notes() == bob.notes())
-        #expect(alice.notes().contains("pizza"))
-        #expect(alice.notes().contains("milk"))
+        #expect(alice.notes().contains("Pizza"))
+        #expect(alice.notes().contains("Milk"))
         #expect(alice.balances() == bob.balances())
         #expect(try await alice.syncState().lastServerSeq == (try await bob.syncState().lastServerSeq))
         #expect(try await alice.syncState().outbox == 0)
@@ -636,7 +636,7 @@ struct SyncEngineTests {
         // locally, but the second one to reach the server is not.
         await alice.store.submit(quickAdd: "-40.00 alice-dinner @Cash >Food")
         await bob.store.submit(quickAdd: "-40.00 bob-dinner @Cash >Food")
-        #expect(bob.notes().contains("bob-dinner"))
+        #expect(bob.notes().contains("Bob-dinner"))
 
         await alice.engine.syncNow()
         await bob.engine.syncNow()
@@ -647,8 +647,8 @@ struct SyncEngineTests {
         #expect(refused.vaultId == vaultId)
         #expect(refused.summary == ErrorMessages.summary(for: "insufficient_funds"))
         #expect(bob.engine.showsRejectedAlert)
-        #expect(bob.notes().contains("bob-dinner") == false)
-        #expect(bob.notes().contains("alice-dinner"))
+        #expect(bob.notes().contains("Bob-dinner") == false)
+        #expect(bob.notes().contains("Alice-dinner"))
         #expect(try await bob.syncState().rejected == 1)
 
         await bob.engine.dismiss(refused)
@@ -678,7 +678,7 @@ struct SyncEngineTests {
         #expect(peer.engine.status == .idle)
         #expect(peer.engine.pendingCount == 0)
         #expect(try await peer.syncState().outbox == 0)
-        #expect(peer.notes().contains("bus"))
+        #expect(peer.notes().contains("Bus"))
     }
 
     @Test("A viewer's vault is read-only here too: the write is refused before it enters the log")
@@ -719,7 +719,7 @@ struct SyncEngineTests {
         #expect(carol.engine.status == .idle)
         // The pull still ran: the owner's rename is here, the gum is not.
         #expect(carol.store.currentVault?.name == "Casa")
-        #expect(carol.notes().contains("gum") == false)
+        #expect(carol.notes().contains("Gum") == false)
         #expect(carol.store.isReadOnly)
     }
 
@@ -742,7 +742,7 @@ struct SyncEngineTests {
         #expect(bob.engine.showsRejectedAlert)
         #expect(bob.engine.status == .idle)
         #expect(bob.store.currentVault?.name == "Casa")
-        #expect(bob.notes().contains("milk") == false)
+        #expect(bob.notes().contains("Milk") == false)
 
         // Nothing is retried: the next round pushes nothing.
         let pushes = await server.callCount(method: "POST", path: "/vaults/\(vaultId)/push")
@@ -870,7 +870,7 @@ struct SyncEngineTests {
         #expect(peer.engine.serverVaults.isEmpty)
 
         await peer.store.submit(quickAdd: "-2.00 water @Cash >Food")
-        #expect(peer.store.transactions.first { $0.note == "water" }?.createdBy == AccountStore.systemAuthor)
+        #expect(peer.store.transactions.first { $0.note == "Water" }?.createdBy == AccountStore.systemAuthor)
 
         // A sync while logged out is a no-op, not an error.
         await peer.engine.syncNow()
@@ -1050,7 +1050,7 @@ struct SyncEngineTests {
         await bob.engine.syncNow()
         #expect(try await bob.syncState().outbox == 0)
         await alice.engine.syncNow()
-        #expect(alice.notes().contains("milk"))
+        #expect(alice.notes().contains("Milk"))
     }
 
     // MARK: - Leaving a vault
@@ -1074,7 +1074,7 @@ struct SyncEngineTests {
 
         // The milk went up before bob left; the vault does not come back.
         await alice.engine.syncNow()
-        #expect(alice.notes().contains("milk"))
+        #expect(alice.notes().contains("Milk"))
         await bob.engine.syncNow()
         #expect(bob.store.vaults.isEmpty)
         #expect(bob.engine.status == .idle)

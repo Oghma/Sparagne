@@ -45,7 +45,7 @@ struct CoreActorTests {
         // The call is inside the actor and going nowhere, yet the test is
         // running on the main actor and can read the store: a synchronous
         // core call would never have given it back.
-        #expect(!store.rows.contains { $0.note == "pizza" })
+        #expect(!store.rows.contains { $0.note == "Pizza" })
         #expect(store.wallets.first?.balance == 10_000)
 
         await gate.open()
@@ -53,7 +53,7 @@ struct CoreActorTests {
         await store.settle()
 
         #expect(store.presentedError == nil)
-        #expect(store.rows.contains { $0.note == "pizza" })
+        #expect(store.rows.contains { $0.note == "Pizza" })
         #expect(store.wallets.first?.balance == 8_750)
     }
 
@@ -70,8 +70,8 @@ struct CoreActorTests {
         await second.value
         await store.settle()
 
-        #expect(store.rows.contains { $0.note == "first" })
-        #expect(!store.rows.contains { $0.note == "second" })
+        #expect(store.rows.contains { $0.note == "First" })
+        #expect(!store.rows.contains { $0.note == "Second" })
         #expect(store.presentedError?.code == "insufficient_funds")
         #expect(store.presentedError?.message.contains("Food") == true)
         #expect(store.flows.first { $0.name == "Food" }?.balance == 1_000)
@@ -88,9 +88,9 @@ struct CoreActorTests {
         await store.settle()
 
         #expect(store.presentedError == nil)
-        #expect(store.rows.contains { $0.note == "bus" })
-        #expect(store.rows.contains { $0.note == "pizza" })
-        #expect(store.rows.filter { $0.note == "bus" || $0.note == "pizza" }.count == 2)
+        #expect(store.rows.contains { $0.note == "Bus" })
+        #expect(store.rows.contains { $0.note == "Pizza" })
+        #expect(store.rows.filter { $0.note == "Bus" || $0.note == "Pizza" }.count == 2)
         let wallet = try #require(store.wallets.first)
         let food = try #require(store.flows.first { $0.name == "Food" })
         #expect(wallet.balance == 7_000)
@@ -102,13 +102,13 @@ struct CoreActorTests {
         let store = try await Self.onboarded()
         await store.submit(quickAdd: "-10.00 bus >Food")
         await store.settle()
-        #expect(store.rows.contains { $0.note == "bus" })
+        #expect(store.rows.contains { $0.note == "Bus" })
 
         let previous = store.month.adding(months: -1)
         store.month = previous
         // The setter cannot await, so nothing has been loaded yet: the rows on
         // screen are still the ones of the month that was left.
-        #expect(store.rows.contains { $0.note == "bus" })
+        #expect(store.rows.contains { $0.note == "Bus" })
 
         await store.settle()
         #expect(store.month == previous)

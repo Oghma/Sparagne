@@ -127,7 +127,7 @@ struct EnvelopeSelectTests {
         await store.archiveEnvelope(viaggi.id)
         #expect(store.presentedError == nil)
         #expect(!store.flows.contains { $0.id == viaggi.id })
-        let archived = try #require(store.rows.first { $0.note == "regalo" })
+        let archived = try #require(store.rows.first { $0.note == "Regalo" })
         #expect(archived.envelopeDisplay == "Viaggi")
 
         var draft = RowDraft(row: archived, store: store)
@@ -148,7 +148,7 @@ struct EnvelopeSelectTests {
         // The column has room for the source; the route goes after the note.
         #expect(transfer.envelopeColumn == "Cash")
         #expect(transfer.transferRoute == "Cash \u{2192} Viaggi")
-        #expect(store.rows.first { $0.note == "coop" }?.transferRoute == nil)
+        #expect(store.rows.first { $0.note == "Coop" }?.transferRoute == nil)
 
         var draft = RowDraft(row: transfer, store: store)
         #expect(draft.flowId == nil)

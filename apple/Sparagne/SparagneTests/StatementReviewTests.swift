@@ -36,7 +36,7 @@ struct StatementReviewTests {
     private static func duplicate(_ model: StatementImportModel, in store: AppStore) async throws -> StatementRow {
         var row = try StatementFixture.row(model, line: 2)
         row.status = .possibleDuplicate
-        row.existing = try #require(try await StatementFixture.transactions(store).first { $0.note == "forno bianco" })
+        row.existing = try #require(try await StatementFixture.transactions(store).first { $0.note == "Forno bianco" })
         row.matchChoice = .skip
         return row
     }
@@ -532,7 +532,7 @@ struct StatementReviewTests {
         let model = try await StatementFixture.cardModel(store, wallet: card)
         let all = try await StatementFixture.transactions(store)
         // An income in the bank stands for the top-up the card's row is.
-        var income = try #require(all.first { $0.note == "forno bianco" })
+        var income = try #require(all.first { $0.note == "Forno bianco" })
         income.kind = .income
         income.walletId = bank
 

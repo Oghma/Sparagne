@@ -34,7 +34,7 @@ struct ReadOnlyLedgerTests {
         #expect(await gate.calls == before)
         // The line is left as typed, not swallowed.
         #expect(store.quickAddText == "-5.00 hotel")
-        #expect(!store.rows.contains { $0.note == "hotel" })
+        #expect(!store.rows.contains { $0.note == "Hotel" })
     }
 
     @Test("Move between envelopes is refused with a message, and the core never hears of it")
@@ -73,7 +73,7 @@ struct ReadOnlyLedgerTests {
         #expect(store.isReadOnly)
         #expect(!store.canWrite)
 
-        let pizza = try #require(store.rows.first { $0.note == "pizza" })
+        let pizza = try #require(store.rows.first { $0.note == "Pizza" })
         await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "coop", amount: 1_000)
         #expect(store.presentedError?.code == "forbidden")
         store.presentedError = nil
@@ -93,7 +93,7 @@ struct ReadOnlyLedgerTests {
     func personEditsAreRefused() async throws {
         let (store, gate) = try await Self.viewer()
         let before = await gate.calls
-        let pizza = try #require(store.rows.first { $0.note == "pizza" })
+        let pizza = try #require(store.rows.first { $0.note == "Pizza" })
 
         await store.update(transactionId: pizza.id, patch: TransactionPatch(person: "elisa"))
         #expect(store.presentedError?.code == "forbidden")
@@ -116,7 +116,7 @@ struct ReadOnlyLedgerTests {
         store.setReadOnlyVaults([vault])
         store.showTransfers = true
         await store.settle()
-        let pizza = try #require(store.rows.first { $0.note == "pizza" })
+        let pizza = try #require(store.rows.first { $0.note == "Pizza" })
         let transfer = try #require(store.rows.first { $0.isTransfer })
         let before = await gate.calls
 

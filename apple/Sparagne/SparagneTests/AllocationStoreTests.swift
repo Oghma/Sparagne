@@ -122,7 +122,7 @@ struct AllocationStoreTests {
         #expect(pending.missed == 0)
         // The opening balance is not an income to share out.
         #expect(store.allocationBase.total == 150_000)
-        #expect(store.allocationBase.incomes.map(\.note) == ["stipendio"])
+        #expect(store.allocationBase.incomes.map(\.note) == ["Stipendio"])
 
         let preview = try #require(await store.previewAllocation(lines: lines, total: store.allocationBase.total))
         #expect(preview.lines.map(\.amount) == [80_000, 50_000])

@@ -190,8 +190,8 @@ struct ServerE2ETests {
         #expect(try await alice.syncState().lastServerSeq == (try await bob.syncState().lastServerSeq))
         #expect(alice.store.snapshot == bob.store.snapshot)
         #expect(try await alice.allTransactions() == (try await bob.allTransactions()))
-        #expect(try await alice.notes().contains("pizza"))
-        #expect(try await alice.notes().contains("stipendio"))
+        #expect(try await alice.notes().contains("Pizza"))
+        #expect(try await alice.notes().contains("Stipendio"))
         #expect(alice.engine.rejected.isEmpty)
         #expect(bob.engine.rejected.isEmpty)
 
@@ -240,7 +240,7 @@ struct ServerE2ETests {
         #expect(carol.engine.pendingCount == 0)
         #expect(carol.engine.rejected.first?.command.code == "forbidden")
         #expect(carol.store.currentVault?.name == "Renamed \(suffix)")
-        #expect(try await carol.notes().contains("gum") == false)
+        #expect(try await carol.notes().contains("Gum") == false)
 
         // From now on the vault is read-only on carol's side.
         #expect(carol.store.isReadOnly)
@@ -250,7 +250,7 @@ struct ServerE2ETests {
 
         // The owner never sees either.
         await alice.engine.syncNow()
-        #expect(try await alice.notes().contains("gum") == false)
+        #expect(try await alice.notes().contains("Gum") == false)
         #expect(alice.engine.status == .idle)
         #expect(alice.store.snapshot == carol.store.snapshot)
     }
@@ -281,7 +281,7 @@ struct ServerE2ETests {
         let members = try await alice.engine.members(ofVault: vaultId)
         #expect(members.map(\.username) == [alice.username])
         await alice.engine.syncNow()
-        #expect(try await alice.notes().contains("pizza"))
+        #expect(try await alice.notes().contains("Pizza"))
 
         // Nothing brings it back, and the owner cannot leave their own.
         await bob.engine.syncNow()

@@ -598,6 +598,98 @@ impl Command {
         *slot = Some(to.to_string());
         true
     }
+
+    /// Capitalizes the note the command writes, when its first word is all
+    /// lowercase: `"hotel Roma"` becomes `"Hotel Roma"`, `"iPhone"` stays.
+    /// The app calls it before a command enters the log, so the log keeps
+    /// the note as the ledger shows it and a replay never rewrites one.
+    pub fn capitalize_note(&mut self) {
+        let note = match self {
+            Self::Income(e) | Self::Expense(e) | Self::Refund(e) => &mut e.note,
+            Self::TransferWallet { note, .. }
+            | Self::TransferFlow { note, .. }
+            | Self::CreateRecurring { note, .. }
+            | Self::ExecuteAllocation { note, .. } => note,
+            Self::UpdateTransaction { patch, .. } => &mut patch.note,
+            Self::UpdateRecurring { patch, .. } => &mut patch.note,
+            Self::CreateVault { .. }
+            | Self::RenameVault { .. }
+            | Self::DeleteVault
+            | Self::CreateWallet { .. }
+            | Self::RenameWallet { .. }
+            | Self::ArchiveWallet { .. }
+            | Self::RestoreWallet { .. }
+            | Self::CreateFlow { .. }
+            | Self::UpdateFlow { .. }
+            | Self::ArchiveFlow { .. }
+            | Self::RestoreFlow { .. }
+            | Self::CreateCategory { .. }
+            | Self::RenameCategory { .. }
+            | Self::ArchiveCategory { .. }
+            | Self::RestoreCategory { .. }
+            | Self::AddAlias { .. }
+            | Self::RemoveAlias { .. }
+            | Self::MergeCategory { .. }
+            | Self::VoidTransaction { .. }
+            | Self::ArchiveRecurring { .. }
+            | Self::RestoreRecurring { .. }
+            | Self::ExecuteRecurring { .. }
+            | Self::SkipRecurring { .. }
+            | Self::CreateAllocationPlan { .. }
+            | Self::UpdateAllocationPlan { .. }
+            | Self::SkipAllocation { .. }
+            | Self::ReopenAllocation { .. } => return,
+        };
+        if let Some(text) = note {
+            capitalize_first_word(text);
+        }
+    }
+}
+
+/// Upper-cases the first letter of `text`'s first word when that word has no
+/// capital yet. Leading blanks are kept: the engine trims the note anyway.
+fn capitalize_first_word(text: &mut String) {
+    let start = text.len() - text.trim_start().len();
+    let mut word = text[start..]
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .chars();
+    let Some(first) = word.next() else {
+        return;
+    };
+    if !first.is_lowercase() || word.any(char::is_uppercase) {
+        return;
+    }
+    let upper: String = first.to_uppercase().collect();
+    text.replace_range(start..start + first.len_utf8(), &upper);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::capitalize_first_word;
+
+    fn capitalized(text: &str) -> String {
+        let mut text = text.to_string();
+        capitalize_first_word(&mut text);
+        text
+    }
+
+    #[test]
+    fn only_an_all_lowercase_first_word_gets_a_capital() {
+        assert_eq!(capitalized("farmacia"), "Farmacia");
+        assert_eq!(capitalized("hotel Roma"), "Hotel Roma");
+        assert_eq!(capitalized("pizza per asporto"), "Pizza per asporto");
+        assert_eq!(capitalized("è festa"), "È festa");
+        assert_eq!(capitalized("l'ombrello"), "L'ombrello");
+        assert_eq!(capitalized("  caffè "), "  Caffè ");
+        assert_eq!(capitalized("iPhone 15"), "iPhone 15");
+        assert_eq!(capitalized("eBay"), "eBay");
+        assert_eq!(capitalized("PAGAMENTO POS"), "PAGAMENTO POS");
+        assert_eq!(capitalized("2 caffè"), "2 caffè");
+        assert_eq!(capitalized("   "), "   ");
+        assert_eq!(capitalized(""), "");
+    }
 }
 
 /// The person a command names, trimmed, or `None` when it names nobody (left

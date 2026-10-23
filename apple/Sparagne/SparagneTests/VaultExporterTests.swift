@@ -105,7 +105,7 @@ struct VaultExporterTests {
         #expect(lines.count == all.count)
         #expect(lines.allSatisfy { $0.count == 10 })
 
-        let first = try #require(lines.first { $0[6] == "row 0" })
+        let first = try #require(lines.first { $0[6] == "Row 0" })
         #expect(first[1] == "expense")
         #expect(first[2] == "-1.00")
         #expect(first[3] == "Cash")
@@ -117,18 +117,18 @@ struct VaultExporterTests {
         #expect(first[8] == "tester")
         #expect(first[9] == "false")
 
-        let wallets = try #require(lines.first { $0[6] == "to bank" })
+        let wallets = try #require(lines.first { $0[6] == "To bank" })
         #expect(wallets[1] == "transfer_wallet")
         #expect(wallets[2] == "50.00")
         #expect(wallets[3] == "Cash \u{2192} Bank")
         #expect(wallets[4] == TransactionRow.placeholder)
 
-        let envelopes = try #require(lines.first { $0[6] == "saving" })
+        let envelopes = try #require(lines.first { $0[6] == "Saving" })
         #expect(envelopes[1] == "transfer_flow")
         #expect(envelopes[3] == TransactionRow.placeholder)
         #expect(envelopes[4] == "\(NameBook.unallocatedLabel) \u{2192} Holidays")
 
-        let voided = try #require(lines.first { $0[6] == "pizza" })
+        let voided = try #require(lines.first { $0[6] == "Pizza" })
         #expect(voided[2] == "-12.50")
         #expect(voided[4] == "Holidays")
         #expect(voided[9] == "true")

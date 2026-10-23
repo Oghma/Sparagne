@@ -47,13 +47,13 @@ struct PersonCellTests {
         #expect(RowDraft.blank(in: store).person == "matteo")
 
         try await Self.save(Self.line(note: "pizza", amount: "12", in: store), in: store)
-        let pizza = try #require(store.rows.first { $0.note == "pizza" })
+        let pizza = try #require(store.rows.first { $0.note == "Pizza" })
         #expect(pizza.person == "matteo")
         #expect(pizza.recordedBy == "matteo")
         #expect(!pizza.isOnBehalf)
 
         try await Self.save(Self.line(note: "cena", amount: "24", person: "eli", in: store), in: store)
-        let dinner = try #require(store.rows.first { $0.note == "cena" })
+        let dinner = try #require(store.rows.first { $0.note == "Cena" })
         #expect(dinner.person == "elisa")
         #expect(dinner.recordedBy == "matteo")
         #expect(dinner.isOnBehalf)
@@ -70,7 +70,7 @@ struct PersonCellTests {
     func editAndUndo() async throws {
         let (store, manager) = try await Self.ledger()
         try await Self.save(Self.line(note: "pizza", amount: "12", in: store), in: store)
-        let row = try #require(store.rows.first { $0.note == "pizza" })
+        let row = try #require(store.rows.first { $0.note == "Pizza" })
 
         var draft = RowDraft(row: row, store: store)
         #expect(draft.person == "matteo")
@@ -110,7 +110,7 @@ struct PersonCellTests {
     func undoBetweenOthers() async throws {
         let (store, manager) = try await Self.ledger()
         try await Self.save(Self.line(note: "cena", amount: "24", person: "elisa", in: store), in: store)
-        let row = try #require(store.rows.first { $0.note == "cena" })
+        let row = try #require(store.rows.first { $0.note == "Cena" })
         let view = try #require(store.transactions.first { $0.id == row.id })
         #expect(AppStore.inverse(of: TransactionPatch(person: "bob"), from: view) == TransactionPatch(person: "elisa"))
 
@@ -125,7 +125,7 @@ struct PersonCellTests {
     func unknownPerson() async throws {
         let (store, _) = try await Self.ledger()
         try await Self.save(Self.line(note: "pizza", amount: "12", in: store), in: store)
-        let row = try #require(store.rows.first { $0.note == "pizza" })
+        let row = try #require(store.rows.first { $0.note == "Pizza" })
         let count = store.rows.count
 
         var draft = RowDraft(row: row, store: store)
@@ -165,7 +165,7 @@ struct PersonCellTests {
         )
         store.showTransfers = true
         await store.settle()
-        let transfer = try #require(store.rows.first { $0.note == "giroconto" })
+        let transfer = try #require(store.rows.first { $0.note == "Giroconto" })
         #expect(!transfer.isPersonEditable)
 
         var draft = RowDraft(row: transfer, store: store)

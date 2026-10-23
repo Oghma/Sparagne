@@ -94,7 +94,7 @@ struct VaultLifecycleTests {
     func pendingUndoIsDropped() async throws {
         let store = try await Self.main(opening: 10_000)
         await store.submit(quickAdd: "-12.50 pizza #food")
-        let row = try #require(store.rows.first { $0.note == "pizza" })
+        let row = try #require(store.rows.first { $0.note == "Pizza" })
         await store.void(transactionId: row.id)
         #expect(store.pendingUndo != nil)
         let vault = try #require(store.currentVault)

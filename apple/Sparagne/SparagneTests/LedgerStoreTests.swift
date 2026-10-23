@@ -141,7 +141,7 @@ struct LedgerStoreTests {
         store.person = "elisa"
         await store.settle()
         #expect(store.rows.count == 1)
-        #expect(store.rows.first?.note == "verdura")
+        #expect(store.rows.first?.note == "Verdura")
 
         let summary = try #require(store.summary)
         // The month totals follow the filter...
@@ -211,7 +211,7 @@ struct LedgerStoreTests {
         await store.addRow(day: Date(), flowId: nil, category: "Auto", note: "benzina", amount: 6_000)
         #expect(store.presentedError == nil)
 
-        let row = try #require(store.rows.first { $0.note == "benzina" })
+        let row = try #require(store.rows.first { $0.note == "Benzina" })
         #expect(row.flowId == store.defaultFlowId)
         #expect(row.person == "matteo")
         #expect(store.savedAt != nil)
@@ -221,7 +221,7 @@ struct LedgerStoreTests {
     func duplicateKeepsTheKind() async throws {
         let (store, _) = try await Self.household()
         await store.submit(quickAdd: "r 20.00 rimborso #Spesa >Cash")
-        let refund = try #require(store.rows.first { $0.note == "rimborso" })
+        let refund = try #require(store.rows.first { $0.note == "Rimborso" })
         #expect(refund.kind == .refund)
 
         let copy = try #require(RowDraft.duplicate(of: refund, store: store))
@@ -238,7 +238,7 @@ struct LedgerStoreTests {
         )
 
         #expect(store.presentedError == nil)
-        let copies = store.rows.filter { $0.note == "rimborso" }
+        let copies = store.rows.filter { $0.note == "Rimborso" }
         #expect(copies.count == 2)
         #expect(copies.allSatisfy { $0.kind == .refund })
     }
@@ -256,7 +256,7 @@ struct LedgerStoreTests {
         let transfer = try #require(store.rows.last)
         #expect(transfer.isTransfer)
         #expect(RowDraft.duplicate(of: transfer, store: store) == nil)
-        #expect(store.lastRow?.note == "coop")
+        #expect(store.lastRow?.note == "Coop")
     }
 
     @Test("Its menu copies a transfer at once, dated today at its time, with its ends, amount and note; ⌘Z deletes the copy")
@@ -285,13 +285,13 @@ struct LedgerStoreTests {
         #expect(copy.kind == .transferFlow)
         #expect(copy.fromId == unallocated.id && copy.toId == envelope.id)
         #expect(copy.absoluteAmount == 2_000)
-        #expect(copy.note == "giro")
+        #expect(copy.note == "Giro")
         #expect(calendar.isDateInToday(copy.occurredAt))
         #expect(calendar.component(.hour, from: copy.occurredAt) == 9)
         #expect(calendar.component(.minute, from: copy.occurredAt) == 30)
         #expect(manager.undoActionName == String(localized: "Add Row"))
         // An entry has no transfer to copy.
-        let coop = try #require(store.rows.first { $0.note == "coop" })
+        let coop = try #require(store.rows.first { $0.note == "Coop" })
         #expect(await store.duplicateTransfer(coop.id) == nil)
 
         manager.undo()
@@ -315,7 +315,7 @@ struct LedgerStoreTests {
     @Test("A committed row sends the cells that changed and nothing else")
     func draftPatchesOnlyWhatChanged() async throws {
         let (store, _) = try await Self.household()
-        let row = try #require(store.rows.first { $0.note == "mutuo" })
+        let row = try #require(store.rows.first { $0.note == "Mutuo" })
 
         var draft = RowDraft(row: row, store: store)
         // Untouched: the same values the cells were filled with.
@@ -337,7 +337,7 @@ struct LedgerStoreTests {
     @Test("Moving a row to another day keeps its time of day")
     func draftKeepsTheTimeOfDay() async throws {
         let (store, _) = try await Self.household()
-        let row = try #require(store.rows.first { $0.note == "coop" })
+        let row = try #require(store.rows.first { $0.note == "Coop" })
         let calendar = Calendar.current
         let moved = try #require(calendar.date(byAdding: .day, value: 1, to: row.occurredAt))
 
@@ -435,12 +435,12 @@ struct LedgerStoreTests {
     @Test("VoiceOver reads a row as one sentence: the amount with its kind, the category, the note, the envelope, who, and deleted")
     func rowReadsAsOneSentence() async throws {
         let (store, envelope) = try await Self.household()
-        let row = try #require(store.rows.first { $0.note == "mutuo" })
+        let row = try #require(store.rows.first { $0.note == "Mutuo" })
 
         let label = LedgerAccessibility.label(for: row)
         #expect(label.hasPrefix(row.occurredAt.formatted(date: .long, time: .omitted)))
         #expect(label.contains(String(localized: "expense \(LedgerMoney.amount(95_000))")))
-        #expect(label.contains("Casa, mutuo"))
+        #expect(label.contains("Casa, Mutuo"))
         #expect(label.contains(String(localized: "envelope \(envelope.name)")))
         // matteo's own row: who it is for, and nobody else who recorded it.
         #expect(label.hasSuffix(LedgerAccessibility.person("matteo")))
@@ -494,7 +494,7 @@ struct LedgerStoreTests {
             walletId: cash.id
         )
         #expect(store.presentedError == nil)
-        let written = try #require(store.rows.first { $0.note == "contanti" })
+        let written = try #require(store.rows.first { $0.note == "Contanti" })
         #expect(written.walletDisplay == "Contanti")
     }
 
@@ -505,7 +505,7 @@ struct LedgerStoreTests {
         await store.createWallet(name: "Contanti", openingBalance: 0)
         let cash = try #require(store.wallets.first { $0.name == "Contanti" })
 
-        let row = try #require(store.rows.first { $0.note == "mutuo" })
+        let row = try #require(store.rows.first { $0.note == "Mutuo" })
         var draft = RowDraft(row: row, store: store)
         #expect(draft.wallet == "Conto")
 

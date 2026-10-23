@@ -49,10 +49,10 @@ struct BulkEnvelopeTests {
     func skipsRowsAlreadyThere() async throws {
         let (store, manager, spesa, _) = try await Self.ledger()
         let unallocated = try #require(store.flows.first { $0.isUnallocated }).id
-        let pane = try #require(store.rows.first { $0.note == "pane" })
+        let pane = try #require(store.rows.first { $0.note == "Pane" })
         store.toggleSelection(pane.id)
         await store.setSelectionEnvelope(unallocated)
-        #expect(try Self.envelope("pane", in: store) == unallocated)
+        #expect(try Self.envelope("Pane", in: store) == unallocated)
 
         store.selectAllRows()
         #expect(store.bulkEnvelope == nil)
@@ -62,9 +62,9 @@ struct BulkEnvelopeTests {
         // The step down moves latte and caffè back; pane was not part of it.
         manager.undo()
         await store.settle()
-        #expect(try Self.envelope("pane", in: store) == unallocated)
-        #expect(try Self.envelope("latte", in: store) == spesa)
-        #expect(try Self.envelope("caffè", in: store) == spesa)
+        #expect(try Self.envelope("Pane", in: store) == unallocated)
+        #expect(try Self.envelope("Latte", in: store) == spesa)
+        #expect(try Self.envelope("Caffè", in: store) == spesa)
 
         // Moved again, then asked again with every row there already: nothing
         // is sent, so the step down is still the real move.
@@ -73,7 +73,7 @@ struct BulkEnvelopeTests {
         await store.setSelectionEnvelope(unallocated)
         manager.undo()
         await store.settle()
-        #expect(try Self.envelope("latte", in: store) == spesa)
+        #expect(try Self.envelope("Latte", in: store) == spesa)
     }
 
     @Test("An envelope that may not go negative refuses the batch, and every row stays where it was")

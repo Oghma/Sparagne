@@ -94,12 +94,12 @@ struct SelectionTests {
     @Test("The store selects by the order on screen, ⌘A takes every row, and a month change clears it")
     func storeSelection() async throws {
         let store = try await Self.ledger()
-        let pane = try Self.id("pane", in: store)
-        let caffe = try Self.id("caffè", in: store)
+        let pane = try Self.id("Pane", in: store)
+        let caffe = try Self.id("Caffè", in: store)
 
         store.toggleSelection(pane)
         store.extendSelection(to: caffe)
-        #expect(store.selectedRows.map(\.note) == ["pane", "latte", "caffè"])
+        #expect(store.selectedRows.map(\.note) == ["Pane", "Latte", "Caffè"])
 
         store.selectAllRows()
         #expect(store.selection.count == 4)
@@ -123,7 +123,7 @@ struct SelectionTests {
         let vault = try #require(store.currentVault)
         await store.createWallet(name: "Contanti", openingBalance: 0)
         await store.submit(quickAdd: "tw> 10.00 @conto @contanti")
-        try await store.core.execute(vaultId: vault.id, .voidTransaction(transactionId: try Self.id("latte", in: store)))
+        try await store.core.execute(vaultId: vault.id, .voidTransaction(transactionId: try Self.id("Latte", in: store)))
         store.showVoided = true
         store.showTransfers = true
         await store.settle()
@@ -132,7 +132,7 @@ struct SelectionTests {
 
         store.selectAllRows()
         #expect(store.selection.count == 5)
-        #expect(store.bulkTargets.map(\.note) == ["pane", "caffè", "benzina"])
+        #expect(store.bulkTargets.map(\.note) == ["Pane", "Caffè", "Benzina"])
 
         let targets = Set(store.bulkTargets.map(\.id))
         await store.voidSelection()
@@ -170,7 +170,7 @@ struct SelectionTests {
         store.selectAllRows()
         // Voided on another device since it was loaded: the grid still shows
         // it live, the core refuses to update it.
-        try await store.core.execute(vaultId: vault.id, .voidTransaction(transactionId: try Self.id("latte", in: store)))
+        try await store.core.execute(vaultId: vault.id, .voidTransaction(transactionId: try Self.id("Latte", in: store)))
         #expect(store.bulkTargets.count == 4)
 
         await store.setSelectionCategory("Colazione")
@@ -191,7 +191,7 @@ struct SelectionTests {
         store.setReadOnlyVaults([try #require(store.currentVault).id])
         #expect(store.selection.isEmpty)
 
-        store.toggleSelection(try Self.id("pane", in: store))
+        store.toggleSelection(try Self.id("Pane", in: store))
         store.selectAllRows()
         #expect(store.selection.isEmpty)
     }

@@ -63,7 +63,7 @@ struct EnvelopeMoveStoreTests {
         #expect(transfers.count == 2)
         #expect(Set(transfers.compactMap(\.toId)) == [rent, holiday])
         #expect(transfers.allSatisfy { $0.fromId == source })
-        #expect(transfers.allSatisfy { $0.note == "riparto straordinario" })
+        #expect(transfers.allSatisfy { $0.note == "Riparto straordinario" })
         #expect(transfers.allSatisfy { $0.occurredAt.hasPrefix(draft.day) })
         #expect(store.savedAt != nil)
     }

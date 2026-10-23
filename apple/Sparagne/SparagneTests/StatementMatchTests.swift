@@ -35,7 +35,7 @@ struct StatementMatchTests {
 
         let grocer = try StatementFixture.row(model, line: 5)
         #expect(grocer.status == .possibleDuplicate)
-        #expect(grocer.existing?.note == "green grocer")
+        #expect(grocer.existing?.note == "Green grocer")
         #expect(grocer.existing?.walletId == card)
         #expect(StatementImportModel.isFlagged(grocer))
         // In the statement's own wallet there is nothing to move.
@@ -54,7 +54,7 @@ struct StatementMatchTests {
         #expect(report.rejected.isEmpty)
         let grocers = try await StatementFixture.transactions(store).filter { $0.amount == 1475 && !$0.voided }
         #expect(grocers.count == 1)
-        #expect(grocers.first?.note == "green grocer")
+        #expect(grocers.first?.note == "Green grocer")
 
         // The same file again: the row stands for the one typed, for good.
         let again = StatementImportModel(store: store, mappings: mappings)
@@ -97,7 +97,7 @@ struct StatementMatchTests {
         await again.refreshPreview()
         let grocer = try StatementFixture.row(again, line: 5)
         #expect(grocer.status == .possibleDuplicate)
-        #expect(grocer.existing?.note == "green grocer")
+        #expect(grocer.existing?.note == "Green grocer")
         #expect(grocer.defaultChoice == .skip)
     }
 
@@ -110,7 +110,7 @@ struct StatementMatchTests {
         let model = try await StatementFixture.cardModel(store, wallet: card)
 
         let kept = try StatementFixture.row(model, line: 5)
-        #expect(kept.existing?.note == "verdura")
+        #expect(kept.existing?.note == "Verdura")
         #expect(kept.defaultChoice == .skip)
         #expect(model.defaultChoice(for: kept) == .skip)
         model.setMatchChoice(.skip, for: kept)
@@ -124,7 +124,7 @@ struct StatementMatchTests {
         #expect(model.matchChoices.isEmpty)
         await model.refreshPreview()
         let moved = try StatementFixture.row(model, line: 5)
-        #expect(moved.existing?.note == "green grocer")
+        #expect(moved.existing?.note == "Green grocer")
         #expect(moved.defaultChoice == .moveExisting)
         #expect(model.matchChoice(for: moved) == .moveExisting)
         #expect(!model.overrides.contains { $0.onMatch != nil })
@@ -188,7 +188,7 @@ struct StatementMatchTests {
         model.setAlsoChecked(true, wallet: cash)
         await model.refreshPreview()
         let first = try StatementFixture.row(model, line: 2)
-        #expect(first.existing?.note == "caffe bar")
+        #expect(first.existing?.note == "Caffe bar")
         model.setMatchChoice(.importAnyway, for: first)
         await model.refreshPreview()
         #expect(model.matchChoices == [2: .importAnyway])
@@ -197,14 +197,14 @@ struct StatementMatchTests {
         // day, and line 2 the cash one, which the choice was not about.
         model.setAction(.expense, for: try StatementFixture.row(model, line: 3))
         await model.refreshPreview()
-        #expect(try StatementFixture.row(model, line: 2).existing?.note == "caffe cash")
+        #expect(try StatementFixture.row(model, line: 2).existing?.note == "Caffe cash")
         // The choice went with the preview that found the other match; that
         // preview, planned with it, is no plan to import from.
         #expect(model.matchChoices.isEmpty)
         #expect(!model.isPlanCurrent)
         await model.refreshPreview()
         let second = try StatementFixture.row(model, line: 2)
-        #expect(second.existing?.note == "caffe cash")
+        #expect(second.existing?.note == "Caffe cash")
         #expect(model.matchChoice(for: second) == .moveExisting)
         #expect(!model.overrides.contains { $0.onMatch != nil })
         #expect(model.isPlanCurrent)
@@ -229,7 +229,7 @@ struct StatementMatchTests {
 
         let metro = try StatementFixture.row(model, line: 3)
         #expect(metro.status == .possibleDuplicate)
-        #expect(metro.existing?.note == "metro")
+        #expect(metro.existing?.note == "Metro")
         #expect(model.matchPredatesStart(metro))
         #expect(!model.matchPredatesStart(try StatementFixture.row(model, line: 2)))
         #expect(!StatementText.typedBeforeStart.isEmpty)
@@ -275,7 +275,7 @@ struct StatementMatchTests {
         #expect(anyway.status == .new)
         #expect(anyway.matchChoice == .importAnyway)
         // The match stays beside it, so the review still shows it.
-        #expect(anyway.existing?.note == "green grocer")
+        #expect(anyway.existing?.note == "Green grocer")
         #expect(StatementImportModel.isFlagged(anyway))
         #expect(model.matchChoice(for: anyway) == .importAnyway)
         #expect(model.counts.new == 3)
@@ -287,7 +287,7 @@ struct StatementMatchTests {
         #expect(model.report?.possibleDuplicates == 0)
         let grocers = try await StatementFixture.transactions(store).filter { $0.amount == 1475 && $0.kind == .expense && !$0.voided }
         #expect(grocers.count == 2)
-        #expect(Set(grocers.compactMap(\.note)) == ["green grocer", "GREEN GROCER"])
+        #expect(Set(grocers.compactMap(\.note)) == ["Green grocer", "GREEN GROCER"])
     }
 
     @Test("A spend typed into a wallet ticked under Duplicates also in is moved into the statement's wallet with its note and category")
@@ -330,7 +330,7 @@ struct StatementMatchTests {
         #expect(report.executed == 2)
         #expect(report.rejected.isEmpty)
         let after = try await StatementFixture.transactions(store)
-        let moved = try #require(after.first { $0.note == "green grocer" })
+        let moved = try #require(after.first { $0.note == "Green grocer" })
         #expect(moved.walletId == card)
         #expect(moved.category == "Spesa")
         #expect(moved.amount == 1475)
@@ -645,7 +645,7 @@ struct StatementMatchTests {
         let row = try StatementFixture.row(model, line: 2)
         #expect(row.status == .new)
         #expect(row.kind == .transferWallet)
-        #expect(row.existing?.note == "regalo")
+        #expect(row.existing?.note == "Regalo")
         #expect(row.existing?.walletId == cash)
         #expect(row.matchChoice == .importAnyway)
         #expect(StatementImportModel.isReplace(row))
@@ -664,7 +664,7 @@ struct StatementMatchTests {
         #expect(model.report?.executed == 1)
         #expect(model.replaced == 0)
         let all = try await StatementFixture.transactions(store)
-        #expect(all.first { $0.note == "regalo" }?.voided == false)
+        #expect(all.first { $0.note == "Regalo" }?.voided == false)
         #expect(all.filter { $0.kind == .transferWallet && !$0.voided }.count == 1)
         #expect(StatementFixture.balance(store, cash) == 10_000) // the gift and the withdrawal
         #expect(StatementFixture.balance(store, bank) == 95_000)
@@ -679,7 +679,7 @@ struct StatementMatchTests {
         }
         let spend = try StatementFixture.row(model, line: 2)
         #expect(spend.status == .possibleDuplicate)
-        #expect(spend.existing?.note == "affitto")
+        #expect(spend.existing?.note == "Affitto")
         model.setMatchChoice(.importAnyway, for: spend)
         await model.refreshPreview()
         #expect(try StatementFixture.row(model, line: 2).matchChoice == .importAnyway)

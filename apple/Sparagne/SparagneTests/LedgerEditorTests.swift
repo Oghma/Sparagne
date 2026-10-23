@@ -22,7 +22,7 @@ struct LedgerEditorTests {
         await store.addRow(day: Date(), flowId: envelope.id, category: "Spesa", note: "coop", amount: 5_000)
         store.tab = .ledger
         #expect(store.presentedError == nil)
-        #expect(store.rows.map(\.note) == ["mutuo", "coop"])
+        #expect(store.rows.map(\.note) == ["Mutuo", "Coop"])
         return (store, store.ledgerEditor)
     }
 
@@ -43,7 +43,7 @@ struct LedgerEditorTests {
     @Test("A cell saved sends its field alone: a note changed meanwhile is not written back over")
     func cellSavedAlone() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         editor.select(Self.cell(coop, .amount))
         #expect(editor.type("60"))
 
@@ -60,14 +60,14 @@ struct LedgerEditorTests {
         #expect(store.presentedError == nil)
         let saved = try #require(store.rows.first { $0.id == coop.id })
         #expect(saved.absoluteAmount == 6_000)
-        #expect(saved.note == "conad")
+        #expect(saved.note == "Conad")
     }
 
     @Test("A cell is saved whichever way it is left: a click on another, an arrow, ⇥, the grid left")
     func everyWayOutSaves() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
-        let mutuo = try Self.row("mutuo", in: store)
+        let coop = try Self.row("Coop", in: store)
+        let mutuo = try Self.row("Mutuo", in: store)
 
         editor.select(Self.cell(coop, .note))
         editor.type("conad")
@@ -90,8 +90,8 @@ struct LedgerEditorTests {
 
         await store.settle()
         #expect(store.presentedError == nil)
-        #expect(try Self.row("conad", in: store).absoluteAmount == 1_230)
-        let rata = try Self.row("rata", in: store)
+        #expect(try Self.row("Conad", in: store).absoluteAmount == 1_230)
+        let rata = try Self.row("Rata", in: store)
         #expect(rata.id == mutuo.id)
         #expect(rata.category == "Mutuo")
     }
@@ -99,7 +99,7 @@ struct LedgerEditorTests {
     @Test("Typing on a selected cell replaces what it says, then appends; ↩ and F2 start from what it says")
     func typeReplacesThenAppends() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
 
         editor.select(Self.cell(coop, .category))
         #expect(editor.edit())
@@ -130,14 +130,14 @@ struct LedgerEditorTests {
 
         await store.settle()
         let saved = try #require(store.rows.first { $0.id == coop.id })
-        #expect(saved.note == "conad")
+        #expect(saved.note == "Conad")
         #expect(saved.absoluteAmount == 5_000)
     }
 
     @Test("DATA starts from the bare day; a day typed moves the row inside the month, text that means no date does not")
     func dateCell() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         let calendar = Calendar.current
         let today = calendar.component(.day, from: coop.occurredAt)
         let other = today == 1 ? 2 : 1
@@ -165,7 +165,7 @@ struct LedgerEditorTests {
     @Test("ENVELOPE's text only narrows its list: the pick is what is saved")
     func envelopeCell() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         let unallocated = try #require(store.flows.first { $0.isUnallocated })
 
         editor.select(Self.cell(coop, .flow))
@@ -184,27 +184,27 @@ struct LedgerEditorTests {
     @Test("A cell put back to what it said before its last save landed is written back")
     func cellPutBackBeforeItsSaveLands() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         editor.select(Self.cell(coop, .note))
         editor.type("conad")
         #expect(editor.move(.tab))
         #expect(editor.move(.backTab))
         // The row loaded still says coop: the write has not landed.
-        #expect(store.rows.first { $0.id == coop.id }?.note == "coop")
+        #expect(store.rows.first { $0.id == coop.id }?.note == "Coop")
         #expect(editor.edit())
         #expect(editor.text == "conad")
         editor.text = "coop"
         #expect(editor.move(.tab))
         await store.settle()
         #expect(store.presentedError == nil)
-        #expect(store.rows.first { $0.id == coop.id }?.note == "coop")
+        #expect(store.rows.first { $0.id == coop.id }?.note == "Coop")
     }
 
     @Test("The row shows a saved cell at once, and as the core has it once a reload gave it back, someone else's change included")
     func shownRowCarriesTheSavedCells() async throws {
         let (store, editor) = try await Self.household()
         let vault = try #require(store.currentVault)
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         let unallocated = try #require(store.flows.first { $0.isUnallocated })
         #expect(editor.shown(coop) == coop)
 
@@ -219,7 +219,7 @@ struct LedgerEditorTests {
         editor.type("75")
         editor.finish()
         let loaded = try #require(store.rows.first { $0.id == coop.id })
-        #expect(loaded.note == "coop")
+        #expect(loaded.note == "Coop")
         let shown = editor.shown(loaded)
         #expect(shown.note == "conad")
         #expect(shown.category == String(localized: "Uncategorized"))
@@ -231,7 +231,7 @@ struct LedgerEditorTests {
         await store.settle()
         #expect(store.presentedError == nil)
         let landed = try #require(store.rows.first { $0.id == coop.id })
-        #expect(landed.note == "conad")
+        #expect(landed.note == "Conad")
         #expect(landed.absoluteAmount == 7_500)
         #expect(editor.shown(landed) == landed)
 
@@ -241,7 +241,7 @@ struct LedgerEditorTests {
         try await store.core.execute(vaultId: vault.id, .updateTransaction(transactionId: coop.id, patch: patch))
         await store.reload()
         let synced = try #require(store.rows.first { $0.id == coop.id })
-        #expect(editor.shown(synced).note == "esselunga")
+        #expect(editor.shown(synced).note == "Esselunga")
     }
 
     // MARK: - esc
@@ -249,7 +249,7 @@ struct LedgerEditorTests {
     @Test("esc while editing takes back that cell only, still selected; again, the cursor goes")
     func escRevertsTheCell() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
 
         editor.select(Self.cell(coop, .note))
         editor.type("conad")
@@ -265,7 +265,7 @@ struct LedgerEditorTests {
 
         await store.settle()
         let saved = try #require(store.rows.first { $0.id == coop.id })
-        #expect(saved.note == "conad")
+        #expect(saved.note == "Conad")
         #expect(saved.category == "Spesa")
     }
 
@@ -289,7 +289,7 @@ struct LedgerEditorTests {
     @Test("A refused amount keeps the cell being edited as typed, and the cursor does not move")
     func refusedAmountStays() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         editor.select(Self.cell(coop, .amount))
         editor.type("abc")
 
@@ -313,7 +313,7 @@ struct LedgerEditorTests {
     @Test("Nothing can be typed into a vault only read or a deleted row, though their cells can be selected")
     func lockedCellsBeep() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         let vault = try #require(store.currentVault)
 
         // Deleted, and shown struck through.
@@ -329,7 +329,7 @@ struct LedgerEditorTests {
         #expect(!editor.isEditing)
 
         // The role changes under a cell being typed into: it closes unsaved.
-        let mutuo = try Self.row("mutuo", in: store)
+        let mutuo = try Self.row("Mutuo", in: store)
         editor.select(Self.cell(mutuo, .note))
         editor.type("rata")
         store.setReadOnlyVaults([vault.id])
@@ -339,7 +339,7 @@ struct LedgerEditorTests {
         #expect(!editor.edit())
         #expect(editor.cursor == Self.cell(mutuo, .note))
         await store.settle()
-        #expect(store.rows.first { $0.id == mutuo.id }?.note == "mutuo")
+        #expect(store.rows.first { $0.id == mutuo.id }?.note == "Mutuo")
     }
 
     // MARK: - The new line
@@ -359,7 +359,7 @@ struct LedgerEditorTests {
         #expect(editor.cursor == Self.newLine(.amount))
         editor.type("3.20")
 
-        let last = try Self.row("coop", in: store)
+        let last = try Self.row("Coop", in: store)
         #expect(editor.move(.up))
         #expect(editor.cursor == Self.cell(last, .amount))
         #expect(editor.newLine.note.isEmpty)
@@ -368,7 +368,7 @@ struct LedgerEditorTests {
 
         await store.settle()
         #expect(store.presentedError == nil)
-        let added = try Self.row("forno", in: store)
+        let added = try Self.row("Forno", in: store)
         #expect(added.absoluteAmount == 320)
         #expect(added.category == "Pane")
         #expect(added.flowId == unallocated.id)
@@ -379,7 +379,7 @@ struct LedgerEditorTests {
     @Test("A click on a stored row registers the new line, as ⇥ off its PERSONA does, landing on its DATA again")
     func newLineRegistersOnClickAndTab() async throws {
         let (store, editor) = try await Self.household()
-        let mutuo = try Self.row("mutuo", in: store)
+        let mutuo = try Self.row("Mutuo", in: store)
 
         editor.select(Self.newLine(.note))
         editor.type("pane")
@@ -403,14 +403,14 @@ struct LedgerEditorTests {
 
         await store.settle()
         #expect(store.presentedError == nil)
-        #expect(try Self.row("pane", in: store).absoluteAmount == 200)
-        #expect(try Self.row("latte", in: store).absoluteAmount == 150)
+        #expect(try Self.row("Pane", in: store).absoluteAmount == 200)
+        #expect(try Self.row("Latte", in: store).absoluteAmount == 150)
     }
 
     @Test("Leaving the grid registers the new line with an amount; ↓ on it, or leaving it without one, keeps the draft")
     func newLineStaysADraftWithoutAnAmount() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
 
         // ↓ on the new line goes nowhere: the cell is saved into the line.
         editor.select(Self.newLine(.amount))
@@ -443,7 +443,7 @@ struct LedgerEditorTests {
         #expect(editor.cursor == nil)
         await store.settle()
         #expect(store.presentedError == nil)
-        #expect(try Self.row("pane", in: store).absoluteAmount == 200)
+        #expect(try Self.row("Pane", in: store).absoluteAmount == 200)
     }
 
     @Test("↩ on the new line with an amount registers it and goes to the blank line's DATA; without one it stays")
@@ -463,14 +463,14 @@ struct LedgerEditorTests {
         #expect(!editor.isEditing)
         #expect(editor.newLine.note.isEmpty)
         await store.settle()
-        #expect(try Self.row("pane", in: store).absoluteAmount == 200)
+        #expect(try Self.row("Pane", in: store).absoluteAmount == 200)
     }
 
     @Test("A new line that refuses to register puts the caret on the cell that is wrong, and the cursor stays on the line")
     func newLineRefused() async throws {
         let (store, editor) = try await Self.household()
         store.showWalletColumn = true
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         #expect(editor.newLine.wallet == "Conto")
 
         editor.select(Self.newLine(.wallet))
@@ -505,8 +505,8 @@ struct LedgerEditorTests {
     @Test("⌘D fills the new line with the row, the caret in its IMPORTO")
     func duplicateFillsTheNewLine() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
-        let mutuo = try Self.row("mutuo", in: store)
+        let coop = try Self.row("Coop", in: store)
+        let mutuo = try Self.row("Mutuo", in: store)
         editor.select(Self.cell(mutuo, .note))
         editor.type("rata")
 
@@ -514,7 +514,7 @@ struct LedgerEditorTests {
         #expect(editor.cursor == Self.newLine(.amount))
         #expect(editor.isEditing)
         #expect(editor.text == "50.00")
-        #expect(editor.newLine.note == "coop")
+        #expect(editor.newLine.note == "Coop")
         #expect(editor.newLine.category == "Spesa")
         #expect(editor.newLine.flowId == coop.flowId)
 
@@ -523,21 +523,21 @@ struct LedgerEditorTests {
         await store.settle()
         #expect(store.presentedError == nil)
         // The cell being typed into before ⌘D was saved on the way.
-        #expect(store.rows.first { $0.id == mutuo.id }?.note == "rata")
-        #expect(store.rows.filter { $0.note == "coop" }.map(\.absoluteAmount) == [5_000, 6_000])
+        #expect(store.rows.first { $0.id == mutuo.id }?.note == "Rata")
+        #expect(store.rows.filter { $0.note == "Coop" }.map(\.absoluteAmount) == [5_000, 6_000])
     }
 
     @Test("A copy left as ⌘D made it is not registered by leaving it, nor by a change of month")
     func untouchedCopyIsNotRegistered() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
-        let mutuo = try Self.row("mutuo", in: store)
+        let coop = try Self.row("Coop", in: store)
+        let mutuo = try Self.row("Mutuo", in: store)
 
         editor.duplicate(coop)
         // The amount saved as it came is no change.
         #expect(editor.move(.left))
         #expect(editor.select(Self.cell(mutuo, .note)))
-        #expect(editor.newLine.note == "coop")
+        #expect(editor.newLine.note == "Coop")
         #expect(editor.select(Self.newLine(.note)))
         #expect(editor.finish())
         await store.settle()
@@ -557,8 +557,8 @@ struct LedgerEditorTests {
     @Test("A copy with a cell changed is registered by leaving it; ↩ registers one unchanged; esc twice throws it away")
     func changedCopyIsRegistered() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
-        let mutuo = try Self.row("mutuo", in: store)
+        let coop = try Self.row("Coop", in: store)
+        let mutuo = try Self.row("Mutuo", in: store)
 
         editor.duplicate(coop)
         editor.text = "60.00"
@@ -566,13 +566,13 @@ struct LedgerEditorTests {
         #expect(editor.select(Self.cell(mutuo, .note)))
         #expect(editor.newLine.note.isEmpty)
         await store.settle()
-        #expect(store.rows.filter { $0.note == "coop" }.map(\.absoluteAmount) == [5_000, 6_000])
+        #expect(store.rows.filter { $0.note == "Coop" }.map(\.absoluteAmount) == [5_000, 6_000])
 
         editor.duplicate(mutuo)
         editor.confirm()
         #expect(editor.cursor == Self.newLine(.date))
         await store.settle()
-        #expect(store.rows.filter { $0.note == "mutuo" }.count == 2)
+        #expect(store.rows.filter { $0.note == "Mutuo" }.count == 2)
 
         editor.duplicate(coop)
         editor.cancel()
@@ -591,7 +591,7 @@ struct LedgerEditorTests {
     func monthChangeSavesTheCell() async throws {
         let (store, editor) = try await Self.household()
         let manager = try LedgerHistoryTests.attachManager(to: store)
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         let current = store.month
 
         editor.select(Self.cell(coop, .amount))
@@ -620,7 +620,7 @@ struct LedgerEditorTests {
     func queuedCellKeepsItsUndoStep() async throws {
         let (store, editor) = try await Self.household()
         let manager = try LedgerHistoryTests.attachManager(to: store)
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         let current = store.month
 
         editor.select(Self.cell(coop, .note))
@@ -635,18 +635,18 @@ struct LedgerEditorTests {
         store.month = current
         await store.settle()
         var saved = try #require(store.rows.first { $0.id == coop.id })
-        #expect(saved.note == "conad")
+        #expect(saved.note == "Conad")
         #expect(saved.absoluteAmount == 7_500)
 
         manager.undo()
         await store.settle()
         saved = try #require(store.rows.first { $0.id == coop.id })
-        #expect(saved.note == "conad")
+        #expect(saved.note == "Conad")
         #expect(saved.absoluteAmount == 5_000)
 
         manager.undo()
         await store.settle()
-        #expect(store.rows.first { $0.id == coop.id }?.note == "coop")
+        #expect(store.rows.first { $0.id == coop.id }?.note == "Coop")
         #expect(store.presentedError == nil)
     }
 
@@ -654,7 +654,7 @@ struct LedgerEditorTests {
     func directionChangeSavesTheCell() async throws {
         let (store, editor) = try await Self.household()
         let manager = try LedgerHistoryTests.attachManager(to: store)
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
 
         editor.select(Self.cell(coop, .note))
         editor.type("conad")
@@ -665,7 +665,7 @@ struct LedgerEditorTests {
 
         store.direction = .expenses
         await store.settle()
-        #expect(store.rows.first { $0.id == coop.id }?.note == "conad")
+        #expect(store.rows.first { $0.id == coop.id }?.note == "Conad")
 
         editor.select(Self.newLine(.note))
         editor.type("pane")
@@ -674,18 +674,18 @@ struct LedgerEditorTests {
         store.direction = .income
         await store.settle()
         #expect(store.presentedError == nil)
-        #expect(!store.rows.contains { $0.note == "pane" })
+        #expect(!store.rows.contains { $0.note == "Pane" })
         #expect(editor.newLine.note.isEmpty)
 
         store.direction = .expenses
         await store.settle()
-        #expect(try Self.row("pane", in: store).kind == .expense)
+        #expect(try Self.row("Pane", in: store).kind == .expense)
     }
 
     @Test("The PERSONA filter saves the cell; showing the transfers saves it too and keeps the cursor on its row")
     func filtersSaveTheCell() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
 
         editor.select(Self.cell(coop, .note))
         editor.type("conad")
@@ -693,7 +693,7 @@ struct LedgerEditorTests {
         #expect(editor.cursor == nil)
         await store.settle()
         #expect(store.presentedError == nil)
-        #expect(store.rows.first { $0.id == coop.id }?.note == "conad")
+        #expect(store.rows.first { $0.id == coop.id }?.note == "Conad")
 
         editor.select(Self.cell(coop, .category))
         editor.type("Altro")
@@ -720,20 +720,20 @@ struct LedgerEditorTests {
     @Test("Leaving the Mastro's tab saves the cell and lets the cursor go")
     func tabSwitchSaves() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         editor.select(Self.cell(coop, .note))
         editor.type("conad")
 
         store.tab = .summary
         #expect(editor.cursor == nil)
         await store.settle()
-        #expect(store.rows.first { $0.id == coop.id }?.note == "conad")
+        #expect(store.rows.first { $0.id == coop.id }?.note == "Conad")
     }
 
     @Test("A cell that refuses to save outlives the tab switch, being edited as typed")
     func refusedEditSurvivesTheTabSwitch() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         editor.select(Self.cell(coop, .amount))
         editor.type("abc")
 
@@ -750,7 +750,7 @@ struct LedgerEditorTests {
     func vaultSwitchSavesTheCell() async throws {
         let (store, editor) = try await Self.household()
         let casa = try #require(store.currentVault)
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         await store.createVault(name: "Ufficio", walletName: "Cassa", openingBalance: 0)
         let ufficio = try #require(store.currentVault)
         await store.select(casa)
@@ -763,13 +763,13 @@ struct LedgerEditorTests {
         #expect(store.rows.isEmpty)
 
         await store.select(casa)
-        #expect(store.rows.first { $0.id == coop.id }?.note == "conad")
+        #expect(store.rows.first { $0.id == coop.id }?.note == "Conad")
     }
 
     @Test("Quitting saves the cell being typed into before the app goes")
     func quittingSavesTheCell() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         editor.select(Self.cell(coop, .amount))
         editor.type("90")
         let quit = QuitHarness(store: store)
@@ -783,7 +783,7 @@ struct LedgerEditorTests {
     @Test("Quitting with a cell that refuses to be saved stays, the cell on screen being edited; after esc it quits")
     func quittingWithARefusedCellStays() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         editor.select(Self.cell(coop, .amount))
         editor.type("abc")
         store.tab = .summary
@@ -805,8 +805,8 @@ struct LedgerEditorTests {
     @Test("A cursor on a row that leaves the screen goes with it: a delete, a search that leaves it out")
     func vanishedRowDropsTheCursor() async throws {
         let (store, editor) = try await Self.household()
-        let coop = try Self.row("coop", in: store)
-        let mutuo = try Self.row("mutuo", in: store)
+        let coop = try Self.row("Coop", in: store)
+        let mutuo = try Self.row("Mutuo", in: store)
 
         editor.select(Self.cell(coop, .note))
         editor.type("conad")
@@ -831,7 +831,7 @@ struct LedgerEditorTests {
         let (store, editor) = try await Self.household()
         store.showWalletColumn = true
         #expect(editor.newLine.wallet == "Conto")
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         editor.select(Self.cell(coop, .wallet))
         editor.type("Con")
 
@@ -851,7 +851,7 @@ struct LedgerEditorTests {
         let gate = TestGate()
         let (store, editor) = try await Self.household(probe: gate.probe)
         let casa = try #require(store.currentVault)
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         await store.createVault(name: "Ufficio", walletName: "Cassa", openingBalance: 0)
         let ufficio = try #require(store.currentVault)
         await store.select(casa)
@@ -882,7 +882,7 @@ struct LedgerEditorTests {
         await store.settle()
         #expect(await gate.calls == before)
         #expect(store.currentVault?.id == ufficio.id)
-        #expect(!store.rows.contains { $0.note == "pane" })
+        #expect(!store.rows.contains { $0.note == "Pane" })
         #expect(!editor.hasPendingWrites)
     }
 
@@ -893,7 +893,7 @@ struct LedgerEditorTests {
         await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "verdura", amount: 2_000, person: "elisa")
         store.person = "elisa"
         await store.settle()
-        let verdura = try Self.row("verdura", in: store)
+        let verdura = try Self.row("Verdura", in: store)
         #expect(store.rows.count == 1)
 
         editor.select(Self.newLine(.note))
@@ -910,7 +910,7 @@ struct LedgerEditorTests {
         #expect(editor.isEditing)
         #expect(editor.text == "2")
         #expect(editor.newLine.note == "pane")
-        #expect(!store.rows.contains { $0.note == "pane" })
+        #expect(!store.rows.contains { $0.note == "Pane" })
     }
 
     // MARK: - A transfer's two ends
@@ -969,7 +969,7 @@ struct LedgerEditorTests {
         #expect(!editor.isEditing)
         #expect(editor.endsRowId == transfer.id)
         await store.settle()
-        #expect(store.rows.first { $0.id == transfer.id }?.note == "giro")
+        #expect(store.rows.first { $0.id == transfer.id }?.note == "Giro")
     }
 
     @Test("Swapped ends are one write with both ids, shown on the row at once, and one ⌘Z puts both back")
@@ -1098,7 +1098,7 @@ struct LedgerEditorTests {
     func secondSaveUndoesToTheFirst() async throws {
         let (store, editor) = try await Self.household()
         let manager = try LedgerHistoryTests.attachManager(to: store)
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
         editor.select(Self.cell(coop, .note))
         editor.type("conad")
         editor.move(.tab)
@@ -1106,14 +1106,14 @@ struct LedgerEditorTests {
         editor.type("esselunga")
         editor.move(.tab)
         await store.settle()
-        #expect(store.rows.first { $0.id == coop.id }?.note == "esselunga")
+        #expect(store.rows.first { $0.id == coop.id }?.note == "Esselunga")
 
         manager.undo()
         await store.settle()
-        #expect(store.rows.first { $0.id == coop.id }?.note == "conad")
+        #expect(store.rows.first { $0.id == coop.id }?.note == "Conad")
         manager.undo()
         await store.settle()
-        #expect(store.rows.first { $0.id == coop.id }?.note == "coop")
+        #expect(store.rows.first { $0.id == coop.id }?.note == "Coop")
         #expect(store.presentedError == nil)
     }
 
@@ -1121,7 +1121,7 @@ struct LedgerEditorTests {
     func undoTakesBackTheLastCell() async throws {
         let (store, editor) = try await Self.household()
         let manager = try LedgerHistoryTests.attachManager(to: store)
-        let coop = try Self.row("coop", in: store)
+        let coop = try Self.row("Coop", in: store)
 
         editor.select(Self.cell(coop, .note))
         editor.type("conad")
@@ -1130,19 +1130,19 @@ struct LedgerEditorTests {
         editor.finish()
         await store.settle()
         var saved = try #require(store.rows.first { $0.id == coop.id })
-        #expect(saved.note == "conad")
+        #expect(saved.note == "Conad")
         #expect(saved.category == "Altro")
 
         manager.undo()
         await store.settle()
         saved = try #require(store.rows.first { $0.id == coop.id })
-        #expect(saved.note == "conad")
+        #expect(saved.note == "Conad")
         #expect(saved.category == "Spesa")
 
         manager.undo()
         await store.settle()
         saved = try #require(store.rows.first { $0.id == coop.id })
-        #expect(saved.note == "coop")
+        #expect(saved.note == "Coop")
         #expect(store.presentedError == nil)
     }
 }

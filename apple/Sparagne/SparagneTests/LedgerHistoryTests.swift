@@ -41,7 +41,7 @@ struct LedgerHistoryTests {
         let (store, manager) = try await Self.ledger()
         // Uncategorized, and a note: the two values a label could get wrong.
         await store.addRow(day: Date(), flowId: nil, category: nil, note: "pizza", amount: 1_250)
-        let before = try Self.row("pizza", in: store)
+        let before = try Self.row("Pizza", in: store)
         let stored = try Self.view(before.id, in: store)
         #expect(before.category == String(localized: "Uncategorized"))
 
@@ -70,7 +70,7 @@ struct LedgerHistoryTests {
         let undone = try Self.view(before.id, in: store)
         #expect(undone.categoryId == stored.categoryId)
         #expect(undone.categoryIsSystem)
-        #expect(undone.note == "pizza")
+        #expect(undone.note == "Pizza")
         #expect(undone.amount == 1_250)
         #expect(undone.occurredAt == stored.occurredAt)
         // The localized label was never sent back as a name to create.
@@ -95,7 +95,7 @@ struct LedgerHistoryTests {
         var patch = TransactionPatch()
         patch.note = "coop"
         await store.update(transactionId: row.id, patch: patch)
-        #expect(try Self.view(row.id, in: store).note == "coop")
+        #expect(try Self.view(row.id, in: store).note == "Coop")
 
         manager.undo()
         await store.settle()
@@ -107,7 +107,7 @@ struct LedgerHistoryTests {
     func undoRedoAnAddedRow() async throws {
         let (store, manager) = try await Self.ledger()
         await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "coop", amount: 5_000)
-        let added = try Self.row("coop", in: store)
+        let added = try Self.row("Coop", in: store)
         #expect(manager.undoActionName == String(localized: "Add Row"))
 
         manager.undo()
@@ -115,13 +115,13 @@ struct LedgerHistoryTests {
         #expect(store.presentedError == nil)
         // Straight to the core: no toast to wait out.
         #expect(store.pendingUndo == nil)
-        #expect(!store.rows.contains { $0.note == "coop" })
+        #expect(!store.rows.contains { $0.note == "Coop" })
         #expect(store.wallets.first?.balance == 100_000)
 
         manager.redo()
         await store.settle()
         #expect(store.presentedError == nil)
-        let readded = try Self.row("coop", in: store)
+        let readded = try Self.row("Coop", in: store)
         #expect(readded.id != added.id)
         #expect(readded.absoluteAmount == 5_000)
         #expect(readded.occurredAt == added.occurredAt)
@@ -130,7 +130,7 @@ struct LedgerHistoryTests {
         manager.undo()
         await store.settle()
         #expect(store.presentedError == nil)
-        #expect(!store.rows.contains { $0.note == "coop" })
+        #expect(!store.rows.contains { $0.note == "Coop" })
         #expect(store.wallets.first?.balance == 100_000)
     }
 
@@ -138,7 +138,7 @@ struct LedgerHistoryTests {
     func undoCancelsThePendingVoid() async throws {
         let (store, manager) = try await Self.ledger()
         await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "coop", amount: 5_000)
-        let row = try Self.row("coop", in: store)
+        let row = try Self.row("Coop", in: store)
 
         await store.void(transactionId: row.id)
         #expect(store.pendingUndo != nil)
@@ -157,7 +157,7 @@ struct LedgerHistoryTests {
     func flushedVoidIsNotUndoable() async throws {
         let (store, manager) = try await Self.ledger()
         await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "coop", amount: 5_000)
-        let row = try Self.row("coop", in: store)
+        let row = try Self.row("Coop", in: store)
         var patch = TransactionPatch()
         patch.amount = 6_000
         await store.update(transactionId: row.id, patch: patch)
@@ -174,7 +174,7 @@ struct LedgerHistoryTests {
     func toastButtonForgetsTheStep() async throws {
         let (store, manager) = try await Self.ledger()
         await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "coop", amount: 5_000)
-        let row = try Self.row("coop", in: store)
+        let row = try Self.row("Coop", in: store)
 
         await store.void(transactionId: row.id)
         store.undo()
@@ -213,8 +213,8 @@ struct LedgerHistoryTests {
         manager.undo()
         await store.settle()
         #expect(store.presentedError == nil)
-        #expect(try Self.row("pane", in: store).category == "Spesa")
-        #expect(try Self.row("latte", in: store).category == String(localized: "Uncategorized"))
+        #expect(try Self.row("Pane", in: store).category == "Spesa")
+        #expect(try Self.row("Latte", in: store).category == String(localized: "Uncategorized"))
         // The next step down is the second add, not half of the bulk change.
         #expect(manager.undoActionName == String(localized: "Add Row"))
 

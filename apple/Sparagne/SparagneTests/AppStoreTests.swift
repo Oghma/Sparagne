@@ -14,7 +14,7 @@ struct AppStoreTests {
     }
 
     private static func pizzaRow(_ store: AppStore) throws -> TransactionRow {
-        try #require(store.rows.first { $0.note == "pizza" })
+        try #require(store.rows.first { $0.note == "Pizza" })
     }
 
     /// A rent of 500,00 on the 1st of every month, started a month ago, so a period is due.
@@ -278,7 +278,7 @@ struct AppStoreTests {
         #expect(error.candidates.sorted() == ["Bancoposta", "Bank"])
         #expect(error.message.contains("Bancoposta"))
         // Nothing was written.
-        #expect(!store.rows.contains { $0.note == "hotel" })
+        #expect(!store.rows.contains { $0.note == "Hotel" })
     }
 
     @Test("A row exposes the ids of its wallet and envelope")
@@ -419,7 +419,7 @@ struct AppStoreTests {
         await store.mergeCategory(sourceId: food.id, targetId: groceries.id)
 
         #expect(store.presentedError == nil)
-        let pizza = try #require(store.transactions.first { $0.note == "pizza" })
+        let pizza = try #require(store.transactions.first { $0.note == "Pizza" })
         #expect(pizza.categoryId == groceries.id)
         #expect(!store.windowCategories.contains { $0.id == food.id })
     }
@@ -493,7 +493,7 @@ struct AppStoreTests {
         #expect(store.yearCategories.first?.amount == 1250)
         #expect(store.yearCategories.first?.share == 1)
         #expect(store.categoryHeat?.rows.map(\.name) == ["food"])
-        #expect(store.topExpenses.map(\.note) == ["pizza"])
+        #expect(store.topExpenses.map(\.note) == ["Pizza"])
         let envelopes = try #require(store.envelopeYear)
         #expect(envelopes.rows.first?.isUnallocated == true)
         #expect(envelopes.rows.count == store.flows.count)
@@ -542,7 +542,7 @@ struct AppStoreTests {
         await store.settle()
         await store.addRow(day: bookDay, flowId: nil, category: nil, note: "libro", amount: 1_800)
         await store.addRow(day: bookDay, flowId: nil, category: "food", note: "pizza", amount: 1_250)
-        let book = try #require(store.transactions.first { $0.note == "libro" })
+        let book = try #require(store.transactions.first { $0.note == "Libro" })
         #expect(store.presentedError == nil)
 
         // Where the user stood: this month, USCITE, a search, the summary.
@@ -600,7 +600,7 @@ struct AppStoreTests {
         await store.settle()
         await store.addRow(day: monthAgo, flowId: nil, category: "food", note: "pizza", amount: 1_250)
         #expect(store.presentedError == nil)
-        let pizza = try #require(store.transactions.first { $0.note == "pizza" })
+        let pizza = try #require(store.transactions.first { $0.note == "Pizza" })
 
         // Somewhere else: this month, the income, a search, the summary.
         store.month = MonthKey(Date())
@@ -626,7 +626,7 @@ struct AppStoreTests {
         let store = try await Self.onboarded()
         await store.submit(quickAdd: "-12.50 pizza #food")
         await store.submit(quickAdd: "-3.00 caffè #bar")
-        let pizza = try #require(store.topExpenses.first { $0.note == "pizza" })
+        let pizza = try #require(store.topExpenses.first { $0.note == "Pizza" })
         store.tab = .summary
 
         store.reveal(transactionId: pizza.transactionId, occurredAt: pizza.occurredAt)
@@ -650,7 +650,7 @@ struct AppStoreTests {
         store.month = MonthKey(monthAgo)
         await store.settle()
         await store.addRow(day: monthAgo, flowId: nil, category: "food", note: "pizza", amount: 1_250)
-        let pizza = try #require(store.transactions.first { $0.note == "pizza" })
+        let pizza = try #require(store.transactions.first { $0.note == "Pizza" })
         store.month = MonthKey(Date())
         await store.settle()
         store.setReadOnlyVaults([try #require(store.currentVault?.id)])
@@ -697,7 +697,7 @@ struct AppStoreTests {
     func revealedRowGoesWithTheList() async throws {
         let store = try await Self.onboarded()
         await store.submit(quickAdd: "-12.50 pizza #food")
-        let pizza = try #require(store.topExpenses.first { $0.note == "pizza" })
+        let pizza = try #require(store.topExpenses.first { $0.note == "Pizza" })
         let vault = try #require(store.currentVault)
         // Only read, so nothing selects it and the id stays for the grid.
         store.setReadOnlyVaults([vault.id])

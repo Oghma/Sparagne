@@ -658,13 +658,16 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func dismissRejected(vaultId: Uuid, commandId: Uuid) throws 
     
     /**
-     * Applies one command: the only way to change a vault.
+     * Applies one command: the only way to change a vault. Its note is
+     * capitalized first ([`Command::capitalize_note`]); the server and a
+     * replay go through [`Core::execute`] and take the note as logged.
      */
     func execute(envelope: CommandEnvelope) throws  -> Receipt
     
     /**
      * Applies several commands in one local transaction, all or none. Each
-     * keeps its own log row and syncs on its own.
+     * keeps its own log row and syncs on its own. Notes are capitalized as
+     * in [`Self::execute`].
      */
     func executeBatch(envelopes: [CommandEnvelope]) throws  -> [Receipt]
     
@@ -1105,7 +1108,9 @@ open func dismissRejected(vaultId: Uuid, commandId: Uuid)throws   {try rustCallW
 }
     
     /**
-     * Applies one command: the only way to change a vault.
+     * Applies one command: the only way to change a vault. Its note is
+     * capitalized first ([`Command::capitalize_note`]); the server and a
+     * replay go through [`Core::execute`] and take the note as logged.
      */
 open func execute(envelope: CommandEnvelope)throws  -> Receipt  {
     return try  FfiConverterTypeReceipt_lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
@@ -1119,7 +1124,8 @@ open func execute(envelope: CommandEnvelope)throws  -> Receipt  {
     
     /**
      * Applies several commands in one local transaction, all or none. Each
-     * keeps its own log row and syncs on its own.
+     * keeps its own log row and syncs on its own. Notes are capitalized as
+     * in [`Self::execute`].
      */
 open func executeBatch(envelopes: [CommandEnvelope])throws  -> [Receipt]  {
     return try  FfiConverterSequenceTypeReceipt.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
@@ -11855,10 +11861,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_method_corehandle_dismiss_rejected() != 48987) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sparagne_core_checksum_method_corehandle_execute() != 4893) {
+    if (uniffi_sparagne_core_checksum_method_corehandle_execute() != 15643) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sparagne_core_checksum_method_corehandle_execute_batch() != 57257) {
+    if (uniffi_sparagne_core_checksum_method_corehandle_execute_batch() != 30400) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_flow_balance_ranges() != 39063) {
