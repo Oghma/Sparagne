@@ -145,6 +145,22 @@
         }
       }
     },
+    "%@ in the last 12 months": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ in the last 12 months"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ negli ultimi 12 mesi"
+          }
+        }
+      }
+    },
     "%@ is %@ short and cannot go below zero.": {
       "localizations": {
         "en": {
@@ -193,6 +209,22 @@
         }
       }
     },
+    "%@ months": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ months"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ mesi"
+          }
+        }
+      }
+    },
     "%@ of average income": {
       "localizations": {
         "en": {
@@ -205,6 +237,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ delle entrate medie"
+          }
+        }
+      }
+    },
+    "%@ of expenses a month": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ of expenses a month"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ di uscite al mese"
           }
         }
       }
@@ -333,22 +381,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ su %@"
-          }
-        }
-      }
-    },
-    "%@ year to date": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ year to date"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ da inizio anno"
           }
         }
       }
@@ -2241,6 +2273,22 @@
         }
       }
     },
+    "Autonomy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autonomy"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autonomia"
+          }
+        }
+      }
+    },
     "Average": {
       "localizations": {
         "en": {
@@ -2461,6 +2509,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tetto"
+          }
+        }
+      }
+    },
+    "Caps": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caps"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tetti"
           }
         }
       }
@@ -4845,38 +4909,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Da / A"
-          }
-        }
-      }
-    },
-    "Fund expenses": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fund expenses"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Uscite fondi"
-          }
-        }
-      }
-    },
-    "Funds": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Funds"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fondi"
           }
         }
       }
@@ -10313,6 +10345,22 @@
         }
       }
     },
+    "The line under it reads the month on screen and the eleven before, so a yearly expense counts once": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The line under it reads the month on screen and the eleven before, so a yearly expense counts once"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La riga sotto guarda il mese a schermo e gli undici prima, così una spesa annuale conta una volta sola"
+          }
+        }
+      }
+    },
     "The new password needs at least 8 characters.": {
       "localizations": {
         "en": {
@@ -11105,18 +11153,34 @@
         }
       }
     },
-    "Total = savings + cash fund − fund expenses": {
+    "Total = savings + cash fund": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Total = savings + cash fund − fund expenses"
+            "value": "Total = savings + cash fund"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Totale = risparmio + fondo cassa − uscite dei fondi"
+            "value": "Totale = risparmio + fondo cassa"
+          }
+        }
+      }
+    },
+    "Total over the average month of expenses of the last twelve finished months: how long the money lasts with nothing coming in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total over the average month of expenses of the last twelve finished months: how long the money lasts with nothing coming in"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il totale diviso per le uscite medie degli ultimi dodici mesi chiusi: per quanti mesi bastano i soldi se non entrasse più niente"
           }
         }
       }
@@ -12161,22 +12225,6 @@
         }
       }
     },
-    "a cap makes it a fund in the summary": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "a cap makes it a fund in the summary"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "un tetto la rende un fondo nel riepilogo"
-          }
-        }
-      }
-    },
     "add": {
       "localizations": {
         "en": {
@@ -12441,18 +12489,18 @@
         }
       }
     },
-    "balance at month end · income and expenses of the year": {
+    "balance at month end · in and out in the year, moves included": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "balance at month end · income and expenses of the year"
+            "value": "balance at month end · in and out in the year, moves included"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "saldo a fine mese · entrate e uscite dell'anno"
+            "value": "saldo a fine mese · entrate e uscite dell’anno, trasferimenti compresi"
           }
         }
       }
@@ -13301,6 +13349,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "il"
+          }
+        }
+      }
+    },
+    "one for each purpose: the house, the holidays, …": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "one for each purpose: the house, the holidays, …"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "una per ogni scopo: la casa, le vacanze, …"
           }
         }
       }

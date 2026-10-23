@@ -8,11 +8,11 @@ import SparagneCore
 /// either: it only ever holds a short number.
 enum LedgerColumn: String, CaseIterable, Sendable {
     case date
+    case wallet
     case flow
     case category
-    case wallet
-    case person
     case amount
+    case person
 
     /// The narrowest a drag leaves a column, inside its padding: a few
     /// letters, enough to find it again.
@@ -27,11 +27,11 @@ enum LedgerColumn: String, CaseIterable, Sendable {
     var standard: CGFloat {
         let outer: CGFloat = switch self {
         case .date: 60
+        case .wallet: 84
         case .flow: 84
         case .category: 124
-        case .wallet: 84
-        case .person: 84
         case .amount: 96
+        case .person: 84
         }
         return outer - 2 * GridColumn.padding
     }
@@ -41,19 +41,19 @@ enum LedgerColumn: String, CaseIterable, Sendable {
     /// side the column is on, the edge follows the pointer.
     var growsLeft: Bool {
         switch self {
-        case .wallet, .person, .amount: true
-        case .date, .flow, .category: false
+        case .amount, .person: true
+        case .date, .wallet, .flow, .category: false
         }
     }
 
     var field: RowField {
         switch self {
         case .date: .date
+        case .wallet: .wallet
         case .flow: .flow
         case .category: .category
-        case .wallet: .wallet
-        case .person: .person
         case .amount: .amount
+        case .person: .person
         }
     }
 
@@ -135,19 +135,19 @@ enum LedgerColumnFit {
         let content: [CGFloat] = switch column {
         case .date:
             (rows.map(\.occurredAt) + due.compactMap { CoreDate.localDay($0.date) }).map(day)
+        case .wallet:
+            (rows.map(\.walletDisplay) + due.map { store.walletName($0.template.walletId) })
+                .map { width(of: $0, font: rowFont) }
         case .flow:
             (rows.map(\.envelopeColumn) + due.map { store.envelopeName($0.template.flowId) })
                 .map { width(of: $0, font: rowFont) + selectMark }
         case .category:
             (rows.map(\.category) + due.map { category($0.template) }).map { width(of: $0, font: rowFont) }
-        case .wallet:
-            (rows.map(\.walletDisplay) + due.map { store.walletName($0.template.walletId) })
+        case .amount:
+            (rows.map(LedgerRowView.amountText) + due.map { LedgerMoney.bare($0.template.amount) } + [LedgerMoney.bare(0)])
                 .map { width(of: $0, font: rowFont) }
         case .person:
             (rows.map(\.person) + due.map(\.template.owner) + [store.currentAuthor])
-                .map { width(of: $0, font: rowFont) }
-        case .amount:
-            (rows.map(LedgerRowView.amountText) + due.map { LedgerMoney.bare($0.template.amount) } + [LedgerMoney.bare(0)])
                 .map { width(of: $0, font: rowFont) }
         }
         return LedgerColumn.clamp(max(heading, content.max() ?? 0) + slack)
@@ -198,11 +198,12 @@ struct ColumnResizeHandles: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { headerWidth = $0 }
     }
 
-    private var leading: [LedgerColumn] { [.date, .flow, .category] }
-
-    private var trailing: [LedgerColumn] {
-        showsWallet ? [.amount, .person, .wallet] : [.amount, .person]
+    private var leading: [LedgerColumn] {
+        showsWallet ? [.date, .wallet, .flow, .category] : [.date, .flow, .category]
     }
+
+    /// From the right edge in: PERSONA is the last column, IMPORTO before it.
+    private var trailing: [LedgerColumn] { [.person, .amount] }
 
     /// Where a column's handle sits: from the left edge for a column before
     /// DESCRIZIONE, from the right edge for one after it.

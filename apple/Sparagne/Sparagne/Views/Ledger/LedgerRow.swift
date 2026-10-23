@@ -97,14 +97,14 @@ struct GridHeader: View {
                 heading("#", spoken: String(localized: "Number"))
             }
             GridCell(width: columns[.date]) { heading(RowField.date.label) }
-            GridCell(width: columns[.flow]) { heading(RowField.flow.label) }
-            GridCell(width: columns[.category]) { heading(RowField.category.label) }
-            GridCell { heading(RowField.note.label) }
             if showsWallet {
                 GridCell(width: columns[.wallet]) { heading(RowField.wallet.label) }
             }
-            GridCell(width: columns[.person]) { heading(RowField.person.label) }
+            GridCell(width: columns[.flow]) { heading(RowField.flow.label) }
+            GridCell(width: columns[.category]) { heading(RowField.category.label) }
+            GridCell { heading(RowField.note.label) }
             GridCell(width: columns[.amount], alignment: .trailing) { heading(RowField.amount.label) }
+            GridCell(width: columns[.person]) { heading(RowField.person.label) }
             RowActionTrack()
         }
         .frame(height: Metrics.headerHeight)
@@ -428,12 +428,12 @@ struct LedgerRowView: View {
             // most often retyped, so it takes the cursor.
             .onTapGesture { onClick(.note) }
             dateCell
+            if showsWallet { walletCell }
             envelopeCell
             categoryCell
             noteCell
-            if showsWallet { walletCell }
-            personCell
             amountCell
+            personCell
             RowActionTrack {
                 if let onDelete { RowDeleteButton(action: onDelete) }
             }
@@ -746,6 +746,9 @@ struct PendingRowView: View {
             GridCell(width: columns[.date]) {
                 DayLabel(date: CoreDate.localDay(period.date) ?? store.month.start(), tint: Ink.text2)
             }
+            if showsWallet {
+                GridCell(width: columns[.wallet]) { Text(store.walletName(template.walletId)) }
+            }
             GridCell(width: columns[.flow]) { Text(store.envelopeName(template.flowId)) }
             GridCell(width: columns[.category]) { Text(category) }
             GridCell {
@@ -778,17 +781,14 @@ struct PendingRowView: View {
                 }
                 .disabled(working)
             }
-            if showsWallet {
-                GridCell(width: columns[.wallet]) { Text(store.walletName(template.walletId)) }
+            GridCell(width: columns[.amount], alignment: .trailing) {
+                Text(LedgerMoney.bare(template.amount))
             }
             // The template's owner: the row is theirs, whoever records it.
             GridCell(width: columns[.person]) {
                 Text(template.owner)
                     .foregroundStyle(ownerLeft ? Ink.negative : Ink.text3)
                     .help(ifAny: ownerLeft ? AppStore.noLongerAMember : nil)
-            }
-            GridCell(width: columns[.amount], alignment: .trailing) {
-                Text(LedgerMoney.bare(template.amount))
             }
             RowActionTrack()
         }
@@ -876,6 +876,14 @@ struct NewRowView: View {
                     DayLabel(date: line.day)
                 }
             }
+            if showsWallet {
+                field(
+                    .wallet,
+                    line.wallet,
+                    placeholder: store.defaultWalletName ?? String(localized: "Wallet"),
+                    width: columns[.wallet]
+                )
+            }
             if isEdited(.flow) {
                 GridCell(width: columns[.flow]) {
                     EnvelopeSelectCell(
@@ -910,17 +918,6 @@ struct NewRowView: View {
                 )
             }
             field(.note, line.note, placeholder: String(localized: "Description"), width: nil)
-            if showsWallet {
-                field(
-                    .wallet,
-                    line.wallet,
-                    placeholder: store.defaultWalletName ?? String(localized: "Wallet"),
-                    width: columns[.wallet]
-                )
-            }
-            // The author until another name is typed; emptied, it still
-            // means the author, and says so.
-            field(.person, line.person, placeholder: store.currentAuthor, width: columns[.person])
             // A duplicated refund is saved as one, and says so in the green
             // the saved row will have.
             field(
@@ -931,6 +928,9 @@ struct NewRowView: View {
                 alignment: .trailing,
                 tint: line.kind == .refund ? Ink.positive : Ink.text
             )
+            // The author until another name is typed; emptied, it still
+            // means the author, and says so.
+            field(.person, line.person, placeholder: store.currentAuthor, width: columns[.person])
             RowActionTrack()
         }
         .frame(height: Metrics.rowHeight)

@@ -14,12 +14,12 @@ use crate::{
     AliasView, AllocationBase, AllocationLine, AllocationPlanView, AllocationPreview,
     AllocationRunView, BucketCategoryTotals, BucketPersonTotals, BucketTargetTotals,
     CategorySuggestion, CategoryTotals, CategoryView, Command, CommandEnvelope, Core, Currency,
-    DomainError, FlowBalanceRange, FlowPersonTotals, MergePreview, Money, Page, PendingAllocation,
-    PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView, RecurringView,
-    RejectedCommand, Schedule, StatementColumnValue, StatementDetection, StatementFormatGuess,
-    StatementMapping, StatementOptions, StatementPreset, StatementPreview, StatementReport,
-    StatementRowOverride, SyncReport, SyncState, TargetKind, TopExpense, TransactionFilter,
-    VaultSnapshot, VaultView,
+    DomainError, FlowBalanceRange, FlowPersonTotals, FlowTransferTotals, MergePreview, Money, Page,
+    PendingAllocation, PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView,
+    RecurringView, RejectedCommand, Schedule, StatementColumnValue, StatementDetection,
+    StatementFormatGuess, StatementMapping, StatementOptions, StatementPreset, StatementPreview,
+    StatementReport, StatementRowOverride, SyncReport, SyncState, TargetKind, TopExpense,
+    TransactionFilter, VaultSnapshot, VaultView,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
     statement,
 };
@@ -242,6 +242,16 @@ impl CoreHandle {
         to: UtcDateTime,
     ) -> Result<Vec<FlowPersonTotals>, DomainError> {
         self.lock()?.flow_person_totals(vault_id, from, to)
+    }
+
+    /// Envelope x person moves between envelopes over `[from, to)`.
+    pub fn flow_transfer_totals(
+        &self,
+        vault_id: Uuid,
+        from: UtcDateTime,
+        to: UtcDateTime,
+    ) -> Result<Vec<FlowTransferTotals>, DomainError> {
+        self.lock()?.flow_transfer_totals(vault_id, from, to)
     }
 
     /// Category breakdown over `[from, to)`, heaviest net expense first.

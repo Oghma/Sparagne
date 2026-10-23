@@ -33,13 +33,34 @@ enum SummaryText {
     /// ledger's comma and no decimals unless asked (`LedgerMoney.percent`,
     /// which takes two amounts where the model hands a ratio).
     static func percent(_ fraction: Double, decimals: Int = 0) -> String {
+        decimal(fraction * 100, decimals: decimals) + "%"
+    }
+
+    /// `"18,9"`: the months of autonomy, one decimal and the ledger's comma.
+    static func months(_ value: Double) -> String {
+        decimal(value, decimals: 1)
+    }
+
+    private static func decimal(_ value: Double, decimals: Int) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.decimalSeparator = ","
         formatter.groupingSeparator = "."
         formatter.minimumFractionDigits = decimals
         formatter.maximumFractionDigits = decimals
-        return (formatter.string(from: NSNumber(value: fraction * 100)) ?? "0") + "%"
+        return formatter.string(from: NSNumber(value: value)) ?? "0"
+    }
+
+    // MARK: - Help
+
+    /// The rate card's second line, on hover: why twelve months.
+    static var trailingRateHelp: String {
+        String(localized: "The line under it reads the month on screen and the eleven before, so a yearly expense counts once")
+    }
+
+    /// What the autonomy card divides, on hover.
+    static var autonomyHelp: String {
+        String(localized: "Total over the average month of expenses of the last twelve finished months: how long the money lasts with nothing coming in")
     }
 
     // MARK: - Categories

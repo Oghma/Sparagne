@@ -755,6 +755,7 @@ final class AppStore {
             previousStart: CoreDate.utcString(month.adding(months: -1).start()),
             trailingBounds: trailing.bounds,
             yearBounds: [epoch] + yearBounds,
+            previousYearBounds: MonthKey.yearBounds(month.year - 1),
             yearFrom: yearBounds[0],
             yearTo: bounds.to,
             person: person,
@@ -793,6 +794,7 @@ final class AppStore {
             year: month.year,
             upTo: month,
             rows: loaded.year,
+            previousRows: loaded.previousYear,
             flows: flows,
             vaultPeople: loaded.people,
             person: person,
@@ -815,6 +817,7 @@ final class AppStore {
         envelopeYear = EnvelopeYear.build(
             flows: flows,
             flowPerson: loaded.yearFlowPerson,
+            transfers: loaded.yearFlowTransfers,
             balances: loaded.flowBalances,
             upTo: month,
             people: loaded.people

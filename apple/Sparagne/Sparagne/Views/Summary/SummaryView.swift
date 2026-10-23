@@ -10,7 +10,7 @@ import SparagneCore
 /// and widths.
 ///
 /// Top to bottom: the heading with the PERSONA control, the things to do,
-/// the month's cards, the funds, the month table, the people beside the
+/// the month's cards, the caps, the month table, the people beside the
 /// envelopes, the two charts, the categories beside the heaviest expenses,
 /// and the months by categories.
 struct SummaryView: View {
@@ -28,7 +28,7 @@ struct SummaryView: View {
             }
 
             if let kpis = year.kpis {
-                MonthCards(kpis: kpis, month: year.upTo, fixedCosts: store.fixedCosts)
+                MonthCards(kpis: kpis, month: year.upTo, fixedCosts: store.fixedCosts, autonomy: year.autonomy)
             }
 
             if !year.funds.isEmpty {

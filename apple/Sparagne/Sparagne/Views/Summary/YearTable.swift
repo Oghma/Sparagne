@@ -11,7 +11,7 @@ struct YearTable: View {
     let year: YearSummary
 
     private static let monthWidth: CGFloat = 116
-    /// `-12.345,67` and its padding. Two wallets and two people make ten
+    /// `-12.345,67` and its padding. Two wallets and two people make nine
     /// figures across: at this width they still fit the narrowest window
     /// without scrolling.
     private static let figureWidth: CGFloat = 88
@@ -29,7 +29,7 @@ struct YearTable: View {
                 HStack(alignment: .firstTextBaseline) {
                     SectionLabel(text: String(localized: "Month by month"), tint: Ink.text2)
                     Spacer(minLength: 8)
-                    Text(String(localized: "Total = savings + cash fund \u{2212} fund expenses"))
+                    Text(String(localized: "Total = savings + cash fund"))
                         .font(Face.label)
                         .foregroundStyle(Ink.text3)
                         .lineLimit(1)
@@ -49,9 +49,9 @@ struct YearTable: View {
         .frame(minWidth: minWidth)
     }
 
-    /// The month, six figures, TASSO, the wallets and the people.
+    /// The month, five figures, TASSO, the wallets and the people.
     private var minWidth: CGFloat {
-        let figures = 6 + year.walletColumns.count + people.count
+        let figures = 5 + year.walletColumns.count + people.count
         return Self.monthWidth + 2 * Metrics.cellPad + CGFloat(figures) * Self.figureWidth + Self.rateWidth
     }
 
@@ -68,7 +68,6 @@ struct YearTable: View {
             Text(String(localized: "Rate"))
                 .tableCell(width: Self.rateWidth, alignment: .trailing)
             headerTitle(String(localized: "Cash fund"), flexible: flexible)
-            headerTitle(String(localized: "Fund expenses"), flexible: flexible)
             headerTitle(String(localized: "Total"), flexible: flexible)
             ForEach(year.walletColumns) { wallet in
                 headerTitle(wallet.name, flexible: flexible)
@@ -79,8 +78,8 @@ struct YearTable: View {
         }
     }
 
-    /// A long title ("Fund expenses") narrows a little rather than lose its
-    /// end on the narrowest window.
+    /// A long title (a wallet's name, "Cash fund") narrows a little rather
+    /// than lose its end on the narrowest window.
     private func headerTitle(_ title: String, flexible: Bool) -> some View {
         Text(title)
             .minimumScaleFactor(0.85)
@@ -99,14 +98,13 @@ struct YearTable: View {
                 .frame(width: Self.monthWidth, alignment: .leading)
                 .padding(.horizontal, Metrics.cellPad)
             figure(row.income, row: row, flexible: flexible, weight: weight)
-            figure(row.cashExpense, row: row, flexible: flexible, weight: weight)
+            figure(row.expense, row: row, flexible: flexible, weight: weight)
             figure(
                 row.savings, row: row, flexible: flexible, weight: weight,
                 tint: isSum ? ((row.savings ?? 0) >= 0 ? Ink.positive : Ink.negative) : ((row.savings ?? 0) < 0 ? Ink.negative : Ink.text)
             )
             rateCell(row)
             figure(row.carried, row: row, flexible: flexible, weight: weight, tint: Ink.text2)
-            figure(row.fundExpense, row: row, flexible: flexible, weight: weight)
             totalCell(row, flexible: flexible)
             ForEach(Array(year.walletColumns.enumerated()), id: \.offset) { index, _ in
                 figure(
@@ -246,13 +244,12 @@ struct YearTable: View {
             if let value { figures.append((title, LedgerMoney.amount(value))) }
         }
         add(String(localized: "Income"), row.income)
-        add(String(localized: "Expenses"), row.cashExpense)
+        add(String(localized: "Expenses"), row.expense)
         add(String(localized: "Savings"), row.savings)
         if let rate = LedgerMoney.savingsRate(row.savings ?? 0, of: row.income ?? 0) {
             figures.append((String(localized: "Rate"), rate))
         }
         add(String(localized: "Cash fund"), row.carried)
-        add(String(localized: "Fund expenses"), row.fundExpense)
         add(String(localized: "Total"), row.total)
         for (index, wallet) in year.walletColumns.enumerated() where row.byWallet.indices.contains(index) {
             figures.append((wallet.name, LedgerMoney.amount(row.byWallet[index])))

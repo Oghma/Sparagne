@@ -1,7 +1,7 @@
-//! Tests for the ledger aggregations: people, the
-//! envelope x person matrix, the category breakdown, the twelve-month buckets,
-//! the top expenses, and the year breakdown, the months x categories grid and
-//! the balance breakdown behind the RIEPILOGO.
+//! Tests for the ledger aggregations: people, the envelope x person matrix
+//! and its moves between envelopes, the category breakdown, the twelve-month
+//! buckets, the top expenses, and the year breakdown, the months x categories
+//! grid and the balance breakdown behind the RIEPILOGO.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -127,6 +127,49 @@ fn flow_person_totals_ignores_transfers_and_voided_and_rows_outside_the_range() 
 }
 
 #[test]
+fn flow_transfer_totals_count_a_move_in_on_one_envelope_and_out_on_the_other() {
+    let mut s = shared_month();
+    let (from, to) = month_range();
+    let vault = s.fx.vault;
+    let move_between =
+        |from_flow: Uuid, to_flow: Uuid, amount: i64, secs: i64| Command::TransferFlow {
+            amount,
+            from_flow_id: from_flow,
+            to_flow_id: to_flow,
+            note: None,
+            occurred_at: at(secs),
+        };
+    s.fx.run_as("elisa", move_between(s.cash, s.varie, 50, T0 + 5 * DAY));
+    s.fx.run_as("elisa", move_between(s.varie, s.cash, 20, T0 + 6 * DAY));
+    s.fx.run_as("matteo", move_between(s.cash, s.varie, 7, T0 + 7 * DAY));
+    // A voided move and one past the range are left out, and so are the
+    // fixture's entries.
+    let voided = s.fx.id(move_between(s.cash, s.varie, 1_000, T0 + 8 * DAY));
+    s.fx.run(Command::VoidTransaction {
+        transaction_id: voided,
+    });
+    s.fx.run(move_between(s.cash, s.varie, 2_000, T0 + 90 * DAY));
+
+    let rows = s.fx.core.flow_transfer_totals(vault, from, to).unwrap();
+    let cell = |flow: Uuid, person: &str| {
+        rows.iter()
+            .find(|r| r.flow_id == flow && r.person == person)
+            .map(|r| (r.moved_in, r.moved_out))
+    };
+    assert_eq!(cell(s.cash, "elisa"), Some((20, 50)));
+    assert_eq!(cell(s.varie, "elisa"), Some((50, 20)));
+    assert_eq!(cell(s.cash, "matteo"), Some((0, 7)));
+    assert_eq!(cell(s.varie, "matteo"), Some((7, 0)));
+    assert_eq!(
+        rows.iter().map(|r| r.person.as_str()).collect::<Vec<_>>(),
+        ["elisa", "elisa", "matteo", "matteo"]
+    );
+
+    let err = s.fx.core.flow_transfer_totals(vault, to, from).unwrap_err();
+    assert!(matches!(err, DomainError::InvalidCommand(_)));
+}
+
+#[test]
 fn flow_person_totals_rejects_an_inverted_range() {
     let s = shared_month();
     let err =
@@ -180,9 +223,9 @@ fn every_aggregation_follows_the_person_not_who_recorded_the_row() {
 
     let year = core.year_breakdown(vault, vec![from, to]).unwrap();
     let elisa_year = year.iter().find(|r| r.person == "elisa").unwrap();
-    assert_eq!(elisa_year.cash_expense, 70);
+    assert_eq!(elisa_year.expense, 70);
     let matteo_year = year.iter().find(|r| r.person == "matteo").unwrap();
-    assert_eq!(matteo_year.cash_expense, 90 + 25);
+    assert_eq!(matteo_year.expense, 90 + 25);
 
     let grid = core
         .category_bucket_totals(vault, vec![from, to], elisa())
@@ -365,11 +408,11 @@ fn year_breakdown_puts_wallet_openings_in_their_own_column() {
         .unwrap();
     assert_eq!(alice.opening, 150);
     assert_eq!(alice.income, 900);
-    assert_eq!((alice.cash_expense, alice.fund_expense), (0, 0));
+    assert_eq!(alice.expense, 0);
 }
 
 #[test]
-fn year_breakdown_splits_expenses_by_cap_and_nets_refunds_inside_the_group() {
+fn year_breakdown_sums_every_envelope_and_nets_refunds() {
     let s = year_fx();
     let w = Some(s.fx.wallet);
     let rows = s.fx.core.year_breakdown(s.fx.vault, year_bounds()).unwrap();
@@ -378,13 +421,13 @@ fn year_breakdown_splits_expenses_by_cap_and_nets_refunds_inside_the_group() {
         .find(|r| r.bucket == 1 && r.person == "elisa")
         .unwrap();
 
-    // 100 on the unlimited envelope, 80 - 30 on the capped one: the refund
-    // nets off the fondo only.
-    assert_eq!(elisa.cash_expense, 100);
-    assert_eq!(elisa.fund_expense, 50);
+    // 100 on the unlimited envelope and 80 - 30 on the capped one: a cap
+    // does not take an expense out of the month.
+    assert_eq!(elisa.expense, 100 + 50);
     assert_eq!((elisa.income, elisa.opening), (0, 0));
 
-    // A refund alone floors its group at zero instead of going negative.
+    // A refund larger than the month's expenses floors it at zero instead of
+    // going negative.
     let mut s = s;
     let cmd = Command::Refund(entry(70, w, Some(s.fondo), Some("Casa"), T0 + 12 * DAY));
     s.fx.run_as("elisa", cmd);
@@ -393,7 +436,7 @@ fn year_breakdown_splits_expenses_by_cap_and_nets_refunds_inside_the_group() {
         .iter()
         .find(|r| r.bucket == 2 && r.person == "elisa")
         .unwrap();
-    assert_eq!((late.cash_expense, late.fund_expense), (40, 0));
+    assert_eq!(late.expense, 0);
 }
 
 #[test]
@@ -731,7 +774,7 @@ fn balance_breakdown_of_the_envelopes_matches_the_year_breakdown_bucket_by_bucke
     let earned = |bucket: u32| -> i64 {
         year.iter()
             .filter(|r| r.bucket == bucket)
-            .map(|r| r.income + r.opening - r.cash_expense - r.fund_expense)
+            .map(|r| r.income + r.opening - r.expense)
             .sum()
     };
     // 700 - 50; 1.000 + 250 - 150 - (80 - 20); the transfer nets to zero.

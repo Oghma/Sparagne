@@ -4,8 +4,8 @@ import SwiftUI
 /// far, one column per person. Not drawn with one person, nor under the
 /// PERSONA filter (`SummaryView`).
 ///
-/// The figures are the table's: expenses are USCITE, the envelopes without
-/// a cap, so a person's column and the month table never disagree.
+/// The figures are the table's: expenses are USCITE, every envelope's, so
+/// a person's column and the month table never disagree.
 struct PersonYearCard: View {
     let year: YearSummary
 

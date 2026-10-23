@@ -122,14 +122,14 @@ final class LedgerEditor {
     }
 
     /// ↑ ↓ ← → ⇥ ⇧⇥: the cell being edited is saved, the new line registered
-    /// if it is left (⇥ off its IMPORTO included), and the cursor moves
+    /// if it is left (⇥ off its PERSONA included), and the cursor moves
     /// (`LedgerCursor.target`). `false` when a save was refused.
     @discardableResult
     func move(_ move: CursorMove) -> Bool {
         guard let from = cursor else { return true }
         let layout = self.layout
         let target = layout.target(of: move, from: from)
-        // ⇥ off the new line's IMPORTO lands on the new line again, but the
+        // ⇥ off the new line's PERSONA lands on the new line again, but the
         // line as typed is done with, as a row of a spreadsheet is.
         let wraps = from.row == nil && move == .tab && from.field == layout.fields.last
         guard leave(for: target.row, wrapping: wraps) else { return false }
@@ -288,7 +288,7 @@ final class LedgerEditor {
     }
 
     /// The WALLET column was shown or hidden. A cursor on it moves to
-    /// PERSONA, the cell beside it, its edit saved first: one refused is
+    /// ENVELOPE, the cell beside it, its edit saved first: one refused is
     /// lost, as a change of month loses one, since the cell is gone. The new
     /// line's cell takes the sticky wallet as the column shows, and lets go
     /// of what it said as it hides, so a wallet nobody can see is never
@@ -297,7 +297,7 @@ final class LedgerEditor {
         guard let store else { return }
         if let at = cursor, at.field == .wallet, !store.showWalletColumn {
             if !saveEditedCell() { stopEditing() }
-            place(at: CellFocus(row: at.row, field: .person))
+            place(at: CellFocus(row: at.row, field: .flow))
         }
         newLine.wallet = store.showWalletColumn ? store.defaultWalletName ?? "" : ""
     }

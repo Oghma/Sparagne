@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, FixedOffset, Utc};
-use rusqlite::{Connection, Row, params_from_iter, types::Value};
+use rusqlite::{Connection, Row, params, params_from_iter, types::Value};
 use uuid::Uuid;
 
 use crate::{
@@ -38,6 +38,20 @@ pub struct FlowPersonTotals {
     pub refund: i64,
     /// `max(expense - refund, 0)`.
     pub net_expense: i64,
+}
+
+/// What moves between envelopes put into and took out of one envelope for
+/// one person: the other half of an envelope's year beside
+/// [`FlowPersonTotals`], whose rows are income, expense and refund only.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct FlowTransferTotals {
+    pub flow_id: Uuid,
+    /// `transactions.person`: who made the move.
+    pub person: String,
+    /// Moved in from another envelope, the allocation plan's shares included.
+    pub moved_in: i64,
+    /// Moved out to another envelope.
+    pub moved_out: i64,
 }
 
 /// One row of the category breakdown.
@@ -83,10 +97,10 @@ pub struct BucketPersonTotals {
     /// Opening balances of wallets (system category `Opening`), signed: an
     /// income counts positive, an expense negative.
     pub opening: i64,
-    /// `max(expense - refund, 0)` on envelopes without a cap.
-    pub cash_expense: i64,
-    /// `max(expense - refund, 0)` on envelopes with a cap (the "fondi").
-    pub fund_expense: i64,
+    /// `max(expense - refund, 0)` on every envelope, Cash among them: each one
+    /// is money kept for something, and what it pays out is spent all the
+    /// same.
+    pub expense: i64,
 }
 
 /// One category's net expense inside one bucket: the months x categories
@@ -131,10 +145,8 @@ pub struct BucketTargetTotals {
 struct YearSlot {
     income: i64,
     opening: i64,
-    cash_expense: i64,
-    cash_refund: i64,
-    fund_expense: i64,
-    fund_refund: i64,
+    expense: i64,
+    refund: i64,
 }
 
 /// What [`BucketCategoryTotals`] is folded from; the bucket nets at the end.
@@ -349,6 +361,44 @@ impl Core {
         Ok(out)
     }
 
+    /// Envelope x person moves between envelopes over the range, voided ones
+    /// left out: each move is in on one envelope and out on the other. Only
+    /// pairs with a move are returned, ordered by person case-insensitively,
+    /// then by envelope id.
+    pub fn flow_transfer_totals(
+        &self,
+        vault_id: Uuid,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<Vec<FlowTransferTotals>> {
+        check_range(from, to)?;
+        let mut stmt = self.conn.prepare(
+            "SELECT l.target_id, t.person,
+                    SUM(CASE WHEN l.amount > 0 THEN l.amount ELSE 0 END),
+                    SUM(CASE WHEN l.amount < 0 THEN -l.amount ELSE 0 END)
+             FROM transactions t
+             JOIN legs l ON l.transaction_id = t.id AND l.target_kind = 'flow'
+             WHERE t.vault_id = ?1 AND t.voided_at IS NULL AND t.kind = 'transfer_flow'
+               AND t.occurred_at >= ?2 AND t.occurred_at < ?3
+             GROUP BY l.target_id, t.person
+             ORDER BY lower(t.person), l.target_id",
+        )?;
+        let rows = stmt
+            .query_map(
+                params![blob(vault_id), from.timestamp(), to.timestamp()],
+                |r| {
+                    Ok(FlowTransferTotals {
+                        flow_id: r.get(0)?,
+                        person: r.get(1)?,
+                        moved_in: r.get(2)?,
+                        moved_out: r.get(3)?,
+                    })
+                },
+            )?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
     /// Category breakdown over the range, heaviest net expense first, opening
     /// balances left out (module doc), so `Opening` never has a row.
     pub fn category_totals(
@@ -460,9 +510,8 @@ impl Core {
     /// The app passes the epoch followed by thirteen month starts, so bucket 0
     /// is everything that happened before the year. Amounts come from the flow
     /// legs, like [`Core::flow_person_totals`], so a future split lands on both
-    /// envelopes, and each leg is cash or fund depending on whether its
-    /// envelope has a cap. Only pairs with movement come back; the app fills
-    /// the gaps with zeros.
+    /// envelopes. Only pairs with movement come back; the app fills the gaps
+    /// with zeros.
     pub fn year_breakdown(
         &self,
         vault_id: Uuid,
@@ -477,10 +526,9 @@ impl Core {
                 let (where_sql, args) = scope(vault_id, from, to, None);
                 let sql = format!(
                     "SELECT t.occurred_at, t.person, t.kind, c.is_system, c.name_norm,
-                            f.cap IS NULL, ABS(l.amount)
+                            ABS(l.amount)
                      FROM transactions t
                      JOIN legs l ON l.transaction_id = t.id AND l.target_kind = 'flow'
-                     JOIN flows f ON f.id = l.target_id
                      JOIN categories c ON c.id = t.category_id
                      {where_sql}"
                 );
@@ -491,8 +539,7 @@ impl Core {
                 let kind: String = row.get(2)?;
                 let is_system: bool = row.get(3)?;
                 let category: String = row.get(4)?;
-                let uncapped: bool = row.get(5)?;
-                let amount: i64 = row.get(6)?;
+                let amount: i64 = row.get(5)?;
 
                 let slot = &mut find_or_push(
                     &mut slots,
@@ -509,12 +556,10 @@ impl Core {
                     }
                     return Ok(());
                 }
-                match (kind.as_str(), uncapped) {
-                    ("income", _) => slot.income += amount,
-                    ("expense", true) => slot.cash_expense += amount,
-                    ("expense", false) => slot.fund_expense += amount,
-                    ("refund", true) => slot.cash_refund += amount,
-                    ("refund", false) => slot.fund_refund += amount,
+                match kind.as_str() {
+                    "income" => slot.income += amount,
+                    "expense" => slot.expense += amount,
+                    "refund" => slot.refund += amount,
                     _ => {}
                 }
                 Ok(())
@@ -528,8 +573,7 @@ impl Core {
                 person,
                 income: slot.income,
                 opening: slot.opening,
-                cash_expense: (slot.cash_expense - slot.cash_refund).max(0),
-                fund_expense: (slot.fund_expense - slot.fund_refund).max(0),
+                expense: (slot.expense - slot.refund).max(0),
             })
             .collect();
         out.sort_by(|a, b| {
@@ -630,11 +674,10 @@ impl Core {
     /// the end of bucket `m`, at `bounds[m + 1]`, as long as `bounds[0]` is
     /// before the vault's first row (the app passes the epoch). On the
     /// envelope side, the deltas of every envelope in a bucket sum to
-    /// `income + opening - cash_expense - fund_expense` of
-    /// [`Core::year_breakdown`] for that bucket, summed over its persons:
-    /// transfers between envelopes net to zero. That holds while nobody's
-    /// refunds in the bucket exceed their expenses on the same group of
-    /// envelopes, where `year_breakdown` floors at zero.
+    /// `income + opening - expense` of [`Core::year_breakdown`] for that
+    /// bucket, summed over its persons: transfers between envelopes net to
+    /// zero. That holds while nobody's refunds in the bucket exceed their
+    /// expenses, where `year_breakdown` floors at zero.
     pub fn balance_breakdown(
         &self,
         vault_id: Uuid,

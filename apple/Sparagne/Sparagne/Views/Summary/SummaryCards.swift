@@ -2,21 +2,23 @@ import SwiftUI
 
 // MARK: - The month's cards
 
-/// The five numbers of the month on screen: income,
-/// expenses, savings and the rate, each with a line under it that compares it
-/// with the month before or the year so far, and what the recurring expenses
-/// commit every month. Only savings is colored: expenses are the ordinary
-/// run of a month, not an alarm.
+/// The six numbers of the month on screen: income, expenses, savings and
+/// the rate, each with a line under it that compares it with the month
+/// before or the last twelve months, what the recurring expenses commit
+/// every month, and how many months the money would last. Only savings is
+/// colored: expenses are the ordinary run of a month, not an alarm.
 struct MonthCards: View {
     let kpis: MonthKPIs
     let month: MonthKey
     /// `nil` without an enabled recurring expense: the fifth card says so.
     let fixedCosts: FixedCosts?
+    /// `nil` with no expense to measure it on: the sixth card is a dash.
+    let autonomy: Autonomy?
 
     var body: some View {
-        // Always five across: an adaptive grid opens a sixth, empty column on
-        // a wide window, and the window is never narrower than five cards.
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 150), spacing: 8), count: 5), spacing: 8) {
+        // Always six across: an adaptive grid opens a seventh, empty column on
+        // a wide window, and the window is never narrower than six cards.
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 150), spacing: 8), count: 6), spacing: 8) {
             KPICard(
                 title: String(localized: "Income \u{00B7} \(name)"),
                 value: LedgerMoney.bare(kpis.income),
@@ -37,12 +39,20 @@ struct MonthCards: View {
             KPICard(
                 title: String(localized: "Savings rate"),
                 value: rate(kpis.savings, of: kpis.income),
-                caption: String(localized: "\(rate(kpis.yearSavings, of: kpis.yearIncome)) year to date")
+                caption: String(localized: "\(rate(kpis.trailingSavings, of: kpis.trailingIncome)) in the last 12 months"),
+                help: SummaryText.trailingRateHelp
             )
             KPICard(
                 title: String(localized: "Fixed costs \u{00B7} monthly"),
                 value: fixedCosts.map { "\u{2248} " + LedgerMoney.bare($0.monthly) } ?? TransactionRow.placeholder,
                 caption: fixedCaption
+            )
+            KPICard(
+                title: String(localized: "Autonomy"),
+                value: autonomy.map { "\u{2248} " + String(localized: "\(SummaryText.months($0.months)) months") }
+                    ?? TransactionRow.placeholder,
+                caption: autonomy.map { String(localized: "\(LedgerMoney.bare($0.monthlyExpense)) of expenses a month") },
+                help: SummaryText.autonomyHelp
             )
         }
     }
@@ -83,6 +93,8 @@ private struct KPICard: View {
     /// `nil` leaves the line blank, so the cards keep their height.
     let caption: String?
     var captionTint: Color = Ink.text2
+    /// What the figure counts, on hover.
+    var help: String?
 
     var body: some View {
         Panel {
@@ -103,10 +115,11 @@ private struct KPICard: View {
         // three separate swipes.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(AccessibilityText.card(title: title, value: value, caption: caption))
+        .help(ifAny: help)
     }
 }
 
-// MARK: - Funds
+// MARK: - Caps
 
 /// One card per capped envelope. Nothing is drawn for
 /// a vault without caps.
@@ -116,7 +129,7 @@ struct FundCards: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                SectionLabel(text: String(localized: "Funds"), tint: Ink.text2)
+                SectionLabel(text: String(localized: "Caps"), tint: Ink.text2)
                 Text(String(localized: "envelopes with a cap"))
                     .font(Face.label)
                     .foregroundStyle(Ink.text3)

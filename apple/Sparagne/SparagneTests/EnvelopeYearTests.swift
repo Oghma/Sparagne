@@ -108,6 +108,40 @@ struct EnvelopeYearTests {
         #expect(casa.expenseByPerson == [0, 0])
     }
 
+    @Test("A move between envelopes comes into the one it reaches and goes out of the one it leaves, for whoever made it")
+    func movesAreInAndOut() throws {
+        let year = EnvelopeYear.build(
+            flows: Self.flows,
+            flowPerson: [Self.line("Vacanze", "elisa", income: 5_000, netExpense: 20_000)],
+            transfers: [
+                // The allocation plan's share-out, then Elisa moving some of
+                // the holidays' money to the shopping.
+                FlowTransferTotals(flowId: "Non allocato", person: "matteo", movedIn: 0, movedOut: 150_000),
+                FlowTransferTotals(flowId: "Vacanze", person: "matteo", movedIn: 100_000, movedOut: 0),
+                FlowTransferTotals(flowId: "Spesa", person: "matteo", movedIn: 50_000, movedOut: 0),
+                FlowTransferTotals(flowId: "Vacanze", person: "elisa", movedIn: 0, movedOut: 30_000),
+                FlowTransferTotals(flowId: "Spesa", person: "elisa", movedIn: 30_000, movedOut: 0),
+            ],
+            balances: [],
+            upTo: Self.june,
+            people: ["elisa", "matteo"]
+        )
+        let unallocated = try #require(year.rows.first { $0.id == "Non allocato" })
+        #expect(unallocated.income == 0)
+        #expect(unallocated.expense == 150_000)
+        #expect(unallocated.expenseByPerson == [0, 150_000])
+        let vacanze = try #require(year.rows.first { $0.id == "Vacanze" })
+        #expect(vacanze.income == 105_000)
+        #expect(vacanze.expense == 50_000)
+        #expect(vacanze.expenseByPerson == [50_000, 0])
+        let spesa = try #require(year.rows.first { $0.id == "Spesa" })
+        #expect(spesa.income == 80_000)
+        #expect(spesa.expense == 0)
+        // A move only passes money along: the envelopes take in what they
+        // give out, and only the real income and expense are left over.
+        #expect(year.rows.reduce(0) { $0 + $1.income } - 5_000 == year.rows.reduce(0) { $0 + $1.expense } - 20_000)
+    }
+
     @Test("A vault with no envelopes has no table")
     func noEnvelopes() {
         let year = EnvelopeYear.build(flows: [], flowPerson: [], balances: [], upTo: Self.june, people: ["matteo"])
