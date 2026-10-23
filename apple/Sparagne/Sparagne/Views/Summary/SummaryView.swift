@@ -9,20 +9,20 @@ import SparagneCore
 /// are tested on their own, so the views of this folder only decide colors
 /// and widths.
 ///
-/// Top to bottom: the heading with the PERSONA control, the things to do,
-/// the year's cards over the month's, the caps, the month table, the people beside the
+/// Top to bottom: the things to do, the year's cards over the month's, the
+/// flows, the month table, the people beside the
 /// envelopes, the two charts, the categories beside the heaviest expenses,
-/// and the months by categories.
+/// and the months by categories. The month and the PERSONA filter are in
+/// the top bar (`TopBar`).
 struct SummaryView: View {
     let year: YearSummary
-    /// The models read with the year, and the PERSONA filter the heading
-    /// sets: the same `store.person` as the Mastro's, one for the window.
+    /// The models read with the year, for the month and the PERSONA filter
+    /// the top bar sets: the same `store.person` as the Mastro's, one for
+    /// the window.
     let store: AppStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            heading
-
             if !store.summaryTodo.isEmpty {
                 SummaryTodoStrip(items: store.summaryTodo, store: store)
             }
@@ -31,16 +31,15 @@ struct SummaryView: View {
                 SummaryCards(year: year, kpis: kpis, fixedCosts: store.fixedCosts)
             }
 
-            if !year.funds.isEmpty {
-                FundCards(funds: year.funds)
-            }
-
             if isBlank {
                 Text(String(localized: "No activity this year"))
                     .font(Face.row)
                     .foregroundStyle(Ink.text3)
                     .padding(.top, 4)
             } else {
+                if !store.flowCards.isEmpty {
+                    FlowCards(cards: store.flowCards, month: year.upTo)
+                }
                 YearTable(year: year)
                 peopleAndEnvelopes
                 SummaryCharts(year: year)
@@ -64,23 +63,6 @@ struct SummaryView: View {
     /// the same: whether the year has rows after the month on screen, or
     /// before it in another year, changes nothing on screen.
     private var isBlank: Bool { store.peopleInRows.isEmpty }
-
-    /// `2026  fino a ottobre`, and the PERSONA control at the other end. A
-    /// past year has no "up to": it is full.
-    private var heading: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(verbatim: "\(year.year)")
-                .font(Face.ui(18, .semibold))
-                .foregroundStyle(Ink.text)
-            if year.year == year.upTo.year {
-                Text(String(localized: "up to \(SummaryText.monthName(year.upTo.month))"))
-                    .font(Face.ui(13))
-                    .foregroundStyle(Ink.text2)
-            }
-            Spacer(minLength: 8)
-            PersonSegments(store: store)
-        }
-    }
 
     // MARK: - People and envelopes
 

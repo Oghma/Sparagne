@@ -144,69 +144,116 @@ private struct KPICard: View {
     }
 }
 
-// MARK: - Caps
+// MARK: - Flows
 
-/// One card per capped envelope. Nothing is drawn for
-/// a vault without caps.
-struct FundCards: View {
-    let funds: [FundGauge]
+/// One card per active flow but Unallocated, in `FlowCard.cards` order: the
+/// capped ones still filling, the open ones, the full ones.
+struct FlowCards: View {
+    let cards: [FlowCard]
+    /// The month on screen, which every card's last line is about.
+    let month: MonthKey
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                SectionLabel(text: String(localized: "Caps"), tint: Ink.text2)
-                Text(String(localized: "flows with a cap"))
+                SectionLabel(text: String(localized: "Flows"), tint: Ink.text2)
+                Text(String(localized: "balance at month end \u{00B7} in and out in the month, moves included"))
                     .font(Face.label)
                     .foregroundStyle(Ink.text3)
                 Spacer(minLength: 0)
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: 8)], spacing: 8) {
-                ForEach(funds) { FundCard(fund: $0) }
+                ForEach(cards) { FlowCardView(card: $0, month: month) }
             }
         }
     }
 }
 
-private struct FundCard: View {
-    let fund: FundGauge
+/// A capped flow and an open one draw the same four lines, the bar's left
+/// empty on an open one, so the cards of a row end on the same line.
+private struct FlowCardView: View {
+    let card: FlowCard
+    let month: MonthKey
 
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    Text(fund.name)
+                    Text(card.name)
                         .font(Face.ui(12, .semibold))
                         .foregroundStyle(Ink.text)
                         .lineLimit(1)
-                    CapTag(kind: fund.kind)
+                    if let gauge = card.gauge {
+                        CapTag(kind: gauge.kind)
+                        if card.isComplete {
+                            SetupTag(text: String(localized: "complete"), fixed: false)
+                        }
+                    }
                 }
                 HStack(alignment: .firstTextBaseline) {
-                    Text(LedgerMoney.bare(fund.filled))
+                    Text(LedgerMoney.bare(figure))
                         .font(Face.ui(15, .semibold))
-                        .foregroundStyle(Ink.text)
+                        .foregroundStyle(figure < 0 ? Ink.negative : Ink.text)
                     Spacer(minLength: 8)
-                    Text(String(localized: "of \(LedgerMoney.bare(fund.cap)) \u{00B7} \(percent)"))
-                        .font(Face.row)
-                        .foregroundStyle(Ink.text3)
+                    if let gauge = card.gauge {
+                        Text(String(localized: "of \(LedgerMoney.bare(gauge.cap)) \u{00B7} \(percent(gauge))"))
+                            .font(Face.row)
+                            .foregroundStyle(Ink.text3)
+                    }
                 }
-                MeterBar(fraction: fund.fraction, tint: Ink.chartIncome, height: 5, rounded: true)
+                if let gauge = card.gauge {
+                    MeterBar(
+                        fraction: gauge.fraction,
+                        tint: card.isComplete ? Ink.positive : Ink.chartIncome,
+                        height: 5,
+                        rounded: true
+                    )
+                } else {
+                    Color.clear.frame(height: 5)
+                }
+                Text(moves)
+                    .font(Face.row)
+                    .foregroundStyle(Ink.text3)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
         }
-        // The bar is a drawn shape with no text of its own: the fund's name
-        // is the label, and the fill its value.
+        // The bar is a drawn shape with no text of its own: the flow's name
+        // is the label, and the figures its value.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(fund.name)
-        .accessibilityValue(
-            AccessibilityText.fundGauge(
-                percent: percent,
-                filled: LedgerMoney.amount(fund.filled),
-                cap: LedgerMoney.amount(fund.cap)
-            )
-        )
+        .accessibilityLabel(card.name)
+        .accessibilityValue(spoken)
     }
 
-    private var percent: String {
-        LedgerMoney.percent(fund.filled, of: fund.cap, decimals: 0) ?? TransactionRow.placeholder
+    /// The balance, or what fills the cap: the cumulative income on a cap
+    /// on the income.
+    private var figure: Int64 { card.gauge?.filled ?? card.balance }
+
+    /// "+400,00 / −312,00 a ottobre": what came in and what went out.
+    private var moves: String {
+        let monthName = SummaryText.monthName(month.month)
+        guard card.monthIncome != 0 || card.monthExpense != 0 else {
+            return String(localized: "no moves in \(monthName)")
+        }
+        let figures = SummaryText.signed(PanelMoney.bare(card.monthIncome), positive: true)
+            + " / " + PanelMoney.bare(-card.monthExpense)
+        return String(localized: "\(figures) in \(monthName)")
+    }
+
+    private var spoken: String {
+        let figures = card.gauge.map {
+            AccessibilityText.fundGauge(
+                percent: percent($0),
+                filled: LedgerMoney.amount($0.filled),
+                cap: LedgerMoney.amount($0.cap)
+            )
+        } ?? LedgerMoney.amount(card.balance)
+        let complete = card.isComplete ? String(localized: "complete") : nil
+        return [figures, complete, moves].compactMap(\.self).joined(separator: ", ")
+    }
+
+    private func percent(_ gauge: FundGauge) -> String {
+        LedgerMoney.percent(gauge.filled, of: gauge.cap, decimals: 0) ?? TransactionRow.placeholder
     }
 }
 

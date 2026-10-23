@@ -398,6 +398,11 @@ actor CoreActor {
                     from: request.monthFrom,
                     to: request.monthTo
                 ),
+                flowTransfers: try handle.flowTransferTotals(
+                    vaultId: vaultId,
+                    from: request.monthFrom,
+                    to: request.monthTo
+                ),
                 categoryTotals: try handle.categoryTotals(
                     vaultId: vaultId,
                     from: request.monthFrom,
@@ -622,6 +627,10 @@ struct VaultLoad: Sendable {
     /// The incomes the next allocation would share out.
     let allocationBase: AllocationBase
     let flowPerson: [FlowPersonTotals]
+    /// The moves between envelopes of the month on screen, by envelope and
+    /// person: with `flowPerson`, what the RIEPILOGO's flow cards say came in
+    /// and went out.
+    let flowTransfers: [FlowTransferTotals]
     let categoryTotals: [CategoryTotals]
     /// `[the month before, the month]`, from the three-bound bucket query.
     let monthPair: [PeriodTotals]

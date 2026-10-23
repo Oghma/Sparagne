@@ -2513,22 +2513,6 @@
         }
       }
     },
-    "Caps": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Caps"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tetti"
-          }
-        }
-      }
-    },
     "Card transactions": {
       "localizations": {
         "en": {
@@ -2541,22 +2525,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transazioni della carta"
-          }
-        }
-      }
-    },
-    "Cash flow": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cash flow"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cash flow"
           }
         }
       }
@@ -5253,6 +5221,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Entrate"
+          }
+        }
+      }
+    },
+    "Income and expenses": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Income and expenses"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrate e uscite"
           }
         }
       }
@@ -12489,6 +12473,22 @@
         }
       }
     },
+    "balance at month end · in and out in the month, moves included": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "balance at month end · in and out in the month, moves included"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "saldo a fine mese · entrate e uscite del mese, trasferimenti compresi"
+          }
+        }
+      }
+    },
     "balance at month end · in and out in the year, moves included": {
       "localizations": {
         "en": {
@@ -12953,22 +12953,6 @@
         }
       }
     },
-    "flows with a cap": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "flows with a cap"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "flussi con un tetto"
-          }
-        }
-      }
-    },
     "from %@ to %@": {
       "localizations": {
         "en": {
@@ -13237,6 +13221,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "non c'è più"
+          }
+        }
+      }
+    },
+    "no moves in %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no moves in %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nessun movimento a %@"
           }
         }
       }
@@ -13909,22 +13909,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "annullare l'ultimo riparto elimina i suoi trasferimenti e lo rimette da distribuire"
-          }
-        }
-      }
-    },
-    "up to %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "up to %@"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "fino a %@"
           }
         }
       }

@@ -43,7 +43,6 @@ struct YearModelTests {
         year: Int = 2026,
         rows: [BucketPersonTotals],
         previousRows: [BucketPersonTotals] = [],
-        flows: [FlowView] = [],
         upTo: MonthKey = upTo,
         vaultPeople: [String] = [],
         person: String? = nil,
@@ -56,7 +55,6 @@ struct YearModelTests {
             upTo: upTo,
             rows: rows,
             previousRows: previousRows,
-            flows: flows,
             vaultPeople: vaultPeople,
             person: person,
             today: today,
@@ -178,60 +176,6 @@ struct YearModelTests {
         let coming = Self.build(year: 2027, rows: Self.household).months.allSatisfy(\.isFuture)
         #expect(past)
         #expect(coming)
-    }
-
-    // MARK: - Gauges
-
-    private static func flow(
-        _ name: String,
-        balance: Int64,
-        mode: FlowMode,
-        incomeTotal: Int64? = nil,
-        archived: Bool = false
-    ) -> FlowView {
-        FlowView(
-            id: name,
-            name: name,
-            balance: balance,
-            mode: mode,
-            incomeTotal: incomeTotal,
-            allowNegative: true,
-            archived: archived,
-            isUnallocated: false
-        )
-    }
-
-    @Test("A gauge is an active envelope with a cap, in the vault's order")
-    func gaugesAreTheCappedEnvelopes() {
-        let year = Self.build(
-            rows: Self.household,
-            flows: [
-                Self.flow("Cash", balance: 10_000, mode: .unlimited),
-                Self.flow("Emergenza", balance: 2_993_100, mode: .netCapped(cap: 3_000_000)),
-                Self.flow("Casa", balance: 500, mode: .incomeCapped(cap: 15_000_000), incomeTotal: 3_193_500),
-                Self.flow("Vecchio", balance: 0, mode: .netCapped(cap: 1_000), archived: true),
-            ]
-        )
-        #expect(year.funds.map(\.name) == ["Emergenza", "Casa"])
-        // A net cap fills with the balance, an income cap with what came in.
-        #expect(year.funds.map(\.filled) == [2_993_100, 3_193_500])
-        #expect(year.funds[0].fraction > 0.99)
-        #expect(year.funds[1].fraction < 0.22)
-    }
-
-    @Test("An income cap with no cumulative income yet falls back to the balance")
-    func incomeCapWithoutTotal() {
-        let year = Self.build(
-            rows: [],
-            flows: [Self.flow("Varie", balance: 461_100, mode: .incomeCapped(cap: 500_000))]
-        )
-        #expect(year.funds.map(\.filled) == [461_100])
-    }
-
-    @Test("A vault with no capped envelope has no gauges")
-    func noGauges() {
-        let year = Self.build(rows: Self.household, flows: [Self.flow("Cash", balance: 1, mode: .unlimited)])
-        #expect(year.funds.isEmpty)
     }
 
     // MARK: - A fresh vault
@@ -492,18 +436,6 @@ struct YearModelTests {
         #expect(Self.build(year: 2027, rows: Self.household).autonomy == nil)
         // Nobody said what today is: every month drawn is finished.
         #expect(Self.build(rows: Self.household).autonomy == Autonomy(total: 1_480_000, monthlyExpense: 30_000))
-    }
-
-    @Test("A fund knows whether its cap is on the balance or on the income")
-    func fundKind() {
-        let year = Self.build(
-            rows: [],
-            flows: [
-                Self.flow("Vacanze", balance: 1, mode: .netCapped(cap: 100)),
-                Self.flow("Casa", balance: 1, mode: .incomeCapped(cap: 100), incomeTotal: 50),
-            ]
-        )
-        #expect(year.funds.map(\.kind) == [.balance, .income])
     }
 
     // MARK: - PERSONA

@@ -21,7 +21,6 @@ struct FixedCostsTests {
                 BucketPersonTotals(bucket: 3, person: "matteo", income: 300_000, opening: 0, expense: 0),
                 BucketPersonTotals(bucket: 4, person: "matteo", income: 100_000, opening: 0, expense: 0),
             ],
-            flows: [],
             today: today
         )
     }
@@ -70,7 +69,7 @@ struct FixedCostsTests {
         #expect(live.monthly == 100_000)
         #expect(live.shareOfIncome == nil)
 
-        let noIncome = YearSummary.build(year: 2026, upTo: Self.april, rows: [], flows: [])
+        let noIncome = YearSummary.build(year: 2026, upTo: Self.april, rows: [])
         let costs = try #require(FixedCosts.build(templates: Self.templates, year: noIncome))
         #expect(costs.shareOfIncome == nil)
     }
@@ -93,7 +92,7 @@ struct FixedCostsTests {
                 BucketPersonTotals(bucket: UInt32(month), person: "matteo", income: 250_000, opening: 0, expense: 0),
             ]
         }
-        return YearSummary.build(year: 2026, upTo: april, rows: rows, flows: [], person: person, today: april)
+        return YearSummary.build(year: 2026, upTo: april, rows: rows, person: person, today: april)
     }
 
     private static var householdTemplates: [RecurringView] {

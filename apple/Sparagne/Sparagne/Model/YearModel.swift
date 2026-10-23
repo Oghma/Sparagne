@@ -248,8 +248,6 @@ struct YearSummary: Sendable {
     /// The twelve months of the year before, January first: the last twelve
     /// months of any month on screen reach into it.
     let previousYear: [MonthFlow]
-    /// The active capped envelopes, in the vault's order.
-    let funds: [FundGauge]
     /// One column per wallet with a balance or a movement in the year, in
     /// the vault's order; empty with fewer than two, when the TOTALE column
     /// already says it all, and under the PERSONA filter: a wallet is the
@@ -456,7 +454,6 @@ struct YearSummary: Sendable {
         upTo: MonthKey,
         rows: [BucketPersonTotals],
         previousRows: [BucketPersonTotals] = [],
-        flows: [FlowView],
         vaultPeople: [String] = [],
         person: String? = nil,
         today: MonthKey? = nil,
@@ -516,7 +513,6 @@ struct YearSummary: Sendable {
                     expense: monthRows.reduce(0) { $0 + $1.expense }
                 )
             },
-            funds: Self.funds(in: flows),
             walletColumns: person == nil
                 ? Self.walletColumns(
                     wallets: wallets,
@@ -603,14 +599,5 @@ struct YearSummary: Sendable {
     /// A later year is all future, an earlier one all past.
     private static func isFuture(year: Int, month: Int, upTo: MonthKey) -> Bool {
         year > upTo.year || (year == upTo.year && month > upTo.month)
-    }
-
-    /// The active envelopes with a cap, for their bars.
-    private static func funds(in flows: [FlowView]) -> [FundGauge] {
-        flows.compactMap { flow in
-            flow.archived
-                ? nil
-                : FundGauge(id: flow.id, name: flow.name, mode: flow.mode, balance: flow.balance, incomeTotal: flow.incomeTotal)
-        }
     }
 }

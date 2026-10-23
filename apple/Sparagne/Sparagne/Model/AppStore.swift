@@ -235,6 +235,9 @@ final class AppStore {
     private(set) var categoryHeat: CategoryHeat?
     /// Every active envelope's year.
     private(set) var envelopeYear: EnvelopeYear?
+    /// Every active flow at the end of the month on screen, in the order its
+    /// cards are drawn.
+    private(set) var flowCards: [FlowCard] = []
     /// What the recurring expenses commit a month, `nil` without any.
     private(set) var fixedCosts: FixedCosts?
     /// The strip of things to do; empty, it is not drawn.
@@ -675,6 +678,7 @@ final class AppStore {
             yearCategories = []
             categoryHeat = nil
             envelopeYear = nil
+            flowCards = []
             fixedCosts = nil
             summaryTodo = []
             yearCategoryTotals = []
@@ -711,7 +715,7 @@ final class AppStore {
             pendingAllocation = loaded.pendingAllocation
             allocationBase = loaded.allocationBase
             summary = Self.summary(month: month, from: loaded)
-            let year = Self.year(month: month, from: loaded, flows: flows, person: person, today: MonthKey(Date()))
+            let year = Self.year(month: month, from: loaded, person: person, today: MonthKey(Date()))
             self.year = year
             loadYearExtras(from: loaded, year: year)
             rebuildRows()
@@ -786,7 +790,6 @@ final class AppStore {
     private static func year(
         month: MonthKey,
         from loaded: VaultLoad,
-        flows: [FlowView],
         person: String?,
         today: MonthKey
     ) -> YearSummary {
@@ -795,7 +798,6 @@ final class AppStore {
             upTo: month,
             rows: loaded.year,
             previousRows: loaded.previousYear,
-            flows: flows,
             vaultPeople: loaded.people,
             person: person,
             today: today,
@@ -810,10 +812,10 @@ final class AppStore {
     private func loadYearExtras(from loaded: VaultLoad, year: YearSummary) {
         yearCategories = SummaryCategories.rows(loaded.yearCategories)
         categoryHeat = CategoryHeat.build(buckets: loaded.categoryBuckets, shares: yearCategories, upTo: month)
-        // The envelopes are the family's whatever PERSONA says, like the
-        // funds: their figures come from the unfiltered matrix, and so do
-        // their columns, every person of the vault's rows in the core's
-        // order.
+        // The envelopes are the family's whatever PERSONA says, in the table
+        // and on the cards: their figures come from the unfiltered matrices,
+        // and so do the table's columns, every person of the vault's rows in
+        // the core's order.
         envelopeYear = EnvelopeYear.build(
             flows: flows,
             flowPerson: loaded.yearFlowPerson,
@@ -821,6 +823,17 @@ final class AppStore {
             balances: loaded.flowBalances,
             upTo: month,
             people: loaded.people
+        )
+        flowCards = FlowCard.cards(
+            flows: flows,
+            month: EnvelopeYear.build(
+                flows: flows,
+                flowPerson: loaded.flowPerson,
+                transfers: loaded.flowTransfers,
+                balances: loaded.flowBalances,
+                upTo: month,
+                people: []
+            )
         )
         // Under PERSONA, `year.person` keeps the templates to that person's.
         fixedCosts = FixedCosts.build(templates: loaded.recurringTemplates, year: year)

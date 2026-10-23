@@ -81,17 +81,21 @@ with it), two rows of cards, the year so far over the month on screen
 with the last twelve months' under it and each month's figure with the
 month before's; the year's row ends with the months of autonomy, the total
 over the average month of expenses of the last twelve finished months, the
-month's with the fixed costs the recurring expenses commit), the capped
-flows with their bars, the month-by-month table (with a column per
+month's with the fixed costs the recurring expenses commit), a card per
+flow (its balance at the end of the month, what came in and went out in
+the month, moves between flows included, and the bar of its cap: the capped
+flows still filling first, then the open ones and the full ones;
+Unallocated has none), the month-by-month table (with a column per
 wallet when two or more move in the year, and one per person), the people
 and the flows of the year (what came into each and went out, moves
-between flows included), the cash flow and the cash fund as charts,
+between flows included), income and expenses and the cash fund as charts,
 the year's expenses by category beside its ten heaviest (a click opens the
 row in the Mastro), and a months × categories grid. Every flow's
 expenses are expenses of the month, whatever its cap. Only the month today
 falls in is drawn as still going, its last segment dashed and the cash fund
 projected to December at the pace of the finished months; a past month is a
-fact. The person chosen in the Mastro's filter is chosen here too.
+fact. The person filter sits in the top bar, and the person chosen there is
+the Mastro's too.
 
 ### Allocation plan
 

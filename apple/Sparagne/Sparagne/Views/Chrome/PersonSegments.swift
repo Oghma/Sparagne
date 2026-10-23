@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The PERSONA segmented control, shared by the Mastro's filter bar and the
-/// RIEPILOGO's heading: one filter for the whole window (`store.person`),
+/// top bar on the RIEPILOGO: one filter for the whole window (`store.person`),
 /// so a person picked on either tab is the one the other reads.
 ///
 /// Nothing with one person: there is nobody to filter out. The persons of

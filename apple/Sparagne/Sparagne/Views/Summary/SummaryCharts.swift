@@ -19,7 +19,7 @@ struct SummaryCharts: View {
     }
 }
 
-// MARK: - Cash flow
+// MARK: - Income and expenses
 
 /// ENTRATE, USCITE and RISPARMIO month by month. The line into today's
 /// month is dashed: that month is not over, so the segment is a promise and
@@ -71,7 +71,7 @@ private struct CashFlowCard: View {
         Panel {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .firstTextBaseline) {
-                    SectionLabel(text: String(localized: "Cash flow"), tint: Ink.text2)
+                    SectionLabel(text: String(localized: "Income and expenses"), tint: Ink.text2)
                     Spacer(minLength: 8)
                     ChartLegend(entries: series.map { ($0.name, $0.tint) })
                 }
@@ -81,7 +81,7 @@ private struct CashFlowCard: View {
             .frame(maxHeight: .infinity)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(String(localized: "Cash flow"))
+        .accessibilityLabel(String(localized: "Income and expenses"))
         .accessibilityValue(spoken)
     }
 
