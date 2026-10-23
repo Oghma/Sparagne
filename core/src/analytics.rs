@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, FixedOffset, Utc};
-use rusqlite::{Connection, Row, params_from_iter, types::Value};
+use rusqlite::{Connection, Row, params, params_from_iter, types::Value};
 use uuid::Uuid;
 
 use crate::{
@@ -38,6 +38,20 @@ pub struct FlowPersonTotals {
     pub refund: i64,
     /// `max(expense - refund, 0)`.
     pub net_expense: i64,
+}
+
+/// What moves between envelopes put into and took out of one envelope for
+/// one person: the other half of an envelope's year beside
+/// [`FlowPersonTotals`], whose rows are income, expense and refund only.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct FlowTransferTotals {
+    pub flow_id: Uuid,
+    /// `transactions.person`: who made the move.
+    pub person: String,
+    /// Moved in from another envelope, the allocation plan's shares included.
+    pub moved_in: i64,
+    /// Moved out to another envelope.
+    pub moved_out: i64,
 }
 
 /// One row of the category breakdown.
@@ -345,6 +359,44 @@ impl Core {
             slot.net_expense = (slot.expense - slot.refund).max(0);
         }
         Ok(out)
+    }
+
+    /// Envelope x person moves between envelopes over the range, voided ones
+    /// left out: each move is in on one envelope and out on the other. Only
+    /// pairs with a move are returned, ordered by person case-insensitively,
+    /// then by envelope id.
+    pub fn flow_transfer_totals(
+        &self,
+        vault_id: Uuid,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<Vec<FlowTransferTotals>> {
+        check_range(from, to)?;
+        let mut stmt = self.conn.prepare(
+            "SELECT l.target_id, t.person,
+                    SUM(CASE WHEN l.amount > 0 THEN l.amount ELSE 0 END),
+                    SUM(CASE WHEN l.amount < 0 THEN -l.amount ELSE 0 END)
+             FROM transactions t
+             JOIN legs l ON l.transaction_id = t.id AND l.target_kind = 'flow'
+             WHERE t.vault_id = ?1 AND t.voided_at IS NULL AND t.kind = 'transfer_flow'
+               AND t.occurred_at >= ?2 AND t.occurred_at < ?3
+             GROUP BY l.target_id, t.person
+             ORDER BY lower(t.person), l.target_id",
+        )?;
+        let rows = stmt
+            .query_map(
+                params![blob(vault_id), from.timestamp(), to.timestamp()],
+                |r| {
+                    Ok(FlowTransferTotals {
+                        flow_id: r.get(0)?,
+                        person: r.get(1)?,
+                        moved_in: r.get(2)?,
+                        moved_out: r.get(3)?,
+                    })
+                },
+            )?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows)
     }
 
     /// Category breakdown over the range, heaviest net expense first, opening

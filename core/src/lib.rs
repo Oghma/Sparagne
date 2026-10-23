@@ -58,7 +58,8 @@ pub use sync::{SyncReport, SyncState};
 
 // Imported through the crate root by the modules, never from outside.
 pub(crate) use analytics::{
-    BucketPersonTotals, BucketTargetTotals, CategoryTotals, FlowPersonTotals, TopExpense,
+    BucketPersonTotals, BucketTargetTotals, CategoryTotals, FlowPersonTotals, FlowTransferTotals,
+    TopExpense,
 };
 pub(crate) use category::normalize_category_key;
 pub(crate) use engine::entities::MergePreview;

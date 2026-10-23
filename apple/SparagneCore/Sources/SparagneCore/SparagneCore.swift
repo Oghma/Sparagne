@@ -681,6 +681,11 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func flowPersonTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime) throws  -> [FlowPersonTotals]
     
     /**
+     * Envelope x person moves between envelopes over `[from, to)`.
+     */
+    func flowTransferTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime) throws  -> [FlowTransferTotals]
+    
+    /**
      * Drops a vault from this device without telling the server. Returns
      * how many outbox commands were thrown away.
      */
@@ -1149,6 +1154,21 @@ open func flowPersonTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime)thr
     return try  FfiConverterSequenceTypeFlowPersonTotals.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
         uniffiCallStatus in
     uniffi_sparagne_core_fn_method_corehandle_flow_person_totals(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterTypeUtcDateTime_lower(from),
+        FfiConverterTypeUtcDateTime_lower(to),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Envelope x person moves between envelopes over `[from, to)`.
+     */
+open func flowTransferTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime)throws  -> [FlowTransferTotals]  {
+    return try  FfiConverterSequenceTypeFlowTransferTotals.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_flow_transfer_totals(
             self.uniffiCloneHandle(),
         FfiConverterTypeUuid_lower(vaultId),
         FfiConverterTypeUtcDateTime_lower(from),
@@ -3104,6 +3124,91 @@ public func FfiConverterTypeFlowPersonTotals_lift(_ buf: RustBuffer) throws -> F
 #endif
 public func FfiConverterTypeFlowPersonTotals_lower(_ value: FlowPersonTotals) -> RustBuffer {
     return FfiConverterTypeFlowPersonTotals.lower(value)
+}
+
+
+/**
+ * What moves between envelopes put into and took out of one envelope for
+ * one person: the other half of an envelope's year beside
+ * [`FlowPersonTotals`], whose rows are income, expense and refund only.
+ */
+public struct FlowTransferTotals: Equatable, Hashable, Codable {
+    public var flowId: Uuid
+    /**
+     * `transactions.person`: who made the move.
+     */
+    public var person: String
+    /**
+     * Moved in from another envelope, the allocation plan's shares included.
+     */
+    public var movedIn: Int64
+    /**
+     * Moved out to another envelope.
+     */
+    public var movedOut: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(flowId: Uuid, 
+        /**
+         * `transactions.person`: who made the move.
+         */person: String, 
+        /**
+         * Moved in from another envelope, the allocation plan's shares included.
+         */movedIn: Int64, 
+        /**
+         * Moved out to another envelope.
+         */movedOut: Int64) {
+        self.flowId = flowId
+        self.person = person
+        self.movedIn = movedIn
+        self.movedOut = movedOut
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FlowTransferTotals: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFlowTransferTotals: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FlowTransferTotals {
+        return
+            try FlowTransferTotals(
+                flowId: FfiConverterTypeUuid.read(from: &buf), 
+                person: FfiConverterString.read(from: &buf), 
+                movedIn: FfiConverterInt64.read(from: &buf), 
+                movedOut: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FlowTransferTotals, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.flowId, into: &buf)
+        FfiConverterString.write(value.person, into: &buf)
+        FfiConverterInt64.write(value.movedIn, into: &buf)
+        FfiConverterInt64.write(value.movedOut, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFlowTransferTotals_lift(_ buf: RustBuffer) throws -> FlowTransferTotals {
+    return try FfiConverterTypeFlowTransferTotals.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFlowTransferTotals_lower(_ value: FlowTransferTotals) -> RustBuffer {
+    return FfiConverterTypeFlowTransferTotals.lower(value)
 }
 
 
@@ -10573,6 +10678,31 @@ fileprivate struct FfiConverterSequenceTypeFlowPersonTotals: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeFlowTransferTotals: FfiConverterRustBuffer {
+    typealias SwiftType = [FlowTransferTotals]
+
+    public static func write(_ value: [FlowTransferTotals], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFlowTransferTotals.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FlowTransferTotals] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FlowTransferTotals]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFlowTransferTotals.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFlowView: FfiConverterRustBuffer {
     typealias SwiftType = [FlowView]
 
@@ -11735,6 +11865,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_flow_person_totals() != 61392) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_flow_transfer_totals() != 46238) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_forget_vault() != 5150) {
