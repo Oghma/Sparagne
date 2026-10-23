@@ -76,13 +76,17 @@ cargo clippy --workspace --all-targets
 The Riepilogo tab (⌘1) is the year at a glance, up to the month on screen:
 a strip of what needs doing (recurring periods to decide, an allocation
 period waiting, rows without a category; a click opens the tab that deals
-with it), five cards of the month (income, expenses, savings, the savings
-rate and the fixed costs the recurring expenses commit), the capped
+with it), six cards of the month (income, expenses, savings, the savings
+rate with the last twelve months' under it, the fixed costs the recurring
+expenses commit, and the months of autonomy: the total over the average
+month of expenses of the last twelve finished months), the capped
 envelopes with their bars, the month-by-month table (with a column per
 wallet when two or more move in the year, and one per person), the people
-and the envelopes of the year, the cash flow and the cash fund as charts,
+and the envelopes of the year (what came into each and went out, moves
+between envelopes included), the cash flow and the cash fund as charts,
 the year's expenses by category beside its ten heaviest (a click opens the
-row in the Mastro), and a months × categories grid. Only the month today
+row in the Mastro), and a months × categories grid. Every envelope's
+expenses are expenses of the month, whatever its cap. Only the month today
 falls in is drawn as still going, its last segment dashed and the cash fund
 projected to December at the pace of the finished months; a past month is a
 fact. The person chosen in the Mastro's filter is chosen here too.
