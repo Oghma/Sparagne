@@ -91,8 +91,10 @@ struct TopBar: View {
                     store.requestNewRecurring()
                 }
             case .allocation:
-                TabActionButton(symbol: "arrow.left.arrow.right", title: String(localized: "Move between flows\u{2026}")) {
-                    NotificationCenter.default.post(name: .moveBetweenEnvelopes, object: nil)
+                // Between flows to start with; the sheet switches to the
+                // wallets.
+                TabActionButton(symbol: "arrow.left.arrow.right", title: String(localized: "Move\u{2026}")) {
+                    NotificationCenter.default.post(name: .moveBetweenFlows, object: nil)
                 }
             case .setup:
                 EmptyView()

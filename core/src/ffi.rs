@@ -12,9 +12,9 @@ use uuid::Uuid;
 
 use crate::{
     AliasView, AllocationBase, AllocationLine, AllocationPlanView, AllocationPreview,
-    AllocationRunView, BucketCategoryTotals, BucketPersonTotals, BucketTargetTotals,
+    AllocationRunView, BalanceRange, BucketCategoryTotals, BucketPersonTotals, BucketTargetTotals,
     CategorySuggestion, CategoryTotals, CategoryView, Command, CommandEnvelope, Core, Currency,
-    DomainError, FlowBalanceRange, FlowPersonTotals, FlowTransferTotals, MergePreview, Money, Page,
+    DomainError, FlowPersonTotals, FlowTransferTotals, MergePreview, Money, Page,
     PendingAllocation, PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView,
     RecurringView, RejectedCommand, Schedule, StatementColumnValue, StatementDetection,
     StatementFormatGuess, StatementMapping, StatementOptions, StatementPreset, StatementPreview,
@@ -158,15 +158,16 @@ impl CoreHandle {
         self.lock()?.snapshot(vault_id)
     }
 
-    /// Each flow's balance at `from` and the lowest and highest it reaches
-    /// afterwards: what a transfer dated `from` can move without a flow
-    /// crossing zero or its cap later on.
-    pub fn flow_balance_ranges(
+    /// Each flow's balance at `from`, or each wallet's by `target`, and the
+    /// lowest and highest it reaches afterwards: what a transfer dated `from`
+    /// can move without a flow crossing zero or its cap later on.
+    pub fn balance_ranges(
         &self,
         vault_id: Uuid,
         from: UtcDateTime,
-    ) -> Result<Vec<FlowBalanceRange>, DomainError> {
-        self.lock()?.flow_balance_ranges(vault_id, from)
+        target: TargetKind,
+    ) -> Result<Vec<BalanceRange>, DomainError> {
+        self.lock()?.balance_ranges(vault_id, from, target)
     }
 
     pub fn categories(

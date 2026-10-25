@@ -1761,6 +1761,22 @@
         }
       }
     },
+    "Add a wallet to move money to": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a wallet to move money to"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi un wallet a cui spostare i soldi"
+          }
+        }
+      }
+    },
     "Add alias": {
       "localizations": {
         "en": {
@@ -1837,6 +1853,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aggiungi rimborso"
+          }
+        }
+      }
+    },
+    "Add wallet…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add wallet…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi wallet…"
           }
         }
       }
@@ -2413,6 +2445,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Prima della data di inizio"
+          }
+        }
+      }
+    },
+    "Between": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Between"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tra"
           }
         }
       }
@@ -6273,6 +6321,22 @@
         }
       }
     },
+    "Move Between Wallets…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Between Wallets…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sposta tra wallet…"
+          }
+        }
+      }
+    },
     "Move Down": {
       "localizations": {
         "en": {
@@ -6321,18 +6385,18 @@
         }
       }
     },
-    "Move between flows…": {
+    "Move between wallets": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Move between flows…"
+            "value": "Move between wallets"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sposta tra flussi…"
+            "value": "Sposta tra wallet"
           }
         }
       }
@@ -6365,6 +6429,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Spostate"
+          }
+        }
+      }
+    },
+    "Move…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sposta…"
           }
         }
       }
@@ -7085,6 +7165,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessun vault ancora"
+          }
+        }
+      }
+    },
+    "No wallet can hold that much.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No wallet can hold that much."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun wallet può contenere tanto."
           }
         }
       }
@@ -10345,6 +10441,22 @@
         }
       }
     },
+    "The money changes wallet, not flow: the flows stay as they are.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The money changes wallet, not flow: the flows stay as they are."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I soldi cambiano wallet, non flusso: i flussi restano come sono."
+          }
+        }
+      }
+    },
     "The new password needs at least 8 characters.": {
       "localizations": {
         "en": {
@@ -10661,6 +10773,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Il vault vive solo su questo Mac. Collega un server per averlo su altri dispositivi o condividerlo."
+          }
+        }
+      }
+    },
+    "The wallet to move from is no longer there": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The wallet to move from is no longer there"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il wallet di partenza non c'è più"
           }
         }
       }

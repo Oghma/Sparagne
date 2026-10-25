@@ -47,13 +47,13 @@ struct ReadOnlyLedgerTests {
         store.setReadOnlyVaults([vault])
         let unallocated = try #require(store.flows.first { $0.isUnallocated })
         let holiday = try #require(store.flows.first { $0.name == "Vacanze" })
-        var draft = EnvelopeMoveDraft(sourceId: unallocated.id, day: CoreDate.day(Date()))
+        var draft = MoveDraft(sourceId: unallocated.id, day: CoreDate.day(Date()))
         draft.add(holiday.id)
         draft.setAmount("10", for: holiday.id)
-        #expect(draft.check(flows: store.flows, currency: store.currency).canMove)
+        #expect(draft.check(targets: store.moveTargets(.flow), currency: store.currency).canMove)
 
         let before = await gate.calls
-        #expect(!(await store.moveBetweenEnvelopes(draft)))
+        #expect(!(await store.move(draft)))
         #expect(store.presentedError?.code == "forbidden")
         #expect(await gate.calls == before)
     }

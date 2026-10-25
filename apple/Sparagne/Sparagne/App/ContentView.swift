@@ -70,7 +70,8 @@ struct MainWindow: View {
         case rejected
         case manage
         case importStatement
-        case moveBetweenEnvelopes
+        /// Move between flows or between wallets, by the side it opens on.
+        case move(TargetKind)
 
         var id: String {
             switch self {
@@ -82,7 +83,7 @@ struct MainWindow: View {
             case .rejected: "rejected"
             case .manage: "manage"
             case .importStatement: "importStatement"
-            case .moveBetweenEnvelopes: "moveBetweenEnvelopes"
+            case .move(let side): "move-\(side)"
             }
         }
     }
@@ -150,7 +151,8 @@ struct MainWindow: View {
             .onPosted(.deleteVault) { if let vault = store.currentVault { sheet = .deleteVault(vault) } }
             .onPosted(.leaveVault) { if let vault = store.currentVault { sheet = .leaveVault(vault) } }
             .onPosted(.importStatement) { if store.currentVault != nil { sheet = .importStatement } }
-            .onPosted(.moveBetweenEnvelopes) { if store.canWrite { sheet = .moveBetweenEnvelopes } }
+            .onPosted(.moveBetweenFlows) { if store.canWrite { sheet = .move(.flow) } }
+            .onPosted(.moveBetweenWallets) { if store.canWrite { sheet = .move(.wallet) } }
             // Back Up Database and Export All Transactions: file panels owned
             // by the exporter (`Support/VaultExporter.swift`).
             .modifier(VaultExportHandlers(store: store))
@@ -204,7 +206,8 @@ struct MainWindow: View {
         case "share": sheet = .share(vault)
         case "manage": sheet = .manage
         case "importstatement": sheet = .importStatement
-        case "move": if store.canWrite { sheet = .moveBetweenEnvelopes }
+        case "move": if store.canWrite { sheet = .move(.flow) }
+        case "movewallets": if store.canWrite { sheet = .move(.wallet) }
         case "rejected": sheet = .rejected
         default: break
         }
@@ -249,8 +252,8 @@ struct MainWindow: View {
             ManagementSheet(store: store, engine: engine, present: { sheet = $0 })
         case .importStatement:
             StatementImportSheet(store: store, engine: engine)
-        case .moveBetweenEnvelopes:
-            EnvelopeMoveSheet(store: store)
+        case .move(let side):
+            MoveSheet(store: store, side: side)
         }
     }
 }

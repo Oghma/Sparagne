@@ -214,10 +214,16 @@ extension CommandPaletteModel {
                 }
             )
             actions.append(post(
-                .moveBetweenEnvelopes,
+                .moveBetweenFlows,
                 "envelopes.move",
                 String(localized: "Move Between Flows\u{2026}"),
                 ["move", "transfer", "sposta", "trasferisci", "flussi", "flow", "buste", "envelope", "riparto", "allocation"]
+            ))
+            actions.append(post(
+                .moveBetweenWallets,
+                "wallets.move",
+                String(localized: "Move Between Wallets\u{2026}"),
+                ["move", "transfer", "sposta", "trasferisci", "wallet", "portafogli", "conto", "contanti", "prelievo"]
             ))
             actions.append(contentsOf: kindActions(store: store))
         }

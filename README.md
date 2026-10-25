@@ -113,8 +113,8 @@ period is decided once; before creating one, upgrade every Mac that syncs
 deleted after its period was shared out, it is not shared again; reopen the
 period to redo it.
 
-For a one-off share, Move Between Flows… (the Riparto tab's top bar, the
-Vault menu or the palette) moves money from one flow, Unallocated by
+For a one-off share, Move Between Flows… (Sposta… in the Riparto tab's
+top bar, the Vault menu or the palette) moves money from one flow, Unallocated by
 default, into several at once: one transfer per line, with the same date and
 note, sent all together or not at all (on a shared vault the server still
 judges each transfer on its own). A line over its flow's cap, or a
@@ -126,6 +126,13 @@ later is not there to move, and the sheet names the day of that lowest
 point. It decides no period and leaves
 the plan as it is. Each transfer is an ordinary ledger row, the same as
 `tf> 500 >unallocated >emergenze` typed in the quick-add line.
+
+The same sheet moves money between wallets: its Between switch (or Move
+Between Wallets… in the Vault menu and the palette) turns it to the wallets,
+the first one the source, Conto into Contanti for a withdrawal. A wallet has
+no cap and may go below zero, which is only pointed out, and the flows stay
+as they are: the money changes wallet, not flow. The balances are again
+those of the date chosen.
 
 ### Statements, full export and backup
 

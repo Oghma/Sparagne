@@ -127,7 +127,9 @@ struct SparagneApp: App {
                 Button(String(localized: "New Recurring\u{2026}")) { store?.requestNewRecurring() }
                 .disabled(store?.canWrite != true)
 
-                post(String(localized: "Move Between Flows\u{2026}"), .moveBetweenEnvelopes)
+                post(String(localized: "Move Between Flows\u{2026}"), .moveBetweenFlows)
+                    .disabled(store?.canWrite != true)
+                post(String(localized: "Move Between Wallets\u{2026}"), .moveBetweenWallets)
                     .disabled(store?.canWrite != true)
             }
         }
@@ -174,8 +176,11 @@ extension Notification.Name {
     /// ⌘⇧I: imports a bank or card statement into the vault on screen.
     static let importStatement = Notification.Name("it.oghma.sparagne.importStatement")
     /// Vault menu, palette and the Riparto tab's top bar: money from one
-    /// envelope into several, once.
-    static let moveBetweenEnvelopes = Notification.Name("it.oghma.sparagne.moveBetweenEnvelopes")
+    /// flow into several, once.
+    static let moveBetweenFlows = Notification.Name("it.oghma.sparagne.moveBetweenFlows")
+    /// Vault menu and palette: the same sheet on the wallets, money from one
+    /// wallet into several.
+    static let moveBetweenWallets = Notification.Name("it.oghma.sparagne.moveBetweenWallets")
     /// File menu: every transaction of the vault on screen as CSV.
     static let exportAllTransactions = Notification.Name("it.oghma.sparagne.exportAllTransactions")
     /// File menu: a copy of the whole database file.

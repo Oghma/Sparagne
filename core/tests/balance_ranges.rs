@@ -1,23 +1,23 @@
-//! Tests for `flow_balance_ranges`: what an envelope holds on a past day and
-//! how low and how high it goes afterwards, the figures a transfer dated
-//! that day is checked against.
+//! Tests for `balance_ranges`: what an envelope or a wallet holds on a past
+//! day and how low and how high it goes afterwards, the figures a transfer
+//! dated that day is checked against.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod common;
 
 use common::*;
-use sparagne_core::{Command, FlowBalanceRange, FlowMode};
+use sparagne_core::{BalanceRange, Command, FlowMode, TargetKind};
 use uuid::Uuid;
 
 const DAY: i64 = 86_400;
 
-fn range(fx: &Fx, flow: Uuid, from: i64) -> FlowBalanceRange {
+fn range(fx: &Fx, flow: Uuid, from: i64) -> BalanceRange {
     fx.core
-        .flow_balance_ranges(fx.vault, utc(from))
+        .balance_ranges(fx.vault, utc(from), TargetKind::Flow)
         .unwrap()
         .into_iter()
-        .find(|r| r.flow_id == flow)
+        .find(|r| r.target_id == flow)
         .unwrap()
 }
 
@@ -51,8 +51,8 @@ fn a_past_day_holds_what_came_before_it_and_the_lowest_comes_later() {
     let fx = ups_and_downs();
     assert_eq!(
         range(&fx, fx.unallocated, T0 + 5 * DAY),
-        FlowBalanceRange {
-            flow_id: fx.unallocated,
+        BalanceRange {
+            target_id: fx.unallocated,
             balance: 1_000,
             low: 200,
             low_at: Some(utc(T0 + 10 * DAY)),
@@ -86,10 +86,10 @@ fn transfers_count_and_every_envelope_comes_back_unallocated_first() {
 
     let ranges = fx
         .core
-        .flow_balance_ranges(fx.vault, utc(T0 + 5 * DAY))
+        .balance_ranges(fx.vault, utc(T0 + 5 * DAY), TargetKind::Flow)
         .unwrap();
     assert_eq!(
-        ranges.iter().map(|r| r.flow_id).collect::<Vec<_>>(),
+        ranges.iter().map(|r| r.target_id).collect::<Vec<_>>(),
         [fx.unallocated, casa]
     );
 
@@ -136,4 +136,38 @@ fn a_voided_row_is_gone_and_one_instant_is_summed_before_it_counts() {
         (voided.balance, voided.low, voided.low_at, voided.high),
         (1_000, 1_000, None, 2_800)
     );
+}
+
+#[test]
+fn a_wallet_has_its_own_range_and_may_go_below_zero() {
+    let mut fx = ups_and_downs();
+    let conto = fx.run(wallet_cmd("Conto", 0)).result_id.unwrap();
+    let cash = fx.wallet;
+    // Dated day 15, while Cash held 200: a wallet has no floor, so it goes
+    // 100 below zero then.
+    fx.run(Command::TransferWallet {
+        amount: 300,
+        from_wallet_id: cash,
+        to_wallet_id: conto,
+        note: None,
+        occurred_at: at(T0 + 15 * DAY),
+    });
+
+    let ranges = fx
+        .core
+        .balance_ranges(fx.vault, utc(T0 + 5 * DAY), TargetKind::Wallet)
+        .unwrap();
+    assert_eq!(
+        ranges
+            .iter()
+            .map(|r| (r.target_id, r.balance, r.low, r.low_at, r.high))
+            .collect::<Vec<_>>(),
+        [
+            (cash, 1_000, -100, Some(utc(T0 + 15 * DAY)), 1_700),
+            (conto, 0, 0, None, 300),
+        ]
+    );
+    // The envelopes are not touched by a move between wallets.
+    let unallocated = range(&fx, fx.unallocated, T0 + 5 * DAY);
+    assert_eq!((unallocated.low, unallocated.high), (200, 2_000));
 }

@@ -4,11 +4,11 @@ import Testing
 
 @testable import Sparagne
 
-/// The "Move between envelopes" draft and its check: what a line reads as,
-/// which line stops the move and why, what the source is left with, and the
-/// transfers it sends. Plain structs against made-up envelopes, so none of
-/// this needs a vault.
-struct EnvelopeMoveTests {
+/// The "Move between flows" draft and its check, and between wallets: what a
+/// line reads as, which line stops the move and why, what the source is left
+/// with, and the transfers it sends. Plain structs against made-up flows and
+/// wallets, so none of this needs a vault.
+struct MoveDraftTests {
     private static let unallocatedId: Uuid = "flow-unallocated"
     private static let rentId: Uuid = "flow-affitto"
     private static let holidayId: Uuid = "flow-vacanze"
@@ -48,33 +48,33 @@ struct EnvelopeMoveTests {
         envelope(giftsId, "Regali", balance: 5_000, allowNegative: true),
     ]
 
-    private static func draft(from source: Uuid = unallocatedId, _ lines: [(Uuid, String)]) -> EnvelopeMoveDraft {
-        var draft = EnvelopeMoveDraft(sourceId: source, day: "2026-10-11")
-        for (flowId, amount) in lines {
-            draft.add(flowId)
-            draft.setAmount(amount, for: flowId)
+    private static func draft(from source: Uuid = unallocatedId, _ lines: [(Uuid, String)]) -> MoveDraft {
+        var draft = MoveDraft(sourceId: source, day: "2026-10-11")
+        for (targetId, amount) in lines {
+            draft.add(targetId)
+            draft.setAmount(amount, for: targetId)
         }
         return draft
     }
 
-    private static func check(_ draft: EnvelopeMoveDraft) -> EnvelopeMoveCheck {
-        draft.check(flows: flows, currency: .eur)
+    private static func check(_ draft: MoveDraft) -> MoveCheck {
+        draft.check(targets: flows.map(MoveTarget.init), currency: .eur)
     }
 
     // MARK: - The lines
 
     @Test("An envelope gets one line, never the source's; a new source drops its own line")
     func lines() {
-        var draft = EnvelopeMoveDraft(sourceId: Self.unallocatedId, day: "2026-10-11")
+        var draft = MoveDraft(sourceId: Self.unallocatedId, day: "2026-10-11")
         draft.add(Self.unallocatedId)
         draft.add(Self.rentId)
         draft.add(Self.rentId)
         draft.add(Self.holidayId)
-        #expect(draft.lines.map(\.flowId) == [Self.rentId, Self.holidayId])
+        #expect(draft.lines.map(\.targetId) == [Self.rentId, Self.holidayId])
 
         draft.setSource(Self.rentId)
         #expect(draft.sourceId == Self.rentId)
-        #expect(draft.lines.map(\.flowId) == [Self.holidayId])
+        #expect(draft.lines.map(\.targetId) == [Self.holidayId])
 
         draft.remove(Self.holidayId)
         #expect(draft.lines.isEmpty)
@@ -96,7 +96,7 @@ struct EnvelopeMoveTests {
 
         let empty = Self.check(Self.draft([(Self.rentId, "100"), (Self.holidayId, "  ")]))
         #expect(empty.rows[1].issue == .empty)
-        #expect(empty.blocker == .line(flowId: Self.holidayId, issue: .empty))
+        #expect(empty.blocker == .line(targetId: Self.holidayId, issue: .empty))
         #expect(empty.total == 10_000)
 
         for garbage in ["abc", "0", "-5", "1,2,3"] {
@@ -118,7 +118,7 @@ struct EnvelopeMoveTests {
 
         let over = Self.check(Self.draft([(Self.holidayId, "400")]))
         #expect(over.rows[0].issue == .overCap(excess: 7_250))
-        #expect(over.blocker == .line(flowId: Self.holidayId, issue: .overCap(excess: 7_250)))
+        #expect(over.blocker == .line(targetId: Self.holidayId, issue: .overCap(excess: 7_250)))
         #expect(!over.canMove)
     }
 
@@ -165,7 +165,7 @@ struct EnvelopeMoveTests {
     func envelopeBelowZero() {
         let short = Self.check(Self.draft(from: Self.rentId, [(Self.holidayId, "100"), (Self.carId, "150,00")]))
         // Auto's line is over its cap too, and a line comes first.
-        #expect(short.blocker == .line(flowId: Self.carId, issue: .overCap(excess: 5_000)))
+        #expect(short.blocker == .line(targetId: Self.carId, issue: .overCap(excess: 5_000)))
 
         let onlyShort = Self.check(Self.draft(from: Self.rentId, [(Self.holidayId, "250")]))
         #expect(onlyShort.sourceAfter == -5_000)
@@ -180,14 +180,14 @@ struct EnvelopeMoveTests {
     @Test("An envelope gone since the sheet opened stops the move, as a line or as the source")
     func gone() {
         let others = Self.flows.filter { $0.id != Self.holidayId }
-        let line = Self.draft([(Self.holidayId, "100")]).check(flows: others, currency: .eur)
+        let line = Self.draft([(Self.holidayId, "100")]).check(targets: others.map(MoveTarget.init), currency: .eur)
         #expect(line.rows[0].issue == .gone)
-        #expect(line.blocker == .line(flowId: Self.holidayId, issue: .gone))
+        #expect(line.blocker == .line(targetId: Self.holidayId, issue: .gone))
         #expect(line.rows[0].after == nil)
         #expect(!line.canMove)
 
         let withoutSource = Self.flows.filter { $0.id != Self.unallocatedId }
-        let source = Self.draft([(Self.rentId, "100")]).check(flows: withoutSource, currency: .eur)
+        let source = Self.draft([(Self.rentId, "100")]).check(targets: withoutSource.map(MoveTarget.init), currency: .eur)
         #expect(source.sourceState == .gone)
         #expect(source.blocker == .sourceGone)
     }
@@ -201,9 +201,9 @@ struct EnvelopeMoveTests {
         #expect(check.rows.map(\.amount) == [5_000_000_000_000_000_000, 5_000_000_000_000_000_000])
         #expect(check.rows.map(\.issue) == [nil, .tooLarge])
         #expect(check.total == 5_000_000_000_000_000_000)
-        #expect(check.blocker == .line(flowId: Self.giftsId, issue: .tooLarge))
+        #expect(check.blocker == .line(targetId: Self.giftsId, issue: .tooLarge))
         let sent = Self.draft([(Self.rentId, huge), (Self.giftsId, huge)])
-            .commands(flows: Self.flows, currency: .eur, occurredAt: "2026-10-11T09:30:00+02:00")
+            .commands(targets: Self.flows.map(MoveTarget.init), currency: .eur, occurredAt: "2026-10-11T09:30:00+02:00")
         #expect(sent.isEmpty)
     }
 
@@ -211,7 +211,7 @@ struct EnvelopeMoveTests {
     func tooLargeBalance() {
         let full = Self.envelope(Self.rentId, "Affitto", balance: .max - 10)
         let flows = Self.flows.map { $0.id == Self.rentId ? full : $0 }
-        let check = Self.draft([(Self.rentId, "1")]).check(flows: flows, currency: .eur)
+        let check = Self.draft([(Self.rentId, "1")]).check(targets: flows.map(MoveTarget.init), currency: .eur)
         #expect(check.rows[0].issue == .tooLarge)
         #expect(!check.canMove)
     }
@@ -220,7 +220,7 @@ struct EnvelopeMoveTests {
     func tooLargeForTheSource() {
         let deep = Self.envelope(Self.unallocatedId, "unallocated", balance: .min + 10, unallocated: true)
         let flows = Self.flows.map { $0.id == Self.unallocatedId ? deep : $0 }
-        let check = Self.draft([(Self.rentId, "1")]).check(flows: flows, currency: .eur)
+        let check = Self.draft([(Self.rentId, "1")]).check(targets: flows.map(MoveTarget.init), currency: .eur)
         #expect(check.rows[0].issue == .tooLarge)
         #expect(check.total == 0)
         #expect(!check.canMove)
@@ -233,14 +233,14 @@ struct EnvelopeMoveTests {
     /// the incomes that took it to today's 5.000,00; Affitto had nothing and
     /// still had 50,00 at its lowest; Vacanze had 1.000,00 and got as high as
     /// 2.900,00 on the way to today's 2.672,50.
-    private static let pastBalances: [Uuid: EnvelopeMoveBalance] = [
-        unallocatedId: EnvelopeMoveBalance(balance: 100_000, low: 20_000, lowOn: "2026-10-20", high: 500_000),
-        rentId: EnvelopeMoveBalance(balance: 0, low: 0, lowOn: nil, high: 20_000),
-        holidayId: EnvelopeMoveBalance(balance: 100_000, low: 100_000, lowOn: nil, high: 290_000),
+    private static let pastBalances: [Uuid: MoveBalance] = [
+        unallocatedId: MoveBalance(balance: 100_000, low: 20_000, lowOn: "2026-10-20", high: 500_000),
+        rentId: MoveBalance(balance: 0, low: 0, lowOn: nil, high: 20_000),
+        holidayId: MoveBalance(balance: 100_000, low: 100_000, lowOn: nil, high: 290_000),
     ]
 
-    private static func pastCheck(_ draft: EnvelopeMoveDraft) -> EnvelopeMoveCheck {
-        draft.check(flows: flows, currency: .eur, balances: pastBalances)
+    private static func pastCheck(_ draft: MoveDraft) -> MoveCheck {
+        draft.check(targets: flows.map(MoveTarget.init), currency: .eur, balances: pastBalances)
     }
 
     @Test("On a past day the source gives what it held then, and the lowest it gets afterwards is named with its day")
@@ -263,16 +263,16 @@ struct EnvelopeMoveTests {
     @Test("An envelope that may not go below zero is stopped by its lowest point after the day, not by today's balance")
     func pastDayShort() {
         let balances = Self.pastBalances.merging(
-            [Self.rentId: EnvelopeMoveBalance(balance: 20_000, low: 5_000, lowOn: "2026-10-20", high: 20_000)]
+            [Self.rentId: MoveBalance(balance: 20_000, low: 5_000, lowOn: "2026-10-20", high: 20_000)]
         ) { _, new in new }
         let check = Self.draft(from: Self.rentId, [(Self.holidayId, "100")])
-            .check(flows: Self.flows, currency: .eur, balances: balances)
+            .check(targets: Self.flows.map(MoveTarget.init), currency: .eur, balances: balances)
         // Today Affitto holds 200,00 and 100,00 would fit.
         #expect(check.sourceAfter == 10_000)
         #expect(check.sourceState == .short(shortfall: 5_000, on: "2026-10-20"))
         #expect(check.blocker == .sourceShort(shortfall: 5_000))
         #expect(Self.draft(from: Self.rentId, [(Self.holidayId, "100")])
-            .commands(flows: Self.flows, currency: .eur, balances: balances, occurredAt: "2026-10-11T09:30:00+02:00")
+            .commands(targets: Self.flows.map(MoveTarget.init), currency: .eur, balances: balances, occurredAt: "2026-10-11T09:30:00+02:00")
             .isEmpty)
     }
 
@@ -294,10 +294,10 @@ struct EnvelopeMoveTests {
     @Test("The instant of the lowest point is read as a day where the Mac is")
     func lowestDay() throws {
         let rome = try #require(TimeZone(identifier: "Europe/Rome"))
-        let late = FlowBalanceRange(flowId: Self.unallocatedId, balance: 100, low: -50, lowAt: "2026-01-04T23:30:00Z", high: 300)
-        #expect(EnvelopeMoveBalance(late, timeZone: rome) == EnvelopeMoveBalance(balance: 100, low: -50, lowOn: "2026-01-05", high: 300))
-        let none = FlowBalanceRange(flowId: Self.unallocatedId, balance: 100, low: 100, lowAt: nil, high: 100)
-        #expect(EnvelopeMoveBalance(none, timeZone: rome).lowOn == nil)
+        let late = BalanceRange(targetId: Self.unallocatedId, balance: 100, low: -50, lowAt: "2026-01-04T23:30:00Z", high: 300)
+        #expect(MoveBalance(late, timeZone: rome) == MoveBalance(balance: 100, low: -50, lowOn: "2026-01-05", high: 300))
+        let none = BalanceRange(targetId: Self.unallocatedId, balance: 100, low: 100, lowAt: nil, high: 100)
+        #expect(MoveBalance(none, timeZone: rome).lowOn == nil)
     }
 
     // MARK: - The transfers
@@ -307,23 +307,50 @@ struct EnvelopeMoveTests {
         var draft = Self.draft([(Self.rentId, "1.000"), (Self.holidayId, "300")])
         draft.note = "  riparto straordinario "
         let at: OffsetDateTime = "2026-10-11T09:30:00+02:00"
-        let commands = draft.commands(flows: Self.flows, currency: .eur, occurredAt: at)
+        let commands = draft.commands(targets: Self.flows.map(MoveTarget.init), currency: .eur, occurredAt: at)
         #expect(commands == [
             .transferFlow(amount: 100_000, fromFlowId: Self.unallocatedId, toFlowId: Self.rentId, note: "riparto straordinario", occurredAt: at),
             .transferFlow(amount: 30_000, fromFlowId: Self.unallocatedId, toFlowId: Self.holidayId, note: "riparto straordinario", occurredAt: at),
         ])
 
         draft.note = "   "
-        let unnoted = draft.commands(flows: Self.flows, currency: .eur, occurredAt: at)
+        let unnoted = draft.commands(targets: Self.flows.map(MoveTarget.init), currency: .eur, occurredAt: at)
         #expect(unnoted.allSatisfy {
             if case .transferFlow(_, _, _, let note, _) = $0 { note == nil } else { false }
         })
     }
 
+    // MARK: - Between wallets
+
+    private static let contoId: Uuid = "wallet-conto"
+    private static let cashId: Uuid = "wallet-contanti"
+
+    /// Conto 1.000,00 and Contanti 50,00.
+    private static let walletTargets = [
+        WalletView(id: contoId, name: "Conto", balance: 100_000, archived: false),
+        WalletView(id: cashId, name: "Contanti", balance: 5_000, archived: false),
+    ].map(MoveTarget.init)
+
+    @Test("Between wallets there is no cap, a wallet below zero is only pointed out, and the lines go as wallet transfers")
+    func betweenWallets() {
+        var draft = MoveDraft(side: .wallet, sourceId: Self.cashId, day: "2026-10-11")
+        draft.add(Self.contoId)
+        draft.setAmount("80", for: Self.contoId)
+        let check = draft.check(targets: Self.walletTargets, currency: .eur)
+        #expect(check.rows.map(\.room) == [nil])
+        #expect(check.sourceState == .belowZero(shortfall: 3_000))
+        #expect(check.canMove)
+
+        let at: OffsetDateTime = "2026-10-11T09:30:00+02:00"
+        #expect(draft.commands(targets: Self.walletTargets, currency: .eur, occurredAt: at) == [
+            .transferWallet(amount: 8_000, fromWalletId: Self.cashId, toWalletId: Self.contoId, note: nil, occurredAt: at),
+        ])
+    }
+
     @Test("A draft that cannot move sends nothing")
     func nothingSent() {
         let over = Self.draft([(Self.rentId, "100"), (Self.holidayId, "400")])
-        #expect(over.commands(flows: Self.flows, currency: .eur, occurredAt: "2026-10-11T09:30:00+02:00").isEmpty)
-        #expect(Self.draft([]).commands(flows: Self.flows, currency: .eur, occurredAt: "2026-10-11T09:30:00+02:00").isEmpty)
+        #expect(over.commands(targets: Self.flows.map(MoveTarget.init), currency: .eur, occurredAt: "2026-10-11T09:30:00+02:00").isEmpty)
+        #expect(Self.draft([]).commands(targets: Self.flows.map(MoveTarget.init), currency: .eur, occurredAt: "2026-10-11T09:30:00+02:00").isEmpty)
     }
 }
