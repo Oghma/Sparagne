@@ -29,7 +29,7 @@ cli = ["uniffi/cli"]
 chrono = { version = "0.4", features = ["serde", "clock"] }
 # IANA timezones, used by the statement import to give a row's day its offset.
 chrono-tz = "0.10"
-rusqlite = { version = "0.40", features = ["bundled", "uuid"] }
+rusqlite = { version = "0.41", features = ["bundled", "uuid"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
