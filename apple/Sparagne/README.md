@@ -22,9 +22,12 @@ which is the only thing that talks to `CoreHandle`).
 | `Sparagne/Views/QuickAdd/` | The ⌘K panel: the parsed line as chips, and the command palette after `>` |
 | `Sparagne/Views/Summary/` | The Riepilogo tab: the to-do strip, KPI cards, cap bars, the month-by-month table, the people and envelopes cards, two charts, the category list, the heaviest expenses and the months × categories grid |
 | `Sparagne/Views/Recurring/` | The Ricorrenze tab: to confirm, next 30 days, templates table and inspector |
-| `Sparagne/Views/Setup/` | The Setup tab (⌘4, ⌘⇧C): vault card, wallets, envelopes and categories as editable tables, the merge sheet |
+| `Sparagne/Views/Wealth/` | The Patrimonio tab (⌘5): `WealthTab` (the three cards, the table and the inspector), `LoanTable`, `LoanInspector` with its `LoanChartView`, the `LoanSheet` (new and edit), `LoanEventSheet` and `LoanScheduleSheet`, `WealthPieces` |
+| `Sparagne/Views/Setup/` | The Setup tab (⌘6, ⌘⇧C): vault card, wallets, envelopes and categories as editable tables, the merge sheet |
 | `Sparagne/Model/YearModel.swift` | `YearSummary.build`, the arithmetic behind the Riepilogo; beside it in `Model/` `SummaryCategories`, `CategoryHeat`, `EnvelopeYear`, `FixedCosts` and `SummaryTodo` |
 | `Sparagne/Views/Chrome/PersonSegments.swift` | The person control, shared by the Mastro's filter bar and the Riepilogo's heading |
+| `Sparagne/Model/AppStore+Loans.swift`, `LoanDraft.swift` | The loan commands (create with its template in one batch, events, linking, keeping the template at the current installment) and the form as typed, turned into terms with the error of each field |
+| `Sparagne/Model/Wealth*.swift` | The Patrimonio's arithmetic and words, tested without a window: `WealthFigures` (liquidity, debt, net worth), `WealthLoans`, `WealthChart`, `WealthEventEffect`, `WealthText` |
 | `Sparagne/Model/` (other) | Pure models, tested without a window: `LedgerLines` (due periods among the rows), `LedgerCursor` (where each key moves the grid's cursor), `LedgerEditor` (the cell being typed into, written when it is left), `RowDraft`, `SheetStats`, `QuickAddTokens`, `SyncPillState`, `RecurringAgenda` / `RecurringDraft` / `RecurringNext` / `RecurringMonthly`, `ScheduleDraft` (the Quando that Ricorrenze and Riparto both edit) |
 | `Sparagne/Views/ManagementSheet.swift` | Vault picker plus wallet and envelope balances and management (⌘⇧M); the window has no sidebar |
 | `Sparagne/Views/Sheets.swift` | Onboarding, new wallet/envelope, rename and edit-envelope sheets |
@@ -50,7 +53,7 @@ that reach across the whole window (`SparagneApp.swift`'s menu commands) are:
 
 | Key | Action |
 |---|---|
-| `⌘1` `⌘2` `⌘3` `⌘4` | the Riepilogo, Mastro, Ricorrenze and Setup tabs (View menu) |
+| `⌘1` … `⌘6` | the Riepilogo, Mastro, Ricorrenze, Riparto, Patrimonio and Setup tabs (View menu) |
 | `⌘K` | quick-add panel over the sheet; a leading `>` turns it into the command palette |
 | `⌘D` | duplicate the last row |
 | `⌘F` | go to the Mastro and focus the search field in the top bar |
