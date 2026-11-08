@@ -180,7 +180,11 @@ pub(crate) fn installment(principal: i64, annual_rate_ppm: u32, months: u32) -> 
     check_months(months)?;
     if annual_rate_ppm == 0 {
         // `principal > 0`, so this is `ceil(principal / months)`.
-        return Ok((principal - 1) / i64::from(months) + 1);
+        return principal
+            .checked_sub(1)
+            .and_then(|less| less.checked_div(i64::from(months)))
+            .and_then(|whole| whole.checked_add(1))
+            .ok_or_else(too_large);
     }
     let (factor, _) = annuity(monthly_discount(annual_rate_ppm)?, months)?;
     let scaled = i128::from(principal)
@@ -540,7 +544,8 @@ pub(crate) fn schedule(terms: &LoanTerms, events: &[LoanEventView]) -> Result<Lo
 /// the monthly `j` at which the installments with their fee, one a month
 /// from a month after the signing, are worth the principal less the upfront
 /// fees, as `(1 + j)^12 − 1`. `None` when the installment never covers the
-/// interest or no such `j` exists.
+/// interest (the terms never amortize), when no such `j` exists (fees that
+/// take the whole principal), or when the TAEG does not fit a `u32`.
 fn taeg(terms: &LoanTerms, run: &Run) -> Option<u32> {
     if run
         .warnings
@@ -620,6 +625,10 @@ fn discount_solving(flows: &[i64], amount: i64) -> Result<i128> {
 /// The yearly rate in millionths, `12 × j`, of the discount factor `w =
 /// 1 / (1 + j)`: `12 000 000 × (1 − w) / w`, refused above 50%.
 fn yearly_rate(discount: i128) -> Result<u32> {
+    let above = || invalid("the yearly rate would be above 50%");
+    if discount <= 0 {
+        return Err(above());
+    }
     let ppm = SCALE
         .checked_sub(discount)
         .and_then(|gap| gap.checked_mul(MONTHLY_RATE_DENOMINATOR))
@@ -628,12 +637,12 @@ fn yearly_rate(discount: i128) -> Result<u32> {
     u32::try_from(ppm)
         .ok()
         .filter(|ppm| *ppm <= MAX_RATE_PPM)
-        .ok_or_else(|| invalid("the yearly rate would be above 50%"))
+        .ok_or_else(above)
 }
 
 /// The yearly TAN, in millionths, at which `installment` repays `principal`
 /// in `months`: bisection on the monthly rate. Refused when `installment ×
-/// months < principal`.
+/// months < principal`, and when the rate would be above `MAX_RATE_PPM`.
 pub(crate) fn solve_rate(principal: i64, installment: i64, months: u32) -> Result<u32> {
     if principal <= 0 {
         return Err(invalid("the amount borrowed must be greater than zero"));
@@ -660,7 +669,7 @@ pub(crate) fn solve_rate(principal: i64, installment: i64, months: u32) -> Resul
                     .ok_or_else(too_large)?,
                 i128::from(installment),
             )?;
-            // annuity_factor(low) <= goal < annuity_factor(high)
+            // annuity(low).0 <= goal < annuity(high).0
             let (mut low, mut high) = (0, SCALE);
             while high - low > 1 {
                 let middle = low + (high - low) / 2;
@@ -676,7 +685,8 @@ pub(crate) fn solve_rate(principal: i64, installment: i64, months: u32) -> Resul
 }
 
 /// The TAN of a loan whose TAEG is `taeg_ppm` and that has no fees:
-/// `12 × ((1 + TAEG)^(1/12) − 1)`.
+/// `12 × ((1 + TAEG)^(1/12) − 1)`. Refused when it would be above
+/// `MAX_RATE_PPM` (a TAEG above about 63.2%).
 pub(crate) fn tan_from_taeg(taeg_ppm: u32) -> Result<u32> {
     // w^12 = 1 / (1 + TAEG), w = 1 / (1 + j): bisection on w in [0, 1],
     // where w^12 grows with w.
