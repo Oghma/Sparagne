@@ -27,6 +27,12 @@ pub const FULL_RATE_PPM: u32 = 1_000_000;
 pub const MAX_RATE_PPM: u32 = 500_000;
 /// The longest loan, in monthly installments: 50 years.
 pub const MAX_MONTHS: u32 = 600;
+/// The largest amount a loan's terms or events carry, minor units: its
+/// principal, a fee, a penalty, a contract installment or an early
+/// repayment (100 million euros). Within it, and the bounds above, the
+/// schedule's arithmetic never overflows, so a query never fails on what
+/// the commands accepted.
+pub const MAX_LOAN_AMOUNT: i64 = 10_000_000_000;
 
 /// How the installment is set, for the loan or for the stretch after a rate
 /// change. Stored as data inside the loan's JSON, tagged by `installment`.

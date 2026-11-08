@@ -11,12 +11,13 @@ use chrono::{Datelike, NaiveDate};
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use uuid::Uuid;
 
-use super::{check_amount, invalid, normalize_name, normalize_note, parse_date};
+use super::{invalid, normalize_name, normalize_note, parse_date};
 use crate::{
     CommandEnvelope, Core, DomainError, Result, TransactionKind,
     loan::{
         LinkedInstallment, LoanEvent, LoanEventView, LoanInstallment, LoanOverview, LoanPatch,
-        LoanSchedule, LoanScheduleRow, LoanTerms, LoanView, MAX_MONTHS, MAX_RATE_PPM, math,
+        LoanSchedule, LoanScheduleRow, LoanTerms, LoanView, MAX_LOAN_AMOUNT, MAX_MONTHS,
+        MAX_RATE_PPM, math,
     },
     recurring::{Frequency, RunOutcome, Schedule},
     store::{parse_column, query_all},
@@ -245,6 +246,18 @@ impl Core {
     /// schedule says of the installments due on or before `today` and the
     /// early repayments dated on or before it, and of what is left.
     ///
+    /// A schedule row's residual already counts every repayment up to the
+    /// next due date, `today` or not. When some of them come after `today`,
+    /// the residual is worked out again from the row before, applying in
+    /// the row's order only the repayments dated by `today`, each clipped
+    /// as the schedule clips it: `min(amount, residual)`, one after the
+    /// other. No field of the schedule carries the amount a repayment
+    /// actually took, so this clipping and the schedule's must stay the
+    /// same.
+    ///
+    /// An error of the schedule fails the whole read: within the bounds the
+    /// commands enforce, the schedule never fails.
+    ///
     /// `today` comes from the caller (system timezone): the core never
     /// guesses a timezone.
     pub fn loan_overview(&self, vault_id: Uuid, today: NaiveDate) -> Result<Vec<LoanOverview>> {
@@ -431,14 +444,10 @@ fn check_link(
 }
 
 /// The terms on their own: a principal, a rate and a length in range, fees
-/// never negative, a contract installment above zero and a last due date
-/// the calendar has.
+/// never negative, a contract installment above zero, every amount at most
+/// [`MAX_LOAN_AMOUNT`], and a last due date the calendar has.
 fn check_terms(terms: &LoanTerms) -> Result<()> {
-    if terms.principal <= 0 {
-        return Err(DomainError::InvalidAmount(
-            "principal must be > 0".to_string(),
-        ));
-    }
+    check_positive(terms.principal, "principal")?;
     check_rate(terms.annual_rate_ppm)?;
     if !(1..=MAX_MONTHS).contains(&terms.months) {
         return Err(invalid(&format!("months must be 1..={MAX_MONTHS}")));
@@ -476,9 +485,27 @@ fn check_rate(annual_rate_ppm: u32) -> Result<()> {
     Ok(())
 }
 
+/// `0 < amount <= MAX_LOAN_AMOUNT`.
+fn check_positive(amount: i64, label: &str) -> Result<()> {
+    if amount <= 0 {
+        return Err(DomainError::InvalidAmount(format!("{label} must be > 0")));
+    }
+    check_ceiling(amount, label)
+}
+
+/// `0 <= fee <= MAX_LOAN_AMOUNT`.
 fn check_fee(fee: i64, label: &str) -> Result<()> {
     if fee < 0 {
         return Err(DomainError::InvalidAmount(format!("{label} must be >= 0")));
+    }
+    check_ceiling(fee, label)
+}
+
+fn check_ceiling(amount: i64, label: &str) -> Result<()> {
+    if amount > MAX_LOAN_AMOUNT {
+        return Err(DomainError::InvalidAmount(format!(
+            "{label} must be at most {MAX_LOAN_AMOUNT}"
+        )));
     }
     Ok(())
 }
@@ -486,12 +513,12 @@ fn check_fee(fee: i64, label: &str) -> Result<()> {
 fn check_installment(installment: LoanInstallment) -> Result<()> {
     match installment {
         LoanInstallment::Computed => Ok(()),
-        LoanInstallment::Contract { amount } => check_amount(amount),
+        LoanInstallment::Contract { amount } => check_positive(amount, "amount"),
     }
 }
 
-/// An event's own values: an amount above zero, a penalty never negative, a
-/// rate in range.
+/// An event's own values: an amount above zero, a penalty never negative,
+/// both at most [`MAX_LOAN_AMOUNT`], a rate in range.
 fn check_event(event: &LoanEvent) -> Result<()> {
     match *event {
         LoanEvent::RateChange {
@@ -503,7 +530,7 @@ fn check_event(event: &LoanEvent) -> Result<()> {
             check_installment(installment)
         }
         LoanEvent::Prepayment { amount, fee, .. } => {
-            check_amount(amount)?;
+            check_positive(amount, "amount")?;
             check_fee(fee, "penalty")
         }
     }
@@ -604,12 +631,9 @@ fn overview(
     }
 }
 
-/// The debt on `today`, once the first `paid` installments are paid. A
-/// row's residual counts every event applied after it, up to the next due
-/// date, and some of them may come after `today`: the last paid row is
-/// worked out again from the one before, with only the early repayments
-/// dated on or before `today`, each clipped to the residual as the schedule
-/// clips it.
+/// The debt on `today`, once the first `paid` installments are paid: see
+/// [`Core::loan_overview`] for why the last paid row is worked out again
+/// and how a repayment is clipped.
 fn residual_on(loan: &LoanView, schedule: &LoanSchedule, paid: usize, today: NaiveDate) -> i64 {
     let repayments: HashMap<Uuid, (NaiveDate, i64)> = loan
         .events

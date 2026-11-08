@@ -15,7 +15,7 @@ use sparagne_core::{
     Command, CommandEnvelope, Core, DomainError, RunOutcome, TransactionKind,
     loan::{
         LinkedInstallment, LoanEvent, LoanEventView, LoanInstallment, LoanOverview, LoanPatch,
-        LoanTerms, LoanView, MAX_MONTHS, MAX_RATE_PPM, PrepaymentMode,
+        LoanTerms, LoanView, MAX_LOAN_AMOUNT, MAX_MONTHS, MAX_RATE_PPM, PrepaymentMode,
     },
 };
 use uuid::Uuid;
@@ -228,6 +228,34 @@ fn create_refuses_terms_out_of_range_and_leaves_nothing() {
             },
             invalid("the loan ends past the last date"),
         ),
+        (
+            LoanTerms {
+                principal: MAX_LOAN_AMOUNT + 1,
+                ..good
+            },
+            invalid_amount("principal must be at most 10000000000"),
+        ),
+        (
+            LoanTerms {
+                upfront_fees: MAX_LOAN_AMOUNT + 1,
+                ..good
+            },
+            invalid_amount("upfront fees must be at most 10000000000"),
+        ),
+        (
+            LoanTerms {
+                installment_fee: MAX_LOAN_AMOUNT + 1,
+                ..good
+            },
+            invalid_amount("installment fee must be at most 10000000000"),
+        ),
+        (
+            LoanTerms {
+                installment: contract(MAX_LOAN_AMOUNT + 1),
+                ..good
+            },
+            invalid_amount("amount must be at most 10000000000"),
+        ),
     ];
     for (terms, err) in cases {
         refused(&mut fx, loan_cmd("Mutuo", terms), &err);
@@ -259,10 +287,16 @@ fn create_refuses_terms_out_of_range_and_leaves_nothing() {
             months: MAX_MONTHS,
             ..good
         },
+        LoanTerms {
+            principal: MAX_LOAN_AMOUNT,
+            upfront_fees: MAX_LOAN_AMOUNT,
+            installment_fee: MAX_LOAN_AMOUNT,
+            ..good
+        },
     ] {
         fx.run(loan_cmd("Mutuo", terms));
     }
-    assert_eq!(loans_of(&fx).len(), 5);
+    assert_eq!(loans_of(&fx).len(), 6);
 
     // No vault, no loan.
     assert_eq!(
@@ -552,6 +586,16 @@ fn update_changes_only_the_fields_the_patch_carries() {
             update(
                 id,
                 LoanPatch {
+                    upfront_fees: Some(MAX_LOAN_AMOUNT + 1),
+                    ..LoanPatch::default()
+                },
+            ),
+            invalid_amount("upfront fees must be at most 10000000000"),
+        ),
+        (
+            update(
+                id,
+                LoanPatch {
                     annual_rate_ppm: Some(MAX_RATE_PPM + 1),
                     ..LoanPatch::default()
                 },
@@ -744,10 +788,16 @@ fn an_event_is_refused_on_its_own_values_and_outside_the_loan() {
         // An early repayment may come before the first installment, any day.
         prepayment(day(2020, 1, 1), 50_000, shorten),
         prepayment(day(2026, 1, 30), 50_000, PrepaymentMode::Lower),
+        LoanEvent::Prepayment {
+            date: day(2026, 2, 1),
+            amount: MAX_LOAN_AMOUNT,
+            mode: shorten,
+            fee: MAX_LOAN_AMOUNT,
+        },
     ] {
         fx.run(event_cmd(id, event));
     }
-    assert_eq!(loans_of(&fx)[0].events.len(), 6);
+    assert_eq!(loans_of(&fx)[0].events.len(), 7);
 
     let outside = invalid("the event's date is outside the loan");
     let penalty = |fee| LoanEvent::Prepayment {
@@ -769,6 +819,22 @@ fn an_event_is_refused_on_its_own_values_and_outside_the_loan() {
             invalid_amount("amount must be > 0"),
         ),
         (penalty(-1), invalid_amount("penalty must be >= 0")),
+        (
+            penalty(MAX_LOAN_AMOUNT + 1),
+            invalid_amount("penalty must be at most 10000000000"),
+        ),
+        (
+            prepayment(day(2026, 2, 1), MAX_LOAN_AMOUNT + 1, shorten),
+            invalid_amount("amount must be at most 10000000000"),
+        ),
+        (
+            LoanEvent::RateChange {
+                date: day(2026, 2, 1),
+                annual_rate_ppm: 30_000,
+                installment: contract(MAX_LOAN_AMOUNT + 1),
+            },
+            invalid_amount("amount must be at most 10000000000"),
+        ),
         (
             rate_change(day(2026, 2, 1), MAX_RATE_PPM + 1),
             invalid_amount("annual rate must be at most 500000 ppm"),
@@ -993,6 +1059,24 @@ fn preview_refuses_what_the_commands_refuse() {
             },
             Vec::new(),
             invalid_amount("principal must be > 0"),
+        ),
+        (
+            LoanTerms {
+                principal: MAX_LOAN_AMOUNT + 1,
+                ..good
+            },
+            Vec::new(),
+            invalid_amount("principal must be at most 10000000000"),
+        ),
+        (
+            good,
+            event(LoanEvent::Prepayment {
+                date: day(2027, 1, 1),
+                amount: 100,
+                mode: PrepaymentMode::Lower,
+                fee: MAX_LOAN_AMOUNT + 1,
+            }),
+            invalid_amount("penalty must be at most 10000000000"),
         ),
         (
             good,
