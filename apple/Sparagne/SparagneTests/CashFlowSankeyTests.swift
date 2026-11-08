@@ -146,7 +146,7 @@ struct CashFlowSankeyTests {
         #expect(sankey.shown(try #require(sankey.node(CashFlowSankey.totalId))) == 270_000)
     }
 
-    @Test("A share written for the labels has one decimal, and one too small to show reads under 0,1% rather than 0,0%")
+    @Test("A share written for the labels has one decimal; one too small to show reads under 0,1%, one just short of the whole over 99,9%")
     func shareText() throws {
         let sankey = try #require(F.month)
         // 270.000 of income: 0,05% is 135.
@@ -155,6 +155,11 @@ struct CashFlowSankeyTests {
         #expect(sankey.shareText(135) == "< 0,1%")
         #expect(sankey.shareText(1) == "< 0,1%")
         #expect(sankey.shareText(270_000) == "100,0%")
+        #expect(sankey.shareText(269_865) == "> 99,9%")
+        #expect(sankey.shareText(269_999) == "> 99,9%")
+        #expect(sankey.shareText(269_864) == "99,9%")
+        // More than the income is a share like any other.
+        #expect(sankey.shareText(270_100) == "100,0%")
 
         let noIncome = try #require(
             CashFlowSankey.build(income: [], expenses: [F.spent("Casa", "Mutuo", 40_000)], flows: F.flows)
@@ -307,7 +312,7 @@ struct CashFlowSankeyTests {
         #expect(Self.value(sankey, CashFlowSankey.savingsId) == 105_000)
     }
 
-    @Test("A refund larger than what one flow spent on a category leaves that ribbon out, and a flow with nothing left is not drawn")
+    @Test("A refund larger than what one flow spent on a category leaves that ribbon out, a flow with nothing left is not drawn, and the excess comes in as Refunds")
     func refundAboveExpense() throws {
         let sankey = try #require(
             CashFlowSankey.build(
@@ -325,8 +330,101 @@ struct CashFlowSankeyTests {
         #expect(sankey.node("flow:Vacanze") == nil)
         #expect(sankey.node("cat:Spesa") == nil)
         #expect(sankey.node("cat:Viaggi") == nil)
-        // The refund does not lower the savings past what was spent.
-        #expect(Self.value(sankey, CashFlowSankey.savingsId) == 95_000)
+        // 50,00 + 100,00 given back beyond their pairs' expenses.
+        let refunds = try #require(sankey.node(CashFlowSankey.refundsId))
+        #expect(refunds.value == 15_000)
+        #expect(refunds.title == String(localized: "Refunds"))
+        #expect(sankey.nodes(in: 0).map(\.role) == [.income, .refunds])
+        // Income minus the expenses net of every refund: 1.000 − (350 − 450).
+        #expect(Self.value(sankey, CashFlowSankey.savingsId) == 110_000)
+        // Entrate lets it all through and says what was earned.
+        let total = try #require(sankey.node(CashFlowSankey.totalId))
+        #expect(total.value == 115_000)
+        #expect(sankey.shown(total) == 100_000)
+    }
+
+    @Test("A refund with no expense in its pair cannot turn the cards' savings into money from the balance")
+    func refundsKeepTheCardsSavings() throws {
+        // The cards: income 1.000, expenses 1.200 less a 300 refund = 900,
+        // savings 100.
+        let sankey = try #require(
+            CashFlowSankey.build(
+                income: [F.earned("Stipendio", 100_000)],
+                expenses: [
+                    F.spent("Casa", "Mutuo", 80_000),
+                    F.spent("Spesa", "Spesa", 40_000),
+                    F.spent("Spesa", "Viaggi", 0, refund: 30_000),
+                ],
+                flows: F.flows
+            )
+        )
+        F.expectBalanced(sankey)
+        #expect(sankey.node(CashFlowSankey.fromBalanceId) == nil)
+        #expect(Self.value(sankey, CashFlowSankey.savingsId) == 10_000)
+        #expect(Self.value(sankey, CashFlowSankey.refundsId) == 30_000)
+        #expect(Self.titles(sankey, column: 0) == ["Stipendio", String(localized: "Refunds")])
+        #expect(sankey.expenses == 120_000)
+    }
+
+    @Test("Refunds alone, nothing earned or spent, still come in and are saved")
+    func refundsAlone() throws {
+        let sankey = try #require(
+            CashFlowSankey.build(income: [], expenses: [F.spent("Casa", "Bollette", 0, refund: 4_000)], flows: F.flows)
+        )
+        F.expectBalanced(sankey)
+        #expect(sankey.nodes(in: 0).map(\.id) == [CashFlowSankey.refundsId])
+        #expect(Self.value(sankey, CashFlowSankey.savingsId) == 4_000)
+        #expect(sankey.shown(try #require(sankey.node(CashFlowSankey.totalId))) == 0)
+    }
+
+    @Test("The income column folds on what was earned, not on the balance it took, and never into nothing but «Other»")
+    func incomeFoldsOnEarned() throws {
+        // Under PERSONA: 5,00 of interest and 3,00 of refunds received
+        // against 1.000,00 spent.
+        let small = try #require(
+            CashFlowSankey.build(
+                income: [F.earned("Interessi", 500), F.earned("Rimborsi spese", 300)],
+                expenses: [F.spent("Casa", "Mutuo", 100_000)],
+                flows: F.flows
+            )
+        )
+        F.expectBalanced(small)
+        #expect(Self.titles(small, column: 0) == ["Interessi", "Rimborsi spese", String(localized: "From the balance")])
+
+        // Seventy categories of 1,00: each under 1,5% of the total, the
+        // first five keep their names all the same.
+        let many = try #require(
+            CashFlowSankey.build(
+                income: (1...70).map { F.earned("Voce \($0)", 100) },
+                expenses: [],
+                flows: F.flows
+            )
+        )
+        F.expectBalanced(many)
+        #expect(Self.titles(many, column: 0) == (1...5).map { "Voce \($0)" } + [String(localized: "Other")])
+        #expect(Self.value(many, "in:other") == 6_500)
+    }
+
+    @Test("A tooltip finds what it points at, and nothing once the graph no longer has it")
+    func tips() throws {
+        let sankey = try #require(F.month)
+        let casa = try #require(sankey.tip(forNode: "flow:Casa"))
+        #expect(casa.title == "Casa")
+        #expect(casa.value == 93_900)
+        let total = try #require(sankey.tip(forNode: CashFlowSankey.totalId))
+        #expect(total.value == 270_000)
+        let ribbon = try #require(sankey.tip(forLink: "flow:Casa>cat:Utenze"))
+        #expect(ribbon.title == "Casa \u{2192} Utenze")
+        #expect(ribbon.value == 13_900)
+
+        // Another month under a pointer at rest: Casa spent nothing on Utenze.
+        let next = try #require(
+            CashFlowSankey.build(
+                income: [F.earned("Stipendio", 240_000)], expenses: [F.spent("Spesa", "Spesa", 20_000)], flows: F.flows
+            )
+        )
+        #expect(next.tip(forNode: "flow:Casa") == nil)
+        #expect(next.tip(forLink: "flow:Casa>cat:Utenze") == nil)
     }
 
     @Test("An archived flow that spent in the period keeps its name; one the vault no longer lists is a dash")

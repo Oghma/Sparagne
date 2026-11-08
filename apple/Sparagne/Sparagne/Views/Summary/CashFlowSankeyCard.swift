@@ -37,7 +37,7 @@ struct CashFlowSankeyCard: View {
                         .frame(height: Self.height)
                         // A redrawn period starts with nothing under the pointer.
                         .id(period)
-                    Text(String(localized: "Figures can differ slightly from the cards above: refunds are netted per flow and category, not per month and person."))
+                    Text(String(localized: "Figures match the cards above unless someone's refunds in a month exceed their expenses."))
                         .font(Face.label)
                         .foregroundStyle(Ink.text3)
                         .lineLimit(2)
@@ -140,20 +140,21 @@ private struct SankeyGraph: View {
                     draw(layout, lit: lit, in: &context)
                 }
                 .accessibilityLabel(name)
-                .accessibilityValue(spoken)
                 .accessibilityChildren {
+                    // The summary first, so it is what VoiceOver reads on
+                    // reaching the graph; a node at a time after it.
                     VStack {
-                        ForEach(sankey.nodes) { node in
+                        ForEach(Array(spoken.enumerated()), id: \.offset) { _, element in
                             Rectangle()
-                                .accessibilityLabel(node.title)
-                                .accessibilityValue(spokenValue(node))
+                                .accessibilityLabel(element.label)
+                                .accessibilityValue(element.value)
                         }
                     }
                 }
                 labels(layout, size: proxy.size, lit: lit)
                     .accessibilityHidden(true)
-                if let hover {
-                    tooltip(hover, size: proxy.size)
+                if let hover, let content = tooltipContent(hover.target) {
+                    tooltip(content, at: hover.point, size: proxy.size)
                 }
             }
             .contentShape(Rectangle())
@@ -166,6 +167,9 @@ private struct SankeyGraph: View {
                 }
             }
         }
+        // New figures under a pointer at rest (another month, a sync): what
+        // it pointed at may be gone, and it has not moved to say where it is.
+        .onChange(of: sankey) { hover = nil }
     }
 
     // MARK: - Drawing
@@ -181,6 +185,7 @@ private struct SankeyGraph: View {
             guard let ribbon = layout.ribbons.first(where: { $0.id == id }) else { return nil }
             return ([id], [ribbon.from, ribbon.to])
         case .node(let id):
+            guard layout.nodes[id] != nil else { return nil }
             let touching = layout.ribbons.filter { $0.from == id || $0.to == id }
             return (Set(touching.map(\.id)), Set(touching.flatMap { [$0.from, $0.to] }).union([id]))
         }
@@ -235,11 +240,11 @@ private struct SankeyGraph: View {
         return path
     }
 
-    /// Income blue into Entrate, the balance red, the savings green, every
-    /// expense orange.
+    /// Income and refunds blue into Entrate, the balance red, the savings
+    /// green, every expense orange.
     private func tint(from: String, to: String) -> Color {
         switch (byId[from]?.role, byId[to]?.role) {
-        case (.income?, _): Ink.chartIncome
+        case (.income?, _), (.refunds?, _): Ink.chartIncome
         case (.fromBalance?, _): Ink.negative
         case (_, .savings?): Ink.chartSavings
         default: Ink.chartExpense
@@ -254,7 +259,7 @@ private struct SankeyGraph: View {
         if let link = sankey.incoming(node.id).first { return tint(from: link.from, to: link.to) }
         switch node.role {
         case .fromBalance: return Ink.negative
-        case .income, .total: return Ink.chartIncome
+        case .income, .refunds, .total: return Ink.chartIncome
         default: return Ink.chartExpense
         }
     }
@@ -316,7 +321,7 @@ private struct SankeyGraph: View {
             let x = leading ? 0 : bar.maxX + Self.labelGap
             let width = leading ? bar.minX - Self.labelGap : (nextX.map { $0 - Self.labelGap } ?? size.width) - x
             let twoLines = nodes.map { node, rect in
-                rect.height >= 2 * Self.lineHeight - 2 || oneLineWidth(node) > width
+                rect.height >= 2 * Self.lineHeight - 2 || oneLineWidth(node) > width - 2
             }
             let tops = SankeyLayout.labelTops(
                 centres: nodes.map { $0.1.midY },
@@ -393,18 +398,17 @@ private struct SankeyGraph: View {
     /// The hovered ribbon's or node's figure and share of the income, on the
     /// palette's raised card as the income chart's tooltip, over the
     /// pointer, or under it near the top.
-    private func tooltip(_ hover: Hover, size: CGSize) -> some View {
-        let (title, swatch, value) = tooltipContent(hover.target)
-        let x = min(max(hover.point.x - tipSize.width / 2, 0), max(size.width - tipSize.width, 0))
-        let above = hover.point.y - tipSize.height - 14
-        let y = above >= 0 ? above : hover.point.y + 18
+    private func tooltip(_ content: TipContent, at point: CGPoint, size: CGSize) -> some View {
+        let x = min(max(point.x - tipSize.width / 2, 0), max(size.width - tipSize.width, 0))
+        let above = point.y - tipSize.height - 14
+        let y = above >= 0 ? above : point.y + 18
         return VStack(alignment: .leading, spacing: 3) {
-            Text(title)
+            Text(content.title)
                 .font(Face.ui(11, .semibold))
                 .foregroundStyle(Ink.text2)
-            tooltipRow(String(localized: "Amount"), LedgerMoney.bare(value), tint: swatch)
-            if hover.target != .node(CashFlowSankey.totalId), let share = share(value) {
-                tooltipRow(String(localized: "Share of income"), share, tint: swatch)
+            tooltipRow(String(localized: "Amount"), LedgerMoney.bare(content.value), tint: content.swatch)
+            if content.showsShare, let share = share(content.value) {
+                tooltipRow(String(localized: "Share of income"), share, tint: content.swatch)
             }
         }
         .font(Face.ui(11.5))
@@ -431,37 +435,34 @@ private struct SankeyGraph: View {
         }
     }
 
+    private struct TipContent {
+        let title: String
+        let swatch: Color
+        let value: Int64
+        /// Not on Entrate, which is the income.
+        let showsShare: Bool
+    }
+
     /// "Casa → Utenze" and the ribbon's value, or the node's title and the
-    /// figure its label says.
-    private func tooltipContent(_ target: Target) -> (String, Color, Int64) {
+    /// figure its label says; `nil` when the graph no longer has it.
+    private func tooltipContent(_ target: Target) -> TipContent? {
         switch target {
         case .link(let id):
-            guard let link = sankey.links.first(where: { $0.id == id }) else { return ("", Ink.text2, 0) }
-            let from = byId[link.from]?.title ?? ""
-            let to = byId[link.to]?.title ?? ""
-            return ("\(from) \u{2192} \(to)", tint(from: link.from, to: link.to), link.value)
+            guard let tip = sankey.tip(forLink: id), let link = sankey.links.first(where: { $0.id == id })
+            else { return nil }
+            return TipContent(
+                title: tip.title, swatch: tint(from: link.from, to: link.to), value: tip.value, showsShare: true
+            )
         case .node(let id):
-            guard let node = byId[id] else { return ("", Ink.text2, 0) }
-            return (node.title, tint(node), sankey.shown(node))
+            guard let tip = sankey.tip(forNode: id), let node = byId[id] else { return nil }
+            return TipContent(title: tip.title, swatch: tint(node), value: tip.value, showsShare: node.role != .total)
         }
     }
 
     // MARK: - VoiceOver
 
-    /// "Income €4,200.00: Casa €1,800.00, Cash €900.00, Savings €600.00".
-    private var spoken: String {
-        var sources = [(String(localized: "Income"), LedgerMoney.amount(sankey.income))]
-        if let balance = sankey.node(CashFlowSankey.fromBalanceId) {
-            sources.append((balance.title, LedgerMoney.amount(balance.value)))
-        }
-        let spending = sankey.nodes(in: 2).map { ($0.title, LedgerMoney.amount($0.value)) }
-        return AccessibilityText.sankey(sources: sources, spending: spending)
-    }
-
-    /// A node's figure and, with an income, its share of it.
-    private func spokenValue(_ node: CashFlowSankey.Node) -> String {
-        let amount = LedgerMoney.amount(sankey.shown(node))
-        guard node.role != .total, let share = share(sankey.shown(node)) else { return amount }
-        return "\(amount), \(share)"
+    /// The summary, then a node at a time (`AccessibilityText.sankey`).
+    private var spoken: [(label: String, value: String)] {
+        AccessibilityText.sankeyElements(sankey, name: name)
     }
 }

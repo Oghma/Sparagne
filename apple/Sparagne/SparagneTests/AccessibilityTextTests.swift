@@ -1,4 +1,5 @@
 import Foundation
+import SparagneCore
 import Testing
 
 @testable import Sparagne
@@ -63,6 +64,46 @@ struct AccessibilityTextTests {
     @Test("With nothing spent there is no colon to open")
     func sankeyWithNothingSpent() {
         #expect(AccessibilityText.sankey(sources: [("Income", "€100.00")], spending: []) == "Income €100.00")
+    }
+
+    @Test("VoiceOver reaches the cash-flow graph's summary first, then a node at a time with its figure and share")
+    func sankeyElementsStartWithTheSummary() throws {
+        let sankey = try #require(SankeyFixture.month)
+        let elements = AccessibilityText.sankeyElements(sankey, name: "Cash flow, October 2026")
+        #expect(elements.count == sankey.nodes.count + 1)
+
+        let income = String(localized: "Income")
+        let savings = String(localized: "Savings")
+        #expect(elements[0].label == "Cash flow, October 2026")
+        #expect(
+            elements[0].value
+                == "\(income) €2.700,00: Casa €939,00, Spesa €250,00, Vacanze €100,00, "
+                + "\(NameBook.unallocatedLabel) €80,00, \(savings) €1.331,00"
+        )
+        #expect(elements.dropFirst().map(\.label) == sankey.nodes.map(\.title))
+        let salary = try #require(elements.first { $0.label == "Stipendio" })
+        #expect(salary.value == "€2.400,00, 88,9%")
+        // Entrate is the income: no share of itself.
+        let total = try #require(elements.first { $0.label == income })
+        #expect(total.value == "€2.700,00")
+    }
+
+    @Test("The refunds and the balance are read after the income, before where it went")
+    func sankeyElementsReadRefundsAndBalance() throws {
+        let sankey = try #require(
+            CashFlowSankey.build(
+                income: [SankeyFixture.earned("Stipendio", 100_000)],
+                expenses: [
+                    SankeyFixture.spent("Casa", "Mutuo", 150_000),
+                    SankeyFixture.spent("Spesa", "Viaggi", 0, refund: 30_000),
+                ],
+                flows: SankeyFixture.flows
+            )
+        )
+        let summary = AccessibilityText.sankeyElements(sankey, name: "Cash flow")[0].value
+        let refunds = String(localized: "Refunds")
+        let balance = String(localized: "From the balance")
+        #expect(summary == "\(String(localized: "Income")) €1.000,00, \(refunds) €300,00, \(balance) €200,00: Casa €1.500,00")
     }
 }
 

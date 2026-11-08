@@ -4,19 +4,21 @@ import SparagneCore
 /// The RIEPILOGO's cash-flow Sankey for one period: the income by category
 /// flowing into one Entrate node, from there into what each flow spent and
 /// into the savings, and from each flow into the categories it paid. When
-/// the period spent more than it earned, a "from the balance" node feeds
+/// the period spent more than came in, a "from the balance" node feeds
 /// Entrate instead of the savings. Every node is worth the sum of its links,
 /// so the graph balances whatever the refunds did.
 ///
 /// Transfers between flows (the Riparto, Sposta) are not in it: a flow is
-/// worth what it spent, not what it was filled with. Refunds are netted per
-/// flow and category, where the cards net them per month and person, so a
-/// refund larger than what one flow spent on one category can make the
-/// figures differ slightly from the cards'.
+/// worth what it spent, not what it was filled with. A refund nets the
+/// expense of its flow and category; what it gives back beyond that pair's
+/// expense (last month's bill refunded this month) comes in as a «Rimborsi»
+/// node beside the income, so the savings are the cards' own: income minus
+/// expenses net of every refund. The cards only differ when one person's
+/// refunds in a month exceed their expenses, which they count as nothing.
 struct CashFlowSankey: Equatable, Sendable {
     /// What a node stands for, which decides its column and its colour.
     enum Role: Hashable, Sendable {
-        case income, fromBalance, total, flow, savings, category
+        case income, refunds, fromBalance, total, flow, savings, category
     }
 
     struct Node: Identifiable, Hashable, Sendable {
@@ -43,7 +45,7 @@ struct CashFlowSankey: Equatable, Sendable {
     }
 
     /// Column by column, each top to bottom: income heaviest first, the
-    /// folded rest, then the balance; flows heaviest first, then the
+    /// folded rest, the refunds, then the balance; flows heaviest first, then the
     /// savings; categories heaviest first, then the folded rest.
     let nodes: [Node]
     let links: [Link]
@@ -55,21 +57,22 @@ struct CashFlowSankey: Equatable, Sendable {
     static let incomeLimit = 5
     /// Expense categories with a node of their own, as the year's list.
     static let categoryLimit = SummaryCategories.limit
-    /// An income or expense category under this share of its column's total
-    /// folds into the rest even within the limit: a sliver of a node only
-    /// crowds the labels.
+    /// An income category under this share of what was earned, or an
+    /// expense category under this share of what was spent, folds into the
+    /// rest even within the limit: a sliver of a node only crowds the labels.
     static let foldShare = 0.015
 
     static let totalId = "total"
     static let savingsId = "savings"
     static let fromBalanceId = "balance"
+    static let refundsId = "refunds"
 
     // MARK: - Reading
 
     func node(_ id: String) -> Node? { nodes.first { $0.id == id } }
 
     /// The columns that have a node, left to right: 0 is missing when one
-    /// income category is all the income, 3 when nothing was spent.
+    /// income category is all that came in, 3 when nothing was spent.
     var columns: [Int] { Array(Set(nodes.map(\.column))).sorted() }
 
     /// The nodes of `column`, top to bottom.
@@ -82,7 +85,8 @@ struct CashFlowSankey: Equatable, Sendable {
     var expenses: Int64 { nodes.reduce(0) { $0 + ($1.role == .flow ? $1.value : 0) } }
 
     /// The figure a node says: its value, except Entrate, which says what
-    /// came in even when the balance made up the rest (0 with no income).
+    /// was earned even when refunds or the balance made up the rest (0 with
+    /// no income).
     func shown(_ node: Node) -> Int64 { node.role == .total ? income : node.value }
 
     /// `value` over the income, `nil` when nothing came in.
@@ -91,17 +95,40 @@ struct CashFlowSankey: Equatable, Sendable {
     }
 
     /// `"14,2%"`: `value`'s share of the income as the labels and the
-    /// tooltip write it, and `"< 0,1%"` for a share that would round to
-    /// `"0,0%"` (7,90 of interest in a year of salary): it is not nothing.
-    /// `nil` when nothing came in.
+    /// tooltip write it; `"< 0,1%"` for a share that would round to `"0,0%"`
+    /// (7,90 of interest in a year of salary), which is not nothing, and
+    /// `"> 99,9%"` for one that would round to `"100,0%"` without being the
+    /// whole income. `nil` when nothing was earned.
     func shareText(_ value: Int64) -> String? {
         guard income > 0 else { return nil }
-        // Up to 0,05% included, `value × 2000 <= income`: the formatter
-        // rounds half to even, so 0,05% would print 0,0% too.
+        // Within 0,05% of either end, that included: the formatter rounds
+        // half to even, so 0,05% would print 0,0% too. `d <= income / 2000`
+        // is `d × 2000 <= income` without the overflow.
         if value > 0, value <= income / 2000 {
             return "< \(LedgerMoney.number(0.1, decimals: 1))%"
         }
+        if value < income, income - value <= income / 2000 {
+            return "> \(LedgerMoney.number(99.9, decimals: 1))%"
+        }
         return LedgerMoney.percent(value, of: income, decimals: 1)
+    }
+
+    // MARK: - Hover
+
+    /// What the tooltip of node `id` says: its title and the figure its
+    /// label shows. `nil` when the graph has no such node, as after a reload
+    /// under a pointer at rest.
+    func tip(forNode id: String) -> (title: String, value: Int64)? {
+        guard let node = node(id) else { return nil }
+        return (node.title, shown(node))
+    }
+
+    /// "Casa → Utenze" and the ribbon's value; `nil` when the graph has no
+    /// such ribbon.
+    func tip(forLink id: String) -> (title: String, value: Int64)? {
+        guard let link = links.first(where: { $0.id == id }), let from = node(link.from), let to = node(link.to)
+        else { return nil }
+        return ("\(from.title) \u{2192} \(to.title)", link.value)
     }
 
     // MARK: - Building
@@ -121,17 +148,20 @@ struct CashFlowSankey: Equatable, Sendable {
         let earned = earning.reduce(Int64(0)) { $0 + $1.value }
         let spending = Spending(expenses)
         let spent = spending.total
-        guard earned > 0 || spent > 0 else { return nil }
+        let refunded = spending.excessRefunds
+        guard earned > 0 || spent > 0 || refunded > 0 else { return nil }
 
-        let fromBalance = max(spent - earned, 0)
-        let savings = max(earned - spent, 0)
+        // What came in against what went out: the savings and what the
+        // balance gave are the cards' figures, every refund netted.
+        let cameIn = earned + refunded
+        let fromBalance = max(spent - cameIn, 0)
+        let savings = max(cameIn - spent, 0)
         var nodes: [Node] = []
         var links: [Link] = []
 
-        // Column 0: the income by category, then the balance it took.
-        let (keptIncome, restIncome) = fold(
-            earning, limit: incomeLimit, columnTotal: earned + fromBalance
-        )
+        // Column 0: the income by category, the refunds beyond their
+        // expenses, then the balance it took. Folded on what was earned.
+        let (keptIncome, restIncome) = fold(earning, limit: incomeLimit, total: earned)
         var sources = keptIncome.map { entry in
             Node(
                 id: "in:\(entry.item.categoryId)", column: 0,
@@ -144,6 +174,14 @@ struct CashFlowSankey: Equatable, Sendable {
                 Node(
                     id: "in:other", column: 0, title: SummaryText.categoryName("", isSystem: false, isOther: true),
                     value: restIncome.reduce(0) { $0 + $1.value }, role: .income, isOther: true
+                )
+            )
+        }
+        if refunded > 0 {
+            sources.append(
+                Node(
+                    id: refundsId, column: 0, title: String(localized: "Refunds"),
+                    value: refunded, role: .refunds, isOther: false
                 )
             )
         }
@@ -166,7 +204,7 @@ struct CashFlowSankey: Equatable, Sendable {
         nodes.append(
             Node(
                 id: totalId, column: 1, title: String(localized: "Income"),
-                value: max(earned, spent), role: .total, isOther: false
+                value: max(cameIn, spent), role: .total, isOther: false
             )
         )
 
@@ -195,7 +233,7 @@ struct CashFlowSankey: Equatable, Sendable {
 
         // Column 3: the categories, global, heaviest first, then the rest.
         let (keptCategories, restCategories) = fold(
-            heaviestFirst(spending.categories), limit: categoryLimit, columnTotal: spent
+            heaviestFirst(spending.categories), limit: categoryLimit, total: spent
         )
         let folded = Set(restCategories.map(\.item))
         for entry in keptCategories {
@@ -242,34 +280,56 @@ struct CashFlowSankey: Equatable, Sendable {
         let category: Uuid
     }
 
-    /// The core's rows summed per flow and category, each pair's net expense
-    /// (a refund larger than the expense leaves the pair out), with the
-    /// flows' and categories' totals in the order the core first names them.
+    /// The core's rows summed per flow and category: each pair's net expense
+    /// (a refund larger than the expense leaves the pair out), the flows' and
+    /// categories' totals in the order the core first names them, and what
+    /// the refunds gave back beyond their pairs' expenses.
     private struct Spending {
         var pairs: [Pair: Int64] = [:]
         var flows: [(item: Uuid, value: Int64)] = []
         var categories: [(item: Uuid, value: Int64)] = []
         var names: [Uuid: (name: String, isSystem: Bool)] = [:]
         var total: Int64 = 0
+        var excessRefunds: Int64 = 0
 
         init(_ rows: [FlowCategoryTotals]) {
+            // Expense and refund per pair first, netted once: the core sends
+            // one row a pair, and two would still net as one.
+            var order: [Pair] = []
+            var expense: [Pair: Int64] = [:]
+            var refund: [Pair: Int64] = [:]
+            for row in rows {
+                let pair = Pair(flow: row.flowId, category: row.categoryId)
+                if expense[pair] == nil {
+                    order.append(pair)
+                    if names[row.categoryId] == nil {
+                        names[row.categoryId] = (name: row.name, isSystem: row.isSystem)
+                    }
+                }
+                expense[pair, default: 0] += row.expense
+                refund[pair, default: 0] += row.refund
+            }
             var flowIndex: [Uuid: Int] = [:]
             var categoryIndex: [Uuid: Int] = [:]
-            for row in rows where row.netExpense > 0 {
-                pairs[Pair(flow: row.flowId, category: row.categoryId), default: 0] += row.netExpense
-                total += row.netExpense
-                if let index = flowIndex[row.flowId] {
-                    flows[index].value += row.netExpense
-                } else {
-                    flowIndex[row.flowId] = flows.count
-                    flows.append((item: row.flowId, value: row.netExpense))
+            for pair in order {
+                let net = (expense[pair] ?? 0) - (refund[pair] ?? 0)
+                guard net > 0 else {
+                    excessRefunds -= net
+                    continue
                 }
-                if let index = categoryIndex[row.categoryId] {
-                    categories[index].value += row.netExpense
+                pairs[pair] = net
+                total += net
+                if let index = flowIndex[pair.flow] {
+                    flows[index].value += net
                 } else {
-                    categoryIndex[row.categoryId] = categories.count
-                    categories.append((item: row.categoryId, value: row.netExpense))
-                    names[row.categoryId] = (name: row.name, isSystem: row.isSystem)
+                    flowIndex[pair.flow] = flows.count
+                    flows.append((item: pair.flow, value: net))
+                }
+                if let index = categoryIndex[pair.category] {
+                    categories[index].value += net
+                } else {
+                    categoryIndex[pair.category] = categories.count
+                    categories.append((item: pair.category, value: net))
                 }
             }
         }
@@ -282,13 +342,14 @@ struct CashFlowSankey: Equatable, Sendable {
             .map(\.element)
     }
 
-    /// The first `limit` entries at or above `foldShare` of the column, and
-    /// the rest to fold. A rest of one keeps its own node: folding it would
-    /// only hide its name.
+    /// The first `limit` entries at or above `foldShare` of `total`, and the
+    /// rest to fold. A rest of one keeps its own node: folding it would only
+    /// hide its name; and when none reaches the share, the first `limit`
+    /// keep theirs all the same, so the column is never one «Other».
     private static func fold<T>(
-        _ entries: [(item: T, value: Int64)], limit: Int, columnTotal: Int64
+        _ entries: [(item: T, value: Int64)], limit: Int, total: Int64
     ) -> (kept: [(item: T, value: Int64)], rest: [(item: T, value: Int64)]) {
-        let threshold = Double(columnTotal) * foldShare
+        let threshold = Double(total) * foldShare
         var kept: [(item: T, value: Int64)] = []
         var rest: [(item: T, value: Int64)] = []
         for (index, entry) in entries.enumerated() {
@@ -297,6 +358,10 @@ struct CashFlowSankey: Equatable, Sendable {
             } else {
                 rest.append(entry)
             }
+        }
+        if kept.isEmpty {
+            kept = Array(entries.prefix(limit))
+            rest = Array(entries.dropFirst(limit))
         }
         if rest.count == 1 {
             kept += rest
