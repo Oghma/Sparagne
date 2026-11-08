@@ -28,20 +28,9 @@ impl Core {
     /// returns the original receipt (idempotency).
     pub fn execute(&mut self, env: CommandEnvelope) -> Result<Receipt> {
         let tx = self.conn.transaction()?;
-        if let Some(receipt) = existing_receipt(&tx, env.id)? {
-            return Ok(receipt);
-        }
-
-        let now = Utc::now().timestamp();
-        let seq = next_seq(&tx, env.vault_id)?;
-        let result_id = apply_envelope(&tx, &env, seq, None, now)?;
+        let receipt = execute_one(&tx, &env, Utc::now().timestamp())?;
         tx.commit()?;
-        Ok(Receipt {
-            command_id: env.id,
-            seq,
-            result_id,
-            deduplicated: false,
-        })
+        Ok(receipt)
     }
 
     /// Applies `envelopes` in order, all of them or none: the first domain
@@ -67,24 +56,30 @@ impl Core {
 
         let tx = self.conn.transaction()?;
         let now = Utc::now().timestamp();
-        let mut receipts = Vec::with_capacity(envelopes.len());
-        for env in &envelopes {
-            if let Some(receipt) = existing_receipt(&tx, env.id)? {
-                receipts.push(receipt);
-                continue;
-            }
-            let seq = next_seq(&tx, vault_id)?;
-            let result_id = apply_envelope(&tx, env, seq, None, now)?;
-            receipts.push(Receipt {
-                command_id: env.id,
-                seq,
-                result_id,
-                deduplicated: false,
-            });
-        }
+        let receipts = envelopes
+            .iter()
+            .map(|env| execute_one(&tx, env, now))
+            .collect::<Result<_>>()?;
         tx.commit()?;
         Ok(receipts)
     }
+}
+
+/// One envelope inside the caller's transaction: the original receipt when
+/// the log already holds its id, otherwise the command applied at the next
+/// seq of its vault.
+fn execute_one(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Receipt> {
+    if let Some(receipt) = existing_receipt(tx, env.id)? {
+        return Ok(receipt);
+    }
+    let seq = next_seq(tx, env.vault_id)?;
+    let result_id = apply_envelope(tx, env, seq, None, now)?;
+    Ok(Receipt {
+        command_id: env.id,
+        seq,
+        result_id,
+        deduplicated: false,
+    })
 }
 
 /// The receipt of a command already in the log (`deduplicated`), `None` for
