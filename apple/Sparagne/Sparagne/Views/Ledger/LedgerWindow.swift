@@ -16,12 +16,6 @@ struct LedgerWindow: View {
     /// The window's, shared with its text fields: the ledger's steps go on the
     /// same stack as the typing, so Edit ▸ Undo takes back whichever came last.
     @Environment(\.undoManager) private var undoManager
-    /// Driven by the two toggles in the Ledger menu.
-    @AppStorage("showVoided") private var showVoided = false
-    @AppStorage("showTransfers") private var showTransfers = false
-    /// The optional WALLET column of the grid, off until
-    /// the View menu turns it on.
-    @AppStorage("showWalletColumn") private var showWalletColumn = false
 
     // MARK: CSV export (⌘E, `Support/LedgerCSV.swift`)
     @State private var showsCSVExporter = false
@@ -93,21 +87,8 @@ struct LedgerWindow: View {
                 showsCSVExporter = true
             }
         }
-        .onAppear {
-            store.showVoided = showVoided
-            store.showTransfers = showTransfers
-            store.showWalletColumn = showWalletColumn
-            store.attach(undoManager: undoManager)
-        }
+        .onAppear { store.attach(undoManager: undoManager) }
         .onChange(of: undoManager) { _, new in store.attach(undoManager: new) }
-        // Both ways for all three: the menu writes the preference, the
-        // palette writes the store, and the shared key keeps them one value.
-        .onChange(of: showVoided) { _, new in store.showVoided = new }
-        .onChange(of: store.showVoided) { _, new in showVoided = new }
-        .onChange(of: showTransfers) { _, new in store.showTransfers = new }
-        .onChange(of: store.showTransfers) { _, new in showTransfers = new }
-        .onChange(of: showWalletColumn) { _, new in store.showWalletColumn = new }
-        .onChange(of: store.showWalletColumn) { _, new in showWalletColumn = new }
         .task(id: store.searchText) {
             // Debounce: reload only once the field has been quiet for 300 ms,
             // and only if it actually changed since the last reload (the task

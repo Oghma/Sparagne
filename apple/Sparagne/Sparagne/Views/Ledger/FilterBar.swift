@@ -7,8 +7,8 @@ import SparagneCore
 /// in the top bar (`TopBar`), the figures in the tab bar's status line
 /// (`SheetStatus`).
 ///
-/// The chips write the store; the window keeps them in step with the View
-/// menu's toggles through the shared preferences (`LedgerWindow`).
+/// The chips write the store, which the menus' toggles also bind to and
+/// which remembers them.
 struct FilterBar: View {
     @Bindable var store: AppStore
 

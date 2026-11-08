@@ -2,14 +2,6 @@ import SwiftUI
 
 @main
 struct SparagneApp: App {
-    // Shared UserDefaults keys with the store's own filters, so the menu
-    // items and the ledger stay in sync without extra plumbing.
-    @AppStorage("showVoided") private var showVoided = false
-    @AppStorage("showTransfers") private var showTransfers = false
-    /// The optional WALLET column of the grid: off by
-    /// default, remembered here.
-    @AppStorage("showWalletColumn") private var showWalletColumn = false
-
     /// Opened once, in `ContentView`; the Settings scene shares the engine
     /// built with it.
     @State private var store: AppStore?
@@ -51,8 +43,9 @@ struct SparagneApp: App {
             // The standard View menu: the column is a property of the view,
             // not of the ledger's filters.
             CommandGroup(after: .toolbar) {
-                Toggle(String(localized: "Show Wallet Column"), isOn: $showWalletColumn)
+                Toggle(String(localized: "Show Wallet Column"), isOn: storeToggle(\.showWalletColumn))
                     .keyboardShortcut("w", modifiers: [.command, .shift])
+                    .disabled(store == nil)
                 // The widths dragged in the ledger's header.
                 Button(String(localized: "Reset Column Widths")) { store?.resetLedgerColumns() }
                     .disabled(store?.ledgerColumns.isStandard ?? true)
@@ -98,10 +91,12 @@ struct SparagneApp: App {
 
                 Divider()
 
-                Toggle(String(localized: "Show Deleted"), isOn: $showVoided)
+                Toggle(String(localized: "Show Deleted"), isOn: storeToggle(\.showVoided))
                     .keyboardShortcut("v", modifiers: [.command, .shift])
-                Toggle(String(localized: "Show Transfers"), isOn: $showTransfers)
+                    .disabled(store == nil)
+                Toggle(String(localized: "Show Transfers"), isOn: storeToggle(\.showTransfers))
                     .keyboardShortcut("t", modifiers: [.command, .shift])
+                    .disabled(store == nil)
             }
 
             CommandMenu(String(localized: "Vault")) {
@@ -143,6 +138,15 @@ struct SparagneApp: App {
     /// A menu item that only tells the window it was chosen.
     private func post(_ title: String, _ name: Notification.Name) -> some View {
         Button(title) { NotificationCenter.default.post(name: name, object: nil) }
+    }
+
+    /// A menu toggle that is the store's own setting, which the palette also
+    /// flips and the store remembers.
+    private func storeToggle(_ setting: ReferenceWritableKeyPath<AppStore, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { store?[keyPath: setting] ?? false },
+            set: { store?[keyPath: setting] = $0 }
+        )
     }
 
     /// The same rules as the top bar's vault selector and the palette

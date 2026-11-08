@@ -109,8 +109,8 @@ extension CommandPaletteModel {
     /// The entries that have a menu item post that item's notification, so
     /// the two ways in share one implementation (`MainWindow` seeds the
     /// sheets); the rest write the same state the top bar and the tab bar
-    /// write. The three view toggles write the store, which the window
-    /// mirrors back into the menu's preference.
+    /// write. The three view toggles write the store, which the menus'
+    /// toggles bind to.
     static func ledgerActions(store: AppStore, engine: SyncEngine?) -> [PaletteAction] {
         func post(_ name: Notification.Name, _ id: String, _ title: String, _ keywords: [String]) -> PaletteAction {
             PaletteAction(id: id, title: title, keywords: keywords) {

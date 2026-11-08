@@ -135,8 +135,10 @@ final class AppStore {
     /// (`loadMore`), and the export reads every page first (`loadAll`).
     static let pageSize: UInt32 = 1000
     static let lastVaultKey = "lastVaultId"
-    /// Shared with the View menu's `@AppStorage` toggle, so the preference
-    /// has one home.
+    /// The three toggles of the menus, kept under the keys the menus wrote
+    /// them under, so the choices made before survive.
+    static let showVoidedKey = "showVoided"
+    static let showTransfersKey = "showTransfers"
     static let walletColumnKey = "showWalletColumn"
     static let ledgerColumnsKey = "ledgerColumnWidths"
 
@@ -397,15 +399,23 @@ final class AppStore {
     /// The deleted rows, struck through. Hiding them, like showing or hiding
     /// the transfers, can take the row of the Mastro's cell off screen, so
     /// the cell is saved first; the cursor goes with its row, if it goes
-    /// (`LedgerEditor.rowsChanged`).
-    var showVoided = false {
+    /// (`LedgerEditor.rowsChanged`). Remembered, as the menu's toggle is.
+    var showVoided: Bool {
         willSet { if newValue != showVoided { ledgerEditor.saveEditedCell() } }
-        didSet { if showVoided != oldValue { filtersChanged() } }
+        didSet {
+            guard showVoided != oldValue else { return }
+            defaults.set(showVoided, forKey: Self.showVoidedKey)
+            filtersChanged()
+        }
     }
-    /// Transfers are in neither direction, so the View menu opts into them.
-    var showTransfers = false {
+    /// Transfers are in neither direction, so the Ledger menu opts into them.
+    var showTransfers: Bool {
         willSet { if newValue != showTransfers { ledgerEditor.saveEditedCell() } }
-        didSet { if showTransfers != oldValue { filtersChanged() } }
+        didSet {
+            guard showTransfers != oldValue else { return }
+            defaults.set(showTransfers, forKey: Self.showTransfersKey)
+            filtersChanged()
+        }
     }
     /// The optional WALLET column. Display only: it
     /// changes what the grid draws and what ⌘E writes, never what is loaded,
@@ -478,6 +488,8 @@ final class AppStore {
         self.undoWindow = undoWindow
         self.sleeper = sleeper
         self.defaultCategories = defaultCategories
+        showVoided = defaults.bool(forKey: Self.showVoidedKey)
+        showTransfers = defaults.bool(forKey: Self.showTransfersKey)
         showWalletColumn = defaults.bool(forKey: Self.walletColumnKey)
         ledgerColumns = LedgerColumnWidths(stored: defaults.dictionary(forKey: Self.ledgerColumnsKey))
         currentAuthor = core.initialAuthor
