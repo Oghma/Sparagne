@@ -20,6 +20,12 @@ nonisolated struct NameBook: Sendable {
 
     func wallet(_ id: Uuid?) -> String? { id.flatMap { wallets[$0] } }
     func flow(_ id: Uuid?) -> String? { id.flatMap { flows[$0] } }
+
+    /// A wallet picker's title: the wallet's name, or the prompt to choose one.
+    func walletChoice(_ id: Uuid?) -> String {
+        guard let id else { return String(localized: "Choose…") }
+        return wallet(id) ?? TransactionRow.placeholder
+    }
 }
 
 /// A `TransactionView` with its ids resolved to names, as a table row.

@@ -30,7 +30,7 @@ extension AppStore {
     /// its name.
     func envelopeName(_ flowId: Uuid?) -> String {
         guard let flowId else { return NameBook.unallocatedLabel }
-        return NameBook(snapshot: snapshot).flow(flowId) ?? TransactionRow.placeholder
+        return names.flow(flowId) ?? TransactionRow.placeholder
     }
 
     /// A template's wallet as the WALLET column writes it. `nil` means the
@@ -38,7 +38,7 @@ extension AppStore {
     /// is exactly one; otherwise the column cannot say yet.
     func walletName(_ walletId: Uuid?) -> String {
         if let walletId {
-            return NameBook(snapshot: snapshot).wallet(walletId) ?? TransactionRow.placeholder
+            return names.wallet(walletId) ?? TransactionRow.placeholder
         }
         return wallets.count == 1 ? wallets[0].name : TransactionRow.placeholder
     }

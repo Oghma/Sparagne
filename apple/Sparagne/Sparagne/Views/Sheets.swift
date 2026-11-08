@@ -16,10 +16,13 @@ struct OnboardingSheet: View {
     @State private var walletName = "Cash"
     @State private var openingBalance = ""
 
+    /// Zero when blank, `nil` while the text is not an amount.
     private var openingMinor: Int64? {
-        let trimmed = openingBalance.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty { return 0 }
-        return try? parseMoney(text: trimmed, currency: .eur)
+        do {
+            return try LedgerMoney.cell(openingBalance, currency: .eur) ?? 0
+        } catch {
+            return nil
+        }
     }
 
     private var canCreate: Bool {

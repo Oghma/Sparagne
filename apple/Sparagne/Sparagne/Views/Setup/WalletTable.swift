@@ -253,8 +253,6 @@ struct WalletDraft: Equatable {
     func wallet(currency: Currency) throws -> (name: String, opening: Int64)? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        let amount = opening.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !amount.isEmpty else { return (name: trimmed, opening: 0) }
-        return (name: trimmed, opening: try parseMoney(text: amount, currency: currency))
+        return (name: trimmed, opening: try LedgerMoney.cell(opening, currency: currency) ?? 0)
     }
 }

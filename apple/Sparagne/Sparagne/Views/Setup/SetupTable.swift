@@ -372,14 +372,6 @@ extension View {
     }
 }
 
-/// How full a capped envelope is, asked of `FundGauge` as the summary's gauges are.
-enum EnvelopeCapFill {
-    /// 0...1, or `nil` for an envelope with no cap (no bar at all).
-    static func fraction(mode: FlowMode, balance: Int64, incomeTotal: Int64?) -> Double? {
-        FundGauge(id: "", name: "", mode: mode, balance: balance, incomeTotal: incomeTotal)?.fraction
-    }
-}
-
 /// The 72 × 2 pt bar itself.
 struct CapBar: View {
     let fraction: Double

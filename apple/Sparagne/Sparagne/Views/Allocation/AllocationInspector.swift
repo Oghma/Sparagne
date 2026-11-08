@@ -93,7 +93,7 @@ struct AllocationInspector: View {
     // MARK: - Avvisi
 
     private var warningsGroup: some View {
-        let names = NameBook(snapshot: store.snapshot)
+        let names = store.names
         let warnings = AllocationWarning.of(
             lines: lines,
             flows: store.snapshot?.flows ?? [],

@@ -152,17 +152,18 @@ struct EnvelopeTable: View {
     }
 
     /// The balance, and under it the 2 pt bar of a capped envelope: how much
-    /// of the cap it has used (`EnvelopeCapFill`). A `dimmed` one has no bar.
+    /// of the cap it has used, asked of `FundGauge` as the summary's gauges
+    /// are. A `dimmed` one has no bar.
     private func balanceCell(_ flow: FlowView, dimmed: Bool = false) -> some View {
-        let fill = flow.isUnallocated || dimmed
+        let gauge = flow.isUnallocated || dimmed
             ? nil
-            : EnvelopeCapFill.fraction(mode: flow.mode, balance: flow.balance, incomeTotal: flow.incomeTotal)
+            : FundGauge(id: flow.id, name: flow.name, mode: flow.mode, balance: flow.balance, incomeTotal: flow.incomeTotal)
         return GridCell(width: EnvelopeColumn.balance, alignment: .trailing) {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(LedgerMoney.amount(flow.balance))
                     .font(Face.row)
                     .foregroundStyle(dimmed ? Ink.text3 : Self.tint(balance: flow.balance))
-                if let fill { CapBar(fraction: fill) }
+                if let gauge { CapBar(fraction: gauge.fraction) }
             }
         }
     }
@@ -497,10 +498,8 @@ struct EnvelopeDraft: Equatable {
     /// tagged with the cell they came from so the table can send the focus
     /// back there.
     private func amount(_ text: String, in field: EnvelopeField, currency: Currency) throws -> Int64? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
         do {
-            return try parseMoney(text: trimmed, currency: currency)
+            return try LedgerMoney.cell(text, currency: currency)
         } catch {
             throw EnvelopeDraftError(field: field, underlying: error)
         }

@@ -17,10 +17,9 @@ struct FilterBar: View {
             SegmentedStrip(
                 options: LedgerDirection.allCases,
                 selection: $store.direction,
-                label: { $0.label }
+                label: { $0.label },
+                name: String(localized: "Direction")
             )
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(String(localized: "Direction"))
 
             PersonSegments(store: store)
 

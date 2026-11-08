@@ -48,7 +48,7 @@ struct RecurringTemplateTable: View {
     @State private var hovered: RecurringSelection?
 
     var body: some View {
-        let names = NameBook(snapshot: store.snapshot)
+        let names = store.names
         Panel(padding: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 // Not `hint:`: without its two-line limit the words sit where

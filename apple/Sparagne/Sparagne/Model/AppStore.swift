@@ -208,7 +208,12 @@ final class AppStore {
 
     // MARK: Loaded data
 
-    private(set) var snapshot: VaultSnapshot?
+    private(set) var snapshot: VaultSnapshot? {
+        didSet { names = NameBook(snapshot: snapshot) }
+    }
+    /// The snapshot's wallets and envelopes by id, archived ones included:
+    /// built once a load, not once a row.
+    private(set) var names = NameBook(snapshot: nil)
     private(set) var categories: [CategoryView] = []
     private(set) var transactions: [TransactionView] = []
     private(set) var nextCursor: String?
@@ -934,7 +939,6 @@ final class AppStore {
     }
 
     private func rebuildRows() {
-        let names = NameBook(snapshot: snapshot)
         allRows = transactions.map { TransactionRow(view: $0, names: names) }
     }
 

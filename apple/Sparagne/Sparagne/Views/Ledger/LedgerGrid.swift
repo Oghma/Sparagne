@@ -119,7 +119,6 @@ struct LedgerGrid: View {
         .hangingCategoryList(completion, inset: 3 - GridColumn.padding) { frames.categoryList = $0 }
         .hangingList(
             envelopes.list,
-            anchor: EnvelopeChoiceAnchor.self,
             height: { EnvelopeChoiceList.height(for: $0.count) },
             inset: 3 - GridColumn.padding,
             placed: { frames.envelopeList = $0 }
@@ -616,7 +615,7 @@ struct LedgerGrid: View {
         .accessibilityElement(children: isEditing ? .contain : .ignore)
         .accessibilityLabel(LedgerAccessibility.label(for: row, showsWallet: store.showWalletColumn))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityActions { rowActions(row, selected: isSelected) }
+        .accessibilityActions { accessibilityActions(row, selected: isSelected) }
         .contextMenu {
             // A row inside a selection speaks for all of it; any other row
             // for itself, as it always has.
@@ -643,32 +642,44 @@ struct LedgerGrid: View {
     /// "Annulla", the old Italian word for it, was also Cancel and the
     /// system's Undo.
     ///
+    /// The menu greys out what `rowActions` says cannot be done now.
+    @ViewBuilder
+    private func rowMenu(_ row: TransactionRow) -> some View {
+        let actions = rowActions(row)
+        ForEach(actions.edits) { action in
+            Button(action.title, action: action.perform).disabled(!action.enabled)
+        }
+        if !row.isTransfer {
+            ChangeKindMenu(targets: store.kindTargets(of: row.id)) { kind in
+                Task { await ChangeKindMenu.change(row.id, to: kind, in: store) }
+            }
+        }
+        if !actions.edits.isEmpty { Divider() }
+        Button(actions.delete.title, role: .destructive, action: actions.delete.perform)
+            .disabled(!actions.delete.enabled)
+    }
+
+    /// What the context menu lists and VoiceOver offers on a row, in that
+    /// order, with the kinds of Cambia tipo between the two parts.
+    ///
     /// A transfer's two ends do not fit the empty line (`RowDraft.duplicate`):
     /// its Duplicate writes the copy at once, and its ends are picked in the
     /// "Da → A" popover. Neither is there in a vault only read, and neither
     /// works on a deleted transfer.
-    @ViewBuilder
-    private func rowMenu(_ row: TransactionRow) -> some View {
-        if row.isTransfer {
-            if !store.isReadOnly {
-                Button(String(localized: "Edit From / To\u{2026}")) { editor.openEnds(of: row.id) }
-                    .disabled(row.voided)
-                Button(String(localized: "Duplicate")) { duplicateTransfer(row) }
-                    .disabled(row.voided)
-                Divider()
-            }
-        } else {
-            Button(String(localized: "Duplicate")) { duplicate(row) }
-                .disabled(store.isReadOnly)
-            ChangeKindMenu(targets: store.kindTargets(of: row.id)) { kind in
-                Task { await ChangeKindMenu.change(row.id, to: kind, in: store) }
-            }
-            Divider()
+    private func rowActions(_ row: TransactionRow) -> (edits: [RowAction], delete: RowAction) {
+        var edits: [RowAction] = []
+        if !row.isTransfer {
+            edits.append(RowAction(title: String(localized: "Duplicate"), enabled: !store.isReadOnly) { duplicate(row) })
+        } else if !store.isReadOnly {
+            edits.append(RowAction(title: String(localized: "Edit From / To\u{2026}"), enabled: !row.voided) {
+                editor.openEnds(of: row.id)
+            })
+            edits.append(RowAction(title: String(localized: "Duplicate"), enabled: !row.voided) { duplicateTransfer(row) })
         }
-        Button(String(localized: "Delete"), role: .destructive) {
+        let delete = RowAction(title: String(localized: "Delete"), enabled: !store.isReadOnly && !row.voided) {
             Task { await store.void(transactionId: row.id) }
         }
-        .disabled(store.isReadOnly || row.voided)
+        return (edits, delete)
     }
 
     /// The trash icon's action, for the row under the pointer only, as the
@@ -682,22 +693,19 @@ struct LedgerGrid: View {
         return { delete(row) }
     }
 
-    /// What VoiceOver offers on a row: the context menu's actions, the
-    /// double click that types into its DESCRIZIONE, and the ⌘-click that
-    /// picks it, since neither gesture is at hand without a pointer.
+    /// What VoiceOver offers on a row: what `rowActions` says can be done
+    /// now, the double click that types into its DESCRIZIONE, and the
+    /// ⌘-click that picks it, since neither gesture is at hand without a
+    /// pointer.
     @ViewBuilder
-    private func rowActions(_ row: TransactionRow, selected: Bool) -> some View {
+    private func accessibilityActions(_ row: TransactionRow, selected: Bool) -> some View {
         if store.canWrite {
+            let actions = rowActions(row)
             if !row.voided {
                 Button(String(localized: "Edit")) { edit(CellFocus(row: row.id, field: .note)) }
             }
-            if row.isTransfer {
-                if !row.voided {
-                    Button(String(localized: "Edit From / To\u{2026}")) { editor.openEnds(of: row.id) }
-                    Button(String(localized: "Duplicate")) { duplicateTransfer(row) }
-                }
-            } else {
-                Button(String(localized: "Duplicate")) { duplicate(row) }
+            ForEach(actions.edits.filter(\.enabled)) { action in
+                Button(action.title, action: action.perform)
             }
             // Cambia tipo's kinds, an action each, named as ⌘K names them.
             ForEach(store.kindTargets(of: row.id), id: \.self) { kind in
@@ -705,8 +713,8 @@ struct LedgerGrid: View {
                     Task { await ChangeKindMenu.change(row.id, to: kind, in: store) }
                 }
             }
-            if !row.voided {
-                Button(String(localized: "Delete")) { Task { await store.void(transactionId: row.id) } }
+            if actions.delete.enabled {
+                Button(actions.delete.title, action: actions.delete.perform)
             }
             Button(selected ? String(localized: "Deselect") : String(localized: "Select")) {
                 store.toggleSelection(row.id)
@@ -992,4 +1000,13 @@ final class GridClickWatcherView: NSView {
         }
         return false
     }
+}
+
+/// One thing to do to a row, and whether it can be done now.
+private struct RowAction: Identifiable {
+    let title: String
+    let enabled: Bool
+    let perform: () -> Void
+
+    var id: String { title }
 }

@@ -72,7 +72,12 @@ struct StatementMappingEditor: View {
         let flows: [Uuid?] = model.store.flows.map { $0.isUnallocated ? nil : Optional($0.id) }
         return FormGroup(String(localized: "Target")) {
             FormRow(String(localized: "Wallet")) {
-                FormPicker(label: String(localized: "Wallet"), selection: $model.walletId, options: wallets, title: walletName)
+                FormPicker(
+                    label: String(localized: "Wallet"),
+                    selection: $model.walletId,
+                    options: wallets,
+                    title: model.store.names.walletChoice
+                )
             }
             FormRow(String(localized: "Flow")) {
                 FormPicker(label: String(localized: "Flow"), selection: $model.flowId, options: flows, title: flowName)
@@ -202,9 +207,9 @@ struct StatementMappingEditor: View {
     private func accountPickTitle(_ pick: AccountPick) -> String {
         switch pick {
         case .file:
-            let name = model.walletId.map { walletName($0) } ?? TransactionRow.placeholder
+            let name = model.walletId.map { model.store.names.walletChoice($0) } ?? TransactionRow.placeholder
             return String(localized: "File’s wallet (\(name))")
-        case .wallet(let wallet): return walletName(wallet)
+        case .wallet(let wallet): return model.store.names.walletChoice(wallet)
         case .leftOut: return String(localized: "Leave out")
         }
     }
@@ -214,12 +219,6 @@ struct StatementMappingEditor: View {
         let calendar = Calendar.current
         let start = calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
         return CoreDate.day(start)
-    }
-
-    /// A wallet by id, or the prompt to choose one.
-    private func walletName(_ id: Uuid?) -> String {
-        guard let id else { return String(localized: "Choose…") }
-        return model.store.wallets.first { $0.id == id }?.name ?? TransactionRow.placeholder
     }
 
     /// An envelope by id; no id is Unallocated.
@@ -445,22 +444,24 @@ struct StatementMappingEditor: View {
             Button(String(localized: "Other Value")) { model.addRule(value: "") }
         } label: {
             addRuleLabel
-                .font(Face.label)
-                .foregroundStyle(Ink.text2)
-                .padding(.horizontal, 8)
-                .frame(height: 22)
-                .contentShape(Rectangle())
         }
         .plainMenu()
         .fixedSize()
     }
 
+    /// "+ Add Rule", for the type rules' menu and the description rules'
+    /// button alike.
     private var addRuleLabel: some View {
         HStack(spacing: 4) {
             Image(systemName: "plus")
                 .font(.system(size: 9, weight: .semibold))
             Text(String(localized: "Add Rule"))
         }
+        .font(Face.label)
+        .foregroundStyle(Ink.text2)
+        .padding(.horizontal, 8)
+        .frame(height: 22)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder
@@ -521,7 +522,7 @@ struct StatementMappingEditor: View {
                     set: { action.wrappedValue = action.wrappedValue.withCounterWallet($0) }
                 ),
                 options: [nil] + model.counterWallets.map { Optional($0.id) },
-                title: walletName
+                title: model.store.names.walletChoice
             )
         } else {
             Color.clear.frame(height: 1)
@@ -568,11 +569,6 @@ struct StatementMappingEditor: View {
                     model.addDescriptionRule()
                 } label: {
                     addRuleLabel
-                        .font(Face.label)
-                        .foregroundStyle(Ink.text2)
-                        .padding(.horizontal, 8)
-                        .frame(height: 22)
-                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .fixedSize()
@@ -767,7 +763,7 @@ struct DescriptionRuleEditor: View {
                 set: { wallet in update { $0.action = $0.action?.withCounterWallet(wallet) } }
             ),
             options: [nil] + model.counterWallets.map { Optional($0.id) },
-            title: walletName
+            title: model.store.names.walletChoice
         )
     }
 
@@ -822,11 +818,6 @@ struct DescriptionRuleEditor: View {
     /// "Keep the type" may well leave an entry, so it keeps the field.
     private var takesCategory: Bool {
         rule?.action.map(StatementImportModel.takesCategory) ?? true
-    }
-
-    private func walletName(_ id: Uuid?) -> String {
-        guard let id else { return String(localized: "Choose…") }
-        return model.store.wallets.first { $0.id == id }?.name ?? TransactionRow.placeholder
     }
 }
 

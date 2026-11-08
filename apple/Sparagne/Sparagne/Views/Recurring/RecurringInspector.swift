@@ -230,11 +230,12 @@ struct RecurringInspector: View {
             .background(RoundedRectangle(cornerRadius: 11).fill(Ink.accent.opacity(0.14)).padding(-3))
             .padding(3)
 
-            RecurringSegments(
+            SegmentedStrip(
                 options: [TransactionKind.expense, .income],
                 selection: $draft.kind,
                 label: Self.kindLabel,
-                name: String(localized: "Kind")
+                name: String(localized: "Kind"),
+                fixed: true
             )
             // A patch has no kind: once the template exists, the "…" menu
             // changes it, into a copy.
@@ -253,7 +254,7 @@ struct RecurringInspector: View {
     // MARK: - Dove
 
     private var whereGroup: some View {
-        let names = NameBook(snapshot: store.snapshot)
+        let names = store.names
         let wallets = store.wallets.count
         return FormGroup(String(localized: "Where")) {
             FormRow(String(localized: "Wallet")) {

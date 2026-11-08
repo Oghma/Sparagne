@@ -39,26 +39,26 @@ struct CategoryUsageTests {
 
     @Test("A net cap fills with the balance")
     func netCap() throws {
-        let fill = EnvelopeCapFill.fraction(mode: .netCapped(cap: 300_000), balance: 124_000, incomeTotal: 900_000)
+        let fill = FundGauge(id: "", name: "", mode: .netCapped(cap: 300_000), balance: 124_000, incomeTotal: 900_000)?.fraction
         #expect(abs(try #require(fill) - 124_000.0 / 300_000.0) < 1e-9)
     }
 
     @Test("An income cap fills with the cumulative income, or the balance without one")
     func incomeCap() throws {
-        let fill = EnvelopeCapFill.fraction(mode: .incomeCapped(cap: 1_000_000), balance: 680_000, incomeTotal: 250_000)
+        let fill = FundGauge(id: "", name: "", mode: .incomeCapped(cap: 1_000_000), balance: 680_000, incomeTotal: 250_000)?.fraction
         #expect(abs(try #require(fill) - 0.25) < 1e-9)
-        let fallback = EnvelopeCapFill.fraction(mode: .incomeCapped(cap: 1_000_000), balance: 680_000, incomeTotal: nil)
+        let fallback = FundGauge(id: "", name: "", mode: .incomeCapped(cap: 1_000_000), balance: 680_000, incomeTotal: nil)?.fraction
         #expect(abs(try #require(fallback) - 0.68) < 1e-9)
     }
 
     @Test("Over the cap the bar stops at full; overdrawn stops at empty")
     func clamps() {
-        #expect(EnvelopeCapFill.fraction(mode: .netCapped(cap: 100), balance: 250, incomeTotal: nil) == 1)
-        #expect(EnvelopeCapFill.fraction(mode: .netCapped(cap: 100), balance: -50, incomeTotal: nil) == 0)
+        #expect(FundGauge(id: "", name: "", mode: .netCapped(cap: 100), balance: 250, incomeTotal: nil)?.fraction == 1)
+        #expect(FundGauge(id: "", name: "", mode: .netCapped(cap: 100), balance: -50, incomeTotal: nil)?.fraction == 0)
     }
 
     @Test("No cap, no bar")
     func noCap() {
-        #expect(EnvelopeCapFill.fraction(mode: .unlimited, balance: 100, incomeTotal: nil) == nil)
+        #expect(FundGauge(id: "", name: "", mode: .unlimited, balance: 100, incomeTotal: nil)?.fraction == nil)
     }
 }

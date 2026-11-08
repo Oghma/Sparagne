@@ -9,6 +9,8 @@ struct SegmentedStrip<Option: Hashable>: View {
     let options: [Option]
     @Binding var selection: Option
     let label: (Option) -> String
+    /// What VoiceOver calls the strip, read as one group of its segments.
+    var name: String?
     /// At its own width whatever it is offered, for a strip in a table cell
     /// or a form row that would otherwise squeeze it.
     var fixed = false
@@ -16,6 +18,16 @@ struct SegmentedStrip<Option: Hashable>: View {
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
+        if let name {
+            strip
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(name)
+        } else {
+            strip
+        }
+    }
+
+    private var strip: some View {
         HStack(spacing: 1) {
             ForEach(options, id: \.self) { option in
                 let active = option == selection

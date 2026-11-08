@@ -130,15 +130,6 @@ final class CategoryCompletionModel {
 
 // MARK: - The cell
 
-/// Where the open list's cell is, for the grid to draw the list at.
-struct CategoryCompletionAnchor: PreferenceKey {
-    static let defaultValue: Anchor<CGRect>? = nil
-
-    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
-        value = value ?? nextValue()
-    }
-}
-
 /// The CATEGORY cell while it is typed into: typing opens the list, ↑↓ move
 /// in it, ↩ and ⇥ pick, esc closes it. With the list closed every key does
 /// what it does in the other cells (`cellKeys`): ↩ saves the cell, ⇥ and the
@@ -186,7 +177,7 @@ struct CategoryCell: View {
             // The whole row's height, so the grid can hang the list from the
             // row's bottom edge rather than from the text's.
             .frame(height: Metrics.rowHeight)
-            .anchorPreference(key: CategoryCompletionAnchor.self, value: .bounds) {
+            .anchorPreference(key: HangingListAnchor<CategoryCandidate>.self, value: .bounds) {
                 completion.list.owner == AnyHashable(key) ? $0 : nil
             }
     }
@@ -284,7 +275,7 @@ extension View {
                 completion.list.close()
             }
         }
-        .anchorPreference(key: CategoryCompletionAnchor.self, value: .bounds) {
+        .anchorPreference(key: HangingListAnchor<CategoryCandidate>.self, value: .bounds) {
             completion.list.owner == owner ? $0 : nil
         }
     }
@@ -298,7 +289,6 @@ extension View {
     ) -> some View {
         hangingList(
             completion.list,
-            anchor: CategoryCompletionAnchor.self,
             height: { CategoryCompletionList.height(for: $0) },
             inset: inset,
             placed: placed
@@ -405,11 +395,11 @@ extension View {
 
     /// An entry: the highlighted one is tinted with the accent rather than
     /// filled with it, so its text stays legible.
-    func floatingListRow(active: Bool) -> some View {
+    func floatingListRow(active: Bool, padding: CGFloat = 7) -> some View {
         font(Face.row)
             .lineLimit(1)
             .truncationMode(.tail)
-            .padding(.horizontal, 7)
+            .padding(.horizontal, padding)
             .frame(height: FloatingList.rowHeight)
             .background(active ? Ink.accent.opacity(0.14) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
             .contentShape(Rectangle())

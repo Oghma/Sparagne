@@ -5,21 +5,6 @@ import SparagneCore
 // like the rest of the window: the system segmented picker and date picker
 // are light-on-dark strangers on this ground.
 
-/// A form's choice as a `SegmentedStrip` at its own width, read to VoiceOver
-/// as one group called `name`.
-struct RecurringSegments<Option: Hashable>: View {
-    let options: [Option]
-    @Binding var selection: Option
-    let label: (Option) -> String
-    let name: String
-
-    var body: some View {
-        SegmentedStrip(options: options, selection: $selection, label: label, fixed: true)
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(name)
-    }
-}
-
 /// Quando, as both inspectors edit a `ScheduleDraft`: the cadence, "ogni [1]
 /// mese, il giorno [1]", Inizio and Fine, then the inspector's own `notes`.
 struct ScheduleEditor<Notes: View>: View {
@@ -31,11 +16,12 @@ struct ScheduleEditor<Notes: View>: View {
 
     var body: some View {
         FormGroup(String(localized: "When")) {
-            RecurringSegments(
+            SegmentedStrip(
                 options: cadences,
                 selection: $draft.cadence,
                 label: Self.cadenceLabel,
-                name: String(localized: "Frequency")
+                name: String(localized: "Frequency"),
+                fixed: true
             )
             .padding(.bottom, 2)
             FormRow(String(localized: "Repeat"), alignment: .firstTextBaseline) {
@@ -56,11 +42,12 @@ struct ScheduleEditor<Notes: View>: View {
             if showsEnd {
                 FormRow(String(localized: "End")) {
                     HStack(spacing: 8) {
-                        RecurringSegments(
+                        SegmentedStrip(
                             options: [false, true],
                             selection: $draft.hasEndDate,
                             label: { $0 ? String(localized: "On a day\u{2026}") : String(localized: "Never") },
-                            name: String(localized: "End")
+                            name: String(localized: "End"),
+                            fixed: true
                         )
                         if draft.hasEndDate {
                             DayField(label: String(localized: "End"), day: $draft.shownEndDate)

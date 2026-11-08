@@ -1,4 +1,5 @@
 import Foundation
+import SparagneCore
 
 /// Money as the ledger writes it (`€2.448,53`), fixed whatever the locale: the layout depends on it.
 enum LedgerMoney {
@@ -46,6 +47,15 @@ enum LedgerMoney {
         guard income > 0 else { return nil }
         guard savings >= -income else { return "< -100%" }
         return percent(savings, of: income, decimals: 0)
+    }
+
+    /// A money cell as the Setup tables and the first-run sheet read it:
+    /// `nil` when blank, what the core's parser makes of the trimmed text
+    /// otherwise.
+    nonisolated static func cell(_ text: String, currency: Currency) throws -> Int64? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return try parseMoney(text: trimmed, currency: currency)
     }
 
     /// `"12.50"`: the plain text `parseMoney` accepts, for a grid cell being

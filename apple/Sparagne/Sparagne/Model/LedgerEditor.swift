@@ -70,8 +70,7 @@ final class LedgerEditor {
     /// once. The row itself when nothing of it is waiting.
     func shown(_ row: TransactionRow) -> TransactionRow {
         guard let cells = saved[row.id], !cells.isEmpty, let store else { return row }
-        let names = NameBook(snapshot: store.snapshot)
-        return cells.values.reduce(row) { $0.applying($1.patch, names: names) }
+        return cells.values.reduce(row) { $0.applying($1.patch, names: store.names) }
     }
 
     // MARK: - The keys and the clicks

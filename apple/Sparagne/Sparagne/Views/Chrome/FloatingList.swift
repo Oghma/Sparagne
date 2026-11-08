@@ -155,20 +155,23 @@ extension View {
     }
 
     /// Entry `index` of `list`: the pointer highlights it, a click or
-    /// VoiceOver's press picks it. `selected` marks it for VoiceOver besides
-    /// the highlight.
+    /// VoiceOver's press picks it, or does `choose` for a list whose entries
+    /// run rather than fill a field (the palette's). `selected` marks it for
+    /// VoiceOver besides the highlight.
     func floatingListEntry<Item>(
         _ list: FloatingListModel<Item>,
         at index: Int,
         label: String,
-        selected: Bool = false
+        selected: Bool = false,
+        padding: CGFloat = 7,
+        choose: (() -> Void)? = nil
     ) -> some View {
         let active = index == list.selection
-        let choose: () -> Void = {
+        let choose = choose ?? {
             list.highlight(index)
             list.pick()
         }
-        return floatingListRow(active: active)
+        return floatingListRow(active: active, padding: padding)
             .onHover { inside in
                 if inside { list.highlight(index) }
             }
@@ -182,27 +185,26 @@ extension View {
     }
 
     /// `content`, `list` drawn `height(list.items)` tall, hung over this view
-    /// from the field `key` anchors while the list is open: from the field's
-    /// bottom edge, or from its top when there is no room below, one point
-    /// into the field as the canvas hangs it (`.ac`). For a view outside any
-    /// scroll view, so the list is never clipped by one, no later row covers
-    /// it, and a click on it is not a click on what is under it (in the
-    /// grid, one that would save the cell). `inset` moves the list along the
-    /// field's edge: a grid cell's starts three points in from the cell's
-    /// edge rather than from its padded text.
+    /// from the field its `HangingListAnchor` names while the list is open:
+    /// from the field's bottom edge, or from its top when there is no room
+    /// below, one point into the field as the canvas hangs it (`.ac`). For a
+    /// view outside any scroll view, so the list is never clipped by one, no
+    /// later row covers it, and a click on it is not a click on what is under
+    /// it (in the grid, one that would save the cell). `inset` moves the list
+    /// along the field's edge: a grid cell's starts three points in from the
+    /// cell's edge rather than from its padded text.
     ///
     /// `placed` hears where the list is, in this view's coordinates, and
     /// `nil` once it is gone: the grid lets a click there through to the list
     /// rather than saving the cell the list belongs to (`LedgerGrid`).
-    func hangingList<Key: PreferenceKey, Item, Content: View>(
+    func hangingList<Item, Content: View>(
         _ list: FloatingListModel<Item>,
-        anchor key: Key.Type,
         height: @escaping ([Item]) -> CGFloat,
         inset: CGFloat,
         placed: @escaping (CGRect?) -> Void,
         @ViewBuilder content: @escaping () -> Content
-    ) -> some View where Key.Value == Anchor<CGRect>? {
-        overlayPreferenceValue(key) { anchor in
+    ) -> some View {
+        overlayPreferenceValue(HangingListAnchor<Item>.self) { anchor in
             if let anchor, list.isOpen {
                 GeometryReader { proxy in
                     let field = proxy[anchor]
@@ -221,5 +223,16 @@ extension View {
                 }
             }
         }
+    }
+}
+
+/// Where the open list of `Item`s hangs from: the bounds of the cell that
+/// owns it, for `hangingList` to draw the list at. One key for each kind of
+/// list, so the CATEGORY list and the FLOW list each find their own cell.
+struct HangingListAnchor<Item>: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? { nil }
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = value ?? nextValue()
     }
 }

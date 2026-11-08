@@ -82,15 +82,6 @@ final class EnvelopeChoiceModel {
 
 // MARK: - The cell
 
-/// Where the open list's cell is, for the grid to draw the list at.
-struct EnvelopeChoiceAnchor: PreferenceKey {
-    static let defaultValue: Anchor<CGRect>? = nil
-
-    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
-        value = value ?? nextValue()
-    }
-}
-
 /// The ENVELOPE cell while it is typed into: it opens the list as it becomes
 /// a field. ↑↓ move in the list, ↩ and ⇥ pick, esc closes it; typing narrows
 /// it. With the list closed every key does what it does in the other cells
@@ -171,7 +162,7 @@ struct EnvelopeSelectCell: View {
         // The whole row's height, so the grid can hang the list from the
         // row's bottom edge rather than from the text's.
         .frame(height: Metrics.rowHeight)
-        .anchorPreference(key: EnvelopeChoiceAnchor.self, value: .bounds) { isOwner ? $0 : nil }
+        .anchorPreference(key: HangingListAnchor<EnvelopeChoice>.self, value: .bounds) { isOwner ? $0 : nil }
     }
 
     private var isOwner: Bool { choices.list.owner == AnyHashable(key) }

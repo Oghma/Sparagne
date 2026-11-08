@@ -12,7 +12,7 @@ struct DueRecurringCard: View {
 
     var body: some View {
         let periods = store.duePeriods
-        let names = NameBook(snapshot: store.snapshot)
+        let names = store.names
         VStack(alignment: .leading, spacing: 0) {
             CardHeading(title: String(localized: "To confirm"), count: periods.isEmpty ? nil : periods.count) {
                 if store.canWrite, !periods.isEmpty {

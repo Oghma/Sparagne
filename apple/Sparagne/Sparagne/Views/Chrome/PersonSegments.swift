@@ -15,10 +15,9 @@ struct PersonSegments: View {
             SegmentedStrip(
                 options: [nil] + store.peopleInRows.map(Optional.some),
                 selection: $store.person,
-                label: { $0 ?? String(localized: "Everyone") }
+                label: { $0 ?? String(localized: "Everyone") },
+                name: String(localized: "Person")
             )
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(String(localized: "Person"))
         }
     }
 }

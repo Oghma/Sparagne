@@ -35,7 +35,7 @@ struct AllocationPlanTable: View {
     @FocusState private var focus: PlanFocus?
 
     var body: some View {
-        let names = NameBook(snapshot: store.snapshot)
+        let names = store.names
         let matched = AllocationPreviewMatch.lines(lines, in: preview)
         Panel(padding: 0) {
             VStack(alignment: .leading, spacing: 0) {
@@ -191,7 +191,7 @@ struct AllocationPlanTable: View {
     /// Busta: a menu of the envelopes a line may take
     /// (`AllocationLineDraft.offered`).
     private func envelopeMenu(draft: Binding<AllocationLineDraft>, key: Uuid?, placeholder: String) -> some View {
-        let names = NameBook(snapshot: store.snapshot)
+        let names = store.names
         let offered = AllocationLineDraft.offered(store.flows, lines: lines, keeping: key)
         let chosen = draft.wrappedValue.flowId.flatMap { names.flow($0) }
         return Menu {
@@ -230,7 +230,7 @@ struct AllocationPlanTable: View {
         let kind = draft.wrappedValue.kind
         let cap = draft.wrappedValue.cap(in: store.snapshot?.flows ?? [])
         return HStack(spacing: 6) {
-            RecurringSegments(
+            SegmentedStrip(
                 options: AllocationRuleKind.allCases,
                 selection: Binding(
                     get: { kind },
@@ -240,7 +240,8 @@ struct AllocationPlanTable: View {
                     }
                 ),
                 label: AllocationText.kind,
-                name: String(localized: "Rule")
+                name: String(localized: "Rule"),
+                fixed: true
             )
             if kind.takesValue {
                 TextField(String(localized: "Amount or percentage"), text: draft.value, prompt: Text(verbatim: ""))

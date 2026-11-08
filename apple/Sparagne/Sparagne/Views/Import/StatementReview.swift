@@ -30,7 +30,7 @@ struct StatementReview: View {
             header
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    let names = NameBook(snapshot: model.store.snapshot)
+                    let names = model.store.names
                     let rows = model.preview?.rows ?? []
                     let routes = StatementImportModel.pairedRoutes(rows, names: names)
                     ForEach(rows, id: \.line) { row in
@@ -349,7 +349,7 @@ private struct StatementReviewRow: View {
             Text(verbatim: route).foregroundStyle(Ink.text3).help(route)
         } else if row.status == .matchedTransfer, let existing = row.existing {
             let other = existing.fromId == model.walletId ? existing.toId : existing.fromId
-            Text(verbatim: "\u{21C4} \(walletName(other))").foregroundStyle(Ink.text3)
+            Text(verbatim: "\u{21C4} \(names.walletChoice(other))").foregroundStyle(Ink.text3)
         } else if StatementImportModel.takesAction(row), StatementActionChoice(action).isTransfer {
             FormPicker(
                 label: String(localized: "Wallet"),
@@ -358,9 +358,9 @@ private struct StatementReviewRow: View {
                     set: { model.setAction(action.withCounterWallet($0), for: row) }
                 ),
                 options: [nil] + model.counterWallets.map { Optional($0.id) },
-                title: walletName,
+                title: names.walletChoice,
                 boxed: false,
-                value: action.counterWalletId.map { "\u{21C4} \(walletName($0))" } ?? walletName(nil),
+                value: action.counterWalletId.map { "\u{21C4} \(names.walletChoice($0))" } ?? names.walletChoice(nil),
                 tint: action.counterWalletId == nil ? Ink.text2 : ink
             )
         } else if StatementImportModel.takesCategory(row) {
@@ -388,11 +388,6 @@ private struct StatementReviewRow: View {
         } else {
             Text(verbatim: row.category ?? row.matchedCategory ?? "").foregroundStyle(Ink.text3)
         }
-    }
-
-    private func walletName(_ id: Uuid?) -> String {
-        guard let id else { return String(localized: "Choose…") }
-        return names.wallet(id) ?? TransactionRow.placeholder
     }
 
     // MARK: Envelope

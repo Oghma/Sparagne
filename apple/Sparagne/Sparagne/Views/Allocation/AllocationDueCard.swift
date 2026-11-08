@@ -31,7 +31,7 @@ struct AllocationDueCard: View {
     // MARK: - A period due
 
     private func dueCard(plan: AllocationPlanView, pending: PendingAllocation) -> some View {
-        let names = NameBook(snapshot: store.snapshot)
+        let names = store.names
         return VStack(alignment: .leading, spacing: 0) {
             header(pending)
             HStack(alignment: .top, spacing: 16) {

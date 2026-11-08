@@ -382,25 +382,10 @@ struct CommandPaletteList: View {
     }
 
     private func row(index: Int, action: PaletteAction) -> some View {
-        let active = index == model.list.selection
-        return Text(action.title)
-            .font(Face.row)
+        Text(action.title)
             .foregroundStyle(Ink.text)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: Metrics.rowHeight)
-            .background(active ? Ink.accent.opacity(0.14) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
-            .contentShape(Rectangle())
-            .onHover { inside in
-                if inside { model.list.highlight(index) }
-            }
-            .onTapGesture { activate(index) }
-            .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
-            // A tap gesture is not an action VoiceOver can press: the row
-            // says it is a button, so it has to act like one.
-            .accessibilityAction { activate(index) }
+            .floatingListEntry(model.list, at: index, label: action.title, padding: 10) { activate(index) }
     }
 
     /// A click on a row, or VoiceOver pressing it: the entry runs as ↩ would
