@@ -1,0 +1,222 @@
+{
+  "%lld active loans": {
+    "en": {"one": "%lld active loan", "other": "%lld active loans"},
+    "it": {"one": "%lld prestito attivo", "other": "%lld prestiti attivi"}
+  },
+  "%lld events": {
+    "en": {"one": "%lld event", "other": "%lld events"},
+    "it": {"one": "%lld evento", "other": "%lld eventi"}
+  },
+  "%lld installments": {
+    "en": {"one": "%lld installment", "other": "%lld installments"},
+    "it": {"one": "%lld rata", "other": "%lld rate"}
+  },
+  "%lld installments not recorded in the ledger": {
+    "en": {"one": "%lld installment not recorded in the ledger", "other": "%lld installments not recorded in the ledger"},
+    "it": {"one": "%lld rata non registrata nel Mastro", "other": "%lld rate non registrate nel Mastro"}
+  },
+  "%lld loans": {
+    "en": {"one": "%lld loan", "other": "%lld loans"},
+    "it": {"one": "%lld prestito", "other": "%lld prestiti"}
+  },
+  "%lld monthly installments": {
+    "en": {"one": "%lld monthly installment", "other": "%lld monthly installments"},
+    "it": {"one": "%lld rata mensile", "other": "%lld rate mensili"}
+  },
+  "%lld months": {
+    "en": {"one": "%lld month", "other": "%lld months"},
+    "it": {"one": "%lld mese", "other": "%lld mesi"}
+  },
+  "%lld years": {
+    "en": {"one": "%lld year", "other": "%lld years"},
+    "it": {"one": "%lld anno", "other": "%lld anni"}
+  },
+  "%lld of %lld": {"en": "%1$lld of %2$lld", "it": "%1$lld di %2$lld"},
+  "%@ of the amount": {"en": "%@ of the amount", "it": "%@ dell'importo"},
+  "%@ on %@": {"en": "%1$@ on %2$@", "it": "%1$@ il %2$@"},
+  "%@ today": {"en": "%@ today", "it": "%@ oggi"},
+  "%@ · amount and penalty": {"en": "%@ · amount and penalty", "it": "%@ · importo e penale"},
+  "%@ · remaining debt %@ on %@, after the installment.": {
+    "en": "%1$@ · remaining debt %2$@ on %3$@, after the installment.",
+    "it": "%1$@ · debito residuo %2$@ al %3$@, dopo la rata."
+  },
+  "%@ · remaining debt %@ on %@.": {
+    "en": "%1$@ · remaining debt %2$@ on %3$@.",
+    "it": "%1$@ · debito residuo %2$@ al %3$@."
+  },
+  "A balloon of %@ is left for the last installment.": {
+    "en": "A balloon of %@ is left for the last installment.",
+    "it": "Resta una maxi-rata finale di %@."
+  },
+  "A monthly expense of %@ that follows the schedule of %@.": {
+    "en": "A monthly expense of %1$@ that follows the schedule of %2$@.",
+    "it": "Un'uscita mensile di %1$@ che segue il piano di %2$@."
+  },
+  "A monthly expense that follows the schedule of %@.": {
+    "en": "A monthly expense that follows the schedule of %@.",
+    "it": "Un'uscita mensile che segue il piano di %@."
+  },
+  "APR": {"en": "APR", "it": "TAEG"},
+  "Add a loan or a mortgage to follow its debt: the bank charges the installments, Sparagne keeps count of what is left.": {
+    "en": "Add a loan or a mortgage to follow its debt: the bank charges the installments, Sparagne keeps count of what is left.",
+    "it": "Aggiungi un prestito o un mutuo per seguirne il debito: la banca addebita le rate, Sparagne tiene il conto di quanto resta."
+  },
+  "Add event": {"en": "Add event", "it": "Aggiungi evento"},
+  "Add event…": {"en": "Add event…", "it": "Aggiungi evento…"},
+  "All of it: %@": {"en": "All of it: %@", "it": "Tutto il debito: %@"},
+  "Also record the expense in the ledger": {"en": "Also record the expense in the ledger", "it": "Registra anche l'uscita nel Mastro"},
+  "Amortization schedule": {"en": "Amortization schedule", "it": "Piano d'ammortamento"},
+  "Amortization schedule…": {"en": "Amortization schedule…", "it": "Piano d'ammortamento…"},
+  "An early repayment was larger than the debt and was cut to it.": {
+    "en": "An early repayment was larger than the debt and was cut to it.",
+    "it": "Un'estinzione superava il debito ed è stata ridotta al residuo."
+  },
+  "An event falls after the end of the loan.": {"en": "An event falls after the end of the loan.", "it": "Un evento cade dopo la fine del prestito."},
+  "As in the bank's letter": {"en": "As in the bank's letter", "it": "Come da lettera della banca"},
+  "As in the contract": {"en": "As in the contract", "it": "Come da contratto"},
+  "As of today": {"en": "As of today", "it": "A oggi"},
+  "Capital": {"en": "Capital", "it": "Capitale"},
+  "Capital repaid": {"en": "Capital repaid", "it": "Capitale restituito"},
+  "Computed": {"en": "Computed", "it": "Calcolata"},
+  "Create loan": {"en": "Create loan", "it": "Crea prestito"},
+  "Create recurring entry": {"en": "Create recurring entry", "it": "Crea ricorrenza"},
+  "Create recurring entry…": {"en": "Create recurring entry…", "it": "Crea ricorrenza…"},
+  "Current rate": {"en": "Current rate", "it": "TAN attuale"},
+  "Due": {"en": "Due", "it": "Scadenza"},
+  "Duration": {"en": "Duration", "it": "Durata"},
+  "Early repayment": {"en": "Early repayment", "it": "Estinzione parziale"},
+  "Early repayments": {"en": "Early repayments", "it": "Estinzioni"},
+  "Edit loan": {"en": "Edit loan", "it": "Modifica prestito"},
+  "Edit…": {"en": "Edit…", "it": "Modifica…"},
+  "Estimate: the nominal rate is worked out without fees. If the bank states it, choose Nominal for the exact installment.": {
+    "en": "Estimate: the nominal rate is worked out without fees. If the bank states it, choose Nominal for the exact installment.",
+    "it": "Stima: il TAN si ricava senza spese. Se la banca lo indica, scegli TAN per avere la rata esatta."
+  },
+  "Event": {"en": "Event", "it": "Evento"},
+  "Events": {"en": "Events", "it": "Eventi"},
+  "Extra interest": {"en": "Extra interest", "it": "Interessi in più"},
+  "Fee per installment": {"en": "Fee per installment", "it": "Spese per rata"},
+  "Fees": {"en": "Fees", "it": "Spese"},
+  "First installment": {"en": "First installment", "it": "Prima rata"},
+  "Fixed rate": {"en": "Fixed rate", "it": "Tasso fisso"},
+  "From installment %lld on, the installment does not cover the interest: the debt never goes down.": {
+    "en": "From installment %lld on, the installment does not cover the interest: the debt never goes down.",
+    "it": "Dalla rata %lld la rata non copre gli interessi: il debito non scende mai."
+  },
+  "Give the loan a name": {"en": "Give the loan a name", "it": "Dai un nome al prestito"},
+  "Installment": {"en": "Installment", "it": "Rata"},
+  "Interest": {"en": "Interest", "it": "Interessi"},
+  "Interest over the whole schedule plus %@ of fees and penalties.": {
+    "en": "Interest over the whole schedule plus %@ of fees and penalties.",
+    "it": "Interessi di tutto il piano più %@ di spese e penali."
+  },
+  "Interest over the whole schedule plus the upfront fees of %@.": {
+    "en": "Interest over the whole schedule plus the upfront fees of %@.",
+    "it": "Interessi di tutto il piano più le spese iniziali di %@."
+  },
+  "Interest over the whole schedule.": {"en": "Interest over the whole schedule.", "it": "Gli interessi di tutto il piano."},
+  "Interest paid": {"en": "Interest paid", "it": "Interessi pagati"},
+  "Interest saved": {"en": "Interest saved", "it": "Interessi risparmiati"},
+  "Interest to pay": {"en": "Interest to pay", "it": "Interessi da pagare"},
+  "Its amount and end follow the schedule from now on, what was typed in it included.": {
+    "en": "Its amount and end follow the schedule from now on, what was typed in it included.",
+    "it": "D'ora in poi importo e fine seguono il piano, anche se scritti a mano."
+  },
+  "Last installment": {"en": "Last installment", "it": "Ultima rata"},
+  "Link to an existing one": {"en": "Link to an existing one", "it": "Collega a una esistente"},
+  "Link…": {"en": "Link…", "it": "Collega…"},
+  "Liquidity": {"en": "Liquidity", "it": "Liquidità"},
+  "Loans and mortgages": {"en": "Loans and mortgages", "it": "Prestiti e mutui"},
+  "Lower the installment": {"en": "Lower the installment", "it": "Riduci la rata"},
+  "Net worth": {"en": "Net worth", "it": "Patrimonio netto"},
+  "New Loan…": {"en": "New Loan…", "it": "Nuovo prestito…"},
+  "New end": {"en": "New end", "it": "Nuova fine"},
+  "New installment": {"en": "New installment", "it": "Nuova rata"},
+  "New loan": {"en": "New loan", "it": "Nuovo prestito"},
+  "New loan…": {"en": "New loan…", "it": "Nuovo prestito…"},
+  "New rate": {"en": "New rate", "it": "Nuovo TAN"},
+  "No expense template to link": {"en": "No expense template to link", "it": "Nessuna ricorrenza in uscita da collegare"},
+  "No loans": {"en": "No loans", "it": "Nessun prestito"},
+  "No rate changes or early repayments.": {"en": "No rate changes or early repayments.", "it": "Nessun cambio tasso né estinzione."},
+  "No.": {"en": "No.", "it": "N°"},
+  "Payment": {"en": "Payment", "it": "Pagamento"},
+  "Penalties": {"en": "Penalties", "it": "Penali"},
+  "Penalty": {"en": "Penalty", "it": "Penale"},
+  "Progress": {"en": "Progress", "it": "Avanzamento"},
+  "Rate change": {"en": "Rate change", "it": "Cambio tasso"},
+  "Recorded in the ledger": {"en": "Recorded in the ledger", "it": "Registrate nel Mastro"},
+  "Remaining debt": {"en": "Remaining debt", "it": "Debito residuo"},
+  "Remaining debt over time": {"en": "Remaining debt over time", "it": "Debito residuo nel tempo"},
+  "Shorten the term": {"en": "Shorten the term", "it": "Riduci la durata"},
+  "Terms": {"en": "Terms", "it": "Termini"},
+  "The amortization schedule follows from the terms: the bank charges the installments itself, Sparagne keeps count of the debt.": {
+    "en": "The amortization schedule follows from the terms: the bank charges the installments itself, Sparagne keeps count of the debt.",
+    "it": "Il piano d'ammortamento si calcola dai termini: la banca addebita da sola, Sparagne tiene il conto del debito."
+  },
+  "The recurring entry «%@» goes to %@ and ends on %@.": {
+    "en": "The recurring entry «%1$@» goes to %2$@ and ends on %3$@.",
+    "it": "La ricorrenza «%1$@» passa a %2$@ e finisce il %3$@."
+  },
+  "The recurring entry «%@» stays at %@ and ends on %@.": {
+    "en": "The recurring entry «%1$@» stays at %2$@ and ends on %3$@.",
+    "it": "La ricorrenza «%1$@» resta a %2$@ e finisce il %3$@."
+  },
+  "The schedule could not be worked out.": {"en": "The schedule could not be worked out.", "it": "Il piano non si può calcolare."},
+  "Total cost": {"en": "Total cost", "it": "Costo totale"},
+  "Total cost of credit": {"en": "Total cost of credit", "it": "Costo totale del credito"},
+  "Total interest": {"en": "Total interest", "it": "Interessi totali"},
+  "Unlink": {"en": "Unlink", "it": "Scollega"},
+  "Upfront fees": {"en": "Upfront fees", "it": "Spese iniziali"},
+  "Variable rate": {"en": "Variable rate", "it": "Tasso variabile"},
+  "Wealth as of today": {"en": "Wealth as of today", "it": "Patrimonio a oggi"},
+  "With «%@» the end stays %@, the installment goes down to %@ and the interest saved is %@.": {
+    "en": "With «%1$@» the end stays %2$@, the installment goes down to %3$@ and the interest saved is %4$@.",
+    "it": "Con «%1$@» la fine resta %2$@, la rata scende a %3$@ e gli interessi risparmiati sono %4$@."
+  },
+  "With «%@» the installment stays %@, the loan ends on %@ and the interest saved is %@.": {
+    "en": "With «%1$@» the installment stays %2$@, the loan ends on %3$@ and the interest saved is %4$@.",
+    "it": "Con «%1$@» la rata resta %2$@, il prestito finisce il %3$@ e gli interessi risparmiati sono %4$@."
+  },
+  "Without a recurring entry the installments are yours to record.": {
+    "en": "Without a recurring entry the installments are yours to record.",
+    "it": "Senza una ricorrenza le rate le registri tu."
+  },
+  "a new one, %@ a month": {"en": "a new one, %@ a month", "it": "una nuova, %@ al mese"},
+  "a new one, monthly": {"en": "a new one, monthly", "it": "una nuova, mensile"},
+  "also creates the recurring entry «%@»": {"en": "also creates the recurring entry «%@»", "it": "crea anche la ricorrenza «%@»"},
+  "application, survey, substitute tax": {"en": "application, survey, substitute tax", "it": "istruttoria, perizia, imposta sostitutiva"},
+  "before: %@": {"en": "before: %@", "it": "prima: %@"},
+  "collection fee, if the bank charges it": {"en": "collection fee, if the bank charges it", "it": "incasso rata, se la banca lo addebita"},
+  "estimate": {"en": "estimate", "it": "stima"},
+  "figures as of today, %@ · the tab ignores the month and the person": {
+    "en": "figures as of today, %@ · the tab ignores the month and the person",
+    "it": "cifre a oggi, %@ · la scheda ignora mese e persona"
+  },
+  "installment %@": {"en": "installment %@", "it": "rata %@"},
+  "installments a month": {"en": "installments a month", "it": "rate al mese"},
+  "interest and fees": {"en": "interest and fees", "it": "interessi e spese"},
+  "liquidity − debt": {"en": "liquidity − debt", "it": "liquidità − debito"},
+  "loan.archived": {"en": "archived", "it": "archiviato"},
+  "loan.category": {"en": "Mortgage", "it": "Mutuo"},
+  "loan.column.rate": {"en": "Rate", "it": "TAN"},
+  "loan.mode": {"en": "Mode", "it": "Modalità"},
+  "loan.payment.none": {"en": "None", "it": "Nessuna"},
+  "loan.recurring": {"en": "Recurring entry", "it": "Ricorrenza"},
+  "loan.recurring.none": {"en": "none", "it": "nessuna"},
+  "loan.taeg": {"en": "APR", "it": "TAEG"},
+  "loan.tan": {"en": "Nominal", "it": "TAN"},
+  "paid off": {"en": "paid off", "it": "estinto"},
+  "penalty %@": {"en": "penalty %@", "it": "penale %@"},
+  "plus %@ of fees": {"en": "plus %@ of fees", "it": "più %@ di spese"},
+  "recurring entry archived — unlink it or link another": {
+    "en": "recurring entry archived — unlink it or link another",
+    "it": "ricorrenza in archivio — scollega o collega un'altra"
+  },
+  "the amount follows the schedule": {"en": "the amount follows the schedule", "it": "l'importo segue il piano"},
+  "then every month, on day %lld": {"en": "then every month, on day %lld", "it": "poi ogni mese, il giorno %lld"},
+  "unchanged": {"en": "unchanged", "it": "invariata"},
+  "variable": {"en": "variable", "it": "variabile"},
+  "with the fees": {"en": "with the fees", "it": "con le spese"},
+  "worked out from the rate": {"en": "worked out from the rate", "it": "calcolata sul tasso"},
+  "you record the installments": {"en": "you record the installments", "it": "le rate le registri tu"}
+}

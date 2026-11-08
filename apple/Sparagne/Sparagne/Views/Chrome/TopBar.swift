@@ -70,8 +70,8 @@ struct TopBar: View {
     }
 
     /// What the tab on screen adds: a row on the Riepilogo and the Mastro, a
-    /// template on the Ricorrenze, a one-off move on the Riparto; the Setup
-    /// tab adds in its tables' own empty lines. Nothing for an account that
+    /// template on the Ricorrenze, a one-off move on the Riparto, a loan on
+    /// the Patrimonio; the Setup tab adds in its tables' own empty lines. Nothing for an account that
     /// only reads the vault, which could not save what it typed.
     ///
     /// Add opens the quick-add line (⌘K), as File ▸ Quick Add does; the
@@ -96,7 +96,11 @@ struct TopBar: View {
                 TabActionButton(symbol: "arrow.left.arrow.right", title: String(localized: "Move\u{2026}")) {
                     NotificationCenter.default.post(name: .moveBetweenFlows, object: nil)
                 }
-            case .wealth, .setup:
+            case .wealth:
+                TabActionButton(symbol: "plus", title: String(localized: "New loan\u{2026}")) {
+                    NotificationCenter.default.post(name: .newLoan, object: nil)
+                }
+            case .setup:
                 EmptyView()
             }
         }

@@ -225,6 +225,12 @@ extension CommandPaletteModel {
                 String(localized: "Move Between Wallets\u{2026}"),
                 ["move", "transfer", "sposta", "trasferisci", "wallet", "portafogli", "conto", "contanti", "prelievo"]
             ))
+            actions.append(post(
+                .newLoan,
+                "loan.new",
+                String(localized: "New Loan\u{2026}"),
+                ["loan", "mortgage", "prestito", "mutuo", "finanziamento", "debito", "patrimonio", "wealth"]
+            ))
             actions.append(contentsOf: kindActions(store: store))
         }
 

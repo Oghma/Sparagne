@@ -14,9 +14,23 @@ enum SheetStatus {
         }
     }
 
-    /// The Patrimonio's figures. Prepared as a contract: nothing yet.
+    /// `2 prestiti · rate al mese 1.039,80`: the loans still being repaid,
+    /// and what their next installments take out of the wallets, fees
+    /// included (`WealthFigures`). Nothing to say without one.
     private static func wealth(_ store: AppStore) -> [StatusItem] {
-        []
+        let figures = WealthFigures.build(
+            wallets: store.snapshot?.wallets ?? [],
+            loans: store.loans,
+            overview: store.loanOverview
+        )
+        guard figures.activeLoans > 0 else { return [] }
+        return [
+            StatusItem(label: String(localized: "\(figures.activeLoans) loans")),
+            StatusItem(
+                label: String(localized: "installments a month"),
+                value: LedgerMoney.bare(figures.monthlyInstallments)
+            ),
+        ]
     }
 
     /// `Media 47,69 · Conteggio 13 · Somma 619,94`, opened by "Selezione:"
