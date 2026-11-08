@@ -238,7 +238,8 @@ pub struct LoanSchedule {
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct LoanOverview {
     pub loan_id: Uuid,
-    /// The debt after every installment due on or before the day.
+    /// The debt after every installment due on or before the day and every
+    /// early repayment dated on or before it.
     pub residual: i64,
     /// Installments due on or before the day.
     pub paid_count: u32,
@@ -247,15 +248,19 @@ pub struct LoanOverview {
     /// The next installment after the day, with its fee.
     pub next_due: Option<NaiveDate>,
     pub next_payment: Option<i64>,
+    /// The principal less `residual`: the installments' capital and the
+    /// early repayments.
     pub capital_repaid: i64,
+    /// The interest of the installments due on or before the day.
     pub interest_paid: i64,
+    /// The interest of the installments due after it.
     pub interest_left: i64,
     /// The last installment's due date.
     pub end_date: Option<NaiveDate>,
     pub taeg_ppm: Option<u32>,
     pub total_cost: i64,
-    /// Due installments on or after `first_due` the linked template recorded
-    /// with a live transaction; `None` without a linked template.
+    /// The periods from `first_due` to the day the linked template recorded
+    /// with a transaction still live; `None` without a linked template.
     pub registered_count: Option<u32>,
     pub warnings: Vec<LoanWarning>,
 }

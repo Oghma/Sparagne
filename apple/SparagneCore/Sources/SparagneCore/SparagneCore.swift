@@ -3642,7 +3642,8 @@ public func FfiConverterTypeLoanEventView_lower(_ value: LoanEventView) -> RustB
 public struct LoanOverview: Equatable, Hashable, Codable {
     public var loanId: Uuid
     /**
-     * The debt after every installment due on or before the day.
+     * The debt after every installment due on or before the day and every
+     * early repayment dated on or before it.
      */
     public var residual: Int64
     /**
@@ -3658,8 +3659,18 @@ public struct LoanOverview: Equatable, Hashable, Codable {
      */
     public var nextDue: NaiveDate?
     public var nextPayment: Int64?
+    /**
+     * The principal less `residual`: the installments' capital and the
+     * early repayments.
+     */
     public var capitalRepaid: Int64
+    /**
+     * The interest of the installments due on or before the day.
+     */
     public var interestPaid: Int64
+    /**
+     * The interest of the installments due after it.
+     */
     public var interestLeft: Int64
     /**
      * The last installment's due date.
@@ -3668,8 +3679,8 @@ public struct LoanOverview: Equatable, Hashable, Codable {
     public var taegPpm: UInt32?
     public var totalCost: Int64
     /**
-     * Due installments on or after `first_due` the linked template recorded
-     * with a live transaction; `None` without a linked template.
+     * The periods from `first_due` to the day the linked template recorded
+     * with a transaction still live; `None` without a linked template.
      */
     public var registeredCount: UInt32?
     public var warnings: [LoanWarning]
@@ -3678,7 +3689,8 @@ public struct LoanOverview: Equatable, Hashable, Codable {
     // declare one manually.
     public init(loanId: Uuid, 
         /**
-         * The debt after every installment due on or before the day.
+         * The debt after every installment due on or before the day and every
+         * early repayment dated on or before it.
          */residual: Int64, 
         /**
          * Installments due on or before the day.
@@ -3688,13 +3700,23 @@ public struct LoanOverview: Equatable, Hashable, Codable {
          */totalCount: UInt32, 
         /**
          * The next installment after the day, with its fee.
-         */nextDue: NaiveDate?, nextPayment: Int64?, capitalRepaid: Int64, interestPaid: Int64, interestLeft: Int64, 
+         */nextDue: NaiveDate?, nextPayment: Int64?, 
+        /**
+         * The principal less `residual`: the installments' capital and the
+         * early repayments.
+         */capitalRepaid: Int64, 
+        /**
+         * The interest of the installments due on or before the day.
+         */interestPaid: Int64, 
+        /**
+         * The interest of the installments due after it.
+         */interestLeft: Int64, 
         /**
          * The last installment's due date.
          */endDate: NaiveDate?, taegPpm: UInt32?, totalCost: Int64, 
         /**
-         * Due installments on or after `first_due` the linked template recorded
-         * with a live transaction; `None` without a linked template.
+         * The periods from `first_due` to the day the linked template recorded
+         * with a transaction still live; `None` without a linked template.
          */registeredCount: UInt32?, warnings: [LoanWarning]) {
         self.loanId = loanId
         self.residual = residual
