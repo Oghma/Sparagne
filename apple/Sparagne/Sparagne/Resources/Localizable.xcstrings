@@ -273,6 +273,22 @@
         }
       }
     },
+    "%@ of the amount": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ of the amount"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ dell'importo"
+          }
+        }
+      }
+    },
     "%@ of the cap": {
       "localizations": {
         "en": {
@@ -301,6 +317,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ del totale"
+          }
+        }
+      }
+    },
+    "%@ on %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ on %2$@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ il %2$@"
           }
         }
       }
@@ -369,6 +401,38 @@
         }
       }
     },
+    "%@ today": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ today"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ oggi"
+          }
+        }
+      }
+    },
+    "%@ · amount and penalty": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · amount and penalty"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · importo e penale"
+          }
+        }
+      }
+    },
     "%@ · due": {
       "localizations": {
         "en": {
@@ -401,6 +465,38 @@
         }
       }
     },
+    "%@ · remaining debt %@ on %@, after the installment.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · remaining debt %2$@ on %3$@, after the installment."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · debito residuo %2$@ al %3$@, dopo la rata."
+          }
+        }
+      }
+    },
+    "%@ · remaining debt %@ on %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · remaining debt %2$@ on %3$@."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · debito residuo %2$@ al %3$@."
+          }
+        }
+      }
+    },
     "%@, %@ of %@": {
       "localizations": {
         "en": {
@@ -429,6 +525,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@, mese futuro"
+          }
+        }
+      }
+    },
+    "%@: early repayment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: early repayment"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: estinzione parziale"
+          }
+        }
+      }
+    },
+    "%lld active loans": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld active loan"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld active loans"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld prestito attivo"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld prestiti attivi"
+                }
+              }
+            }
           }
         }
       }
@@ -593,6 +745,46 @@
         }
       }
     },
+    "%lld events": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld event"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld events"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld evento"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld eventi"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld flows": {
       "localizations": {
         "en": {
@@ -669,6 +861,222 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "%lld installments": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld installment"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld installments"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rata"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rate"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld installments not recorded in the ledger": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld installment not recorded in the ledger"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld installments not recorded in the ledger"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rata non registrata nel Mastro"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rate non registrate nel Mastro"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld loans": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld loan"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld loans"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld prestito"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld prestiti"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld monthly installments": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld monthly installment"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld monthly installments"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rata mensile"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rate mensili"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld months": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld month"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld months"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld mese"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld mesi"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld of %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld of %2$lld"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld di %2$lld"
           }
         }
       }
@@ -1393,6 +1801,46 @@
         }
       }
     },
+    "%lld years": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld year"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld years"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld anno"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld anni"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "-12.50 pizza #food @cash >groceries": {
       "localizations": {
         "en": {
@@ -1405,6 +1853,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "-12,50 pizza #cibo @contanti >spesa"
+          }
+        }
+      }
+    },
+    "A balloon of %@ is left for the last installment.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A balloon of %@ is left for the last installment."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resta una maxi-rata finale di %@."
           }
         }
       }
@@ -1457,6 +1921,54 @@
         }
       }
     },
+    "A loan lasts from 1 month to 50 years": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A loan lasts from 1 month to 50 years"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un prestito dura da 1 mese a 50 anni"
+          }
+        }
+      }
+    },
+    "A monthly expense of %@ that follows the schedule of %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A monthly expense of %1$@ that follows the schedule of %2$@."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un'uscita mensile di %1$@ che segue il piano di %2$@."
+          }
+        }
+      }
+    },
+    "A monthly expense that follows the schedule of %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A monthly expense that follows the schedule of %@."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un'uscita mensile che segue il piano di %@."
+          }
+        }
+      }
+    },
     "A percentage goes from 0,01 to 100": {
       "localizations": {
         "en": {
@@ -1469,6 +1981,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Una percentuale va da 0,01 a 100"
+          }
+        }
+      }
+    },
+    "A rate change falls between the first and the last installment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A rate change falls between the first and the last installment"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un cambio di tasso cade tra la prima e l'ultima rata"
+          }
+        }
+      }
+    },
+    "A rate goes from 0 to 50%": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A rate goes from 0 to 50%"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il tasso va da 0 al 50%"
           }
         }
       }
@@ -1617,6 +2161,22 @@
         }
       }
     },
+    "APR": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "APR"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TAEG"
+          }
+        }
+      }
+    },
     "Account": {
       "localizations": {
         "en": {
@@ -1745,6 +2305,22 @@
         }
       }
     },
+    "Add a loan or a mortgage to follow its debt: the bank charges the installments, Sparagne keeps count of what is left.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a loan or a mortgage to follow its debt: the bank charges the installments, Sparagne keeps count of what is left."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi un prestito o un mutuo per seguirne il debito: la banca addebita le rate, Sparagne tiene il conto di quanto resta."
+          }
+        }
+      }
+    },
     "Add a wallet to move money to": {
       "localizations": {
         "en": {
@@ -1773,6 +2349,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aggiungi alias"
+          }
+        }
+      }
+    },
+    "Add event": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add event"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi evento"
+          }
+        }
+      }
+    },
+    "Add event…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add event…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi evento…"
           }
         }
       }
@@ -1825,6 +2433,22 @@
         }
       }
     },
+    "Add loan event": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add loan event"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi evento al prestito"
+          }
+        }
+      }
+    },
     "Add refund": {
       "localizations": {
         "en": {
@@ -1869,6 +2493,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Alias"
+          }
+        }
+      }
+    },
+    "All of it: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All of it: %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tutto il debito: %@"
           }
         }
       }
@@ -1985,6 +2625,54 @@
         }
       }
     },
+    "Also record the expense in the ledger": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also record the expense in the ledger"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registra anche l'uscita nel Mastro"
+          }
+        }
+      }
+    },
+    "Amortization schedule": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Amortization schedule"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Piano d'ammortamento"
+          }
+        }
+      }
+    },
+    "Amortization schedule…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Amortization schedule…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Piano d'ammortamento…"
+          }
+        }
+      }
+    },
     "Amount": {
       "localizations": {
         "en": {
@@ -2061,6 +2749,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "È richiesto un importo"
+          }
+        }
+      }
+    },
+    "An early repayment falls on or before the last installment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An early repayment falls on or before the last installment"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un'estinzione parziale cade entro l'ultima rata"
+          }
+        }
+      }
+    },
+    "An early repayment was larger than the debt and was cut to it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An early repayment was larger than the debt and was cut to it."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un'estinzione superava il debito ed è stata ridotta al residuo."
+          }
+        }
+      }
+    },
+    "An event falls after the end of the loan.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An event falls after the end of the loan."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un evento cade dopo la fine del prestito."
           }
         }
       }
@@ -2209,6 +2945,22 @@
         }
       }
     },
+    "Archive loan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive loan"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivia prestito"
+          }
+        }
+      }
+    },
     "Archive recurring": {
       "localizations": {
         "en": {
@@ -2257,6 +3009,38 @@
         }
       }
     },
+    "As in the bank's letter": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "As in the bank's letter"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Come da lettera della banca"
+          }
+        }
+      }
+    },
+    "As in the contract": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "As in the contract"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Come da contratto"
+          }
+        }
+      }
+    },
     "As income": {
       "localizations": {
         "en": {
@@ -2269,6 +3053,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Come entrata"
+          }
+        }
+      }
+    },
+    "As of today": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "As of today"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A oggi"
           }
         }
       }
@@ -2541,6 +3341,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tetto"
+          }
+        }
+      }
+    },
+    "Capital": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Capital"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Capitale"
+          }
+        }
+      }
+    },
+    "Capital repaid": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Capital repaid"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Capitale restituito"
           }
         }
       }
@@ -3033,6 +3865,22 @@
         }
       }
     },
+    "Computed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Computed"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calcolata"
+          }
+        }
+      }
+    },
     "Confirm %lld matches": {
       "localizations": {
         "en": {
@@ -3233,6 +4081,22 @@
         }
       }
     },
+    "Create loan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create loan"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea prestito"
+          }
+        }
+      }
+    },
     "Create recurring": {
       "localizations": {
         "en": {
@@ -3245,6 +4109,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Crea ricorrenza"
+          }
+        }
+      }
+    },
+    "Create recurring entry": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create recurring entry"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea ricorrenza"
+          }
+        }
+      }
+    },
+    "Create recurring entry…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create recurring entry…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea ricorrenza…"
           }
         }
       }
@@ -3341,6 +4237,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Password attuale"
+          }
+        }
+      }
+    },
+    "Current rate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current rate"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TAN attuale"
           }
         }
       }
@@ -3865,6 +4777,22 @@
         }
       }
     },
+    "Due": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Due"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scadenza"
+          }
+        }
+      }
+    },
     "Duplicate": {
       "localizations": {
         "en": {
@@ -3913,6 +4841,22 @@
         }
       }
     },
+    "Duration": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duration"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Durata"
+          }
+        }
+      }
+    },
     "Each line becomes a transfer in the ledger, with the same note and date. All of them go through or none does: if one line cannot, nothing moves.": {
       "localizations": {
         "en": {
@@ -3925,6 +4869,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ogni riga diventa un trasferimento nel Mastro, con la stessa nota e la stessa data. Passano tutti o nessuno: se una riga non può passare, non si sposta niente."
+          }
+        }
+      }
+    },
+    "Early repayment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Early repayment"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estinzione parziale"
+          }
+        }
+      }
+    },
+    "Early repayments": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Early repayments"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estinzioni"
           }
         }
       }
@@ -4009,6 +4985,22 @@
         }
       }
     },
+    "Edit loan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit loan"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifica prestito"
+          }
+        }
+      }
+    },
     "Edit recurring": {
       "localizations": {
         "en": {
@@ -4057,6 +5049,22 @@
         }
       }
     },
+    "Edit…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifica…"
+          }
+        }
+      }
+    },
     "Enabled": {
       "localizations": {
         "en": {
@@ -4101,6 +5109,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fine"
+          }
+        }
+      }
+    },
+    "Estimate: the nominal rate is worked out without fees. If the bank states it, choose Nominal for the exact installment.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estimate: the nominal rate is worked out without fees. If the bank states it, choose Nominal for the exact installment."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stima: il TAN si ricava senza spese. Se la banca lo indica, scegli TAN per avere la rata esatta."
+          }
+        }
+      }
+    },
+    "Event": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Event"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Evento"
+          }
+        }
+      }
+    },
+    "Events": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Events"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eventi"
           }
         }
       }
@@ -4329,6 +5385,22 @@
         }
       }
     },
+    "Every installment of the loan is already due: there is nothing left to record": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every installment of the loan is already due: there is nothing left to record"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tutte le rate del prestito sono già scadute: non resta niente da registrare"
+          }
+        }
+      }
+    },
     "Every month on day %lld": {
       "localizations": {
         "en": {
@@ -4553,6 +5625,70 @@
         }
       }
     },
+    "Extra interest": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extra interest"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interessi in più"
+          }
+        }
+      }
+    },
+    "Fee per installment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fee per installment"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spese per rata"
+          }
+        }
+      }
+    },
+    "Fees": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fees"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spese"
+          }
+        }
+      }
+    },
+    "Fees cannot be below zero": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fees cannot be below zero"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le spese non possono essere sotto zero"
+          }
+        }
+      }
+    },
     "File": {
       "localizations": {
         "en": {
@@ -4597,6 +5733,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trova…"
+          }
+        }
+      }
+    },
+    "First installment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First installment"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prima rata"
           }
         }
       }
@@ -4725,6 +5877,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Entrate fisse"
+          }
+        }
+      }
+    },
+    "Fixed rate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fixed rate"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasso fisso"
           }
         }
       }
@@ -4913,6 +6081,22 @@
         }
       }
     },
+    "From installment %lld on, the installment does not cover the interest: the debt never goes down.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From installment %lld on, the installment does not cover the interest: the debt never goes down."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dalla rata %lld la rata non copre gli interessi: il debito non scende mai."
+          }
+        }
+      }
+    },
     "Gets": {
       "localizations": {
         "en": {
@@ -4925,6 +6109,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Riceve"
+          }
+        }
+      }
+    },
+    "Give the loan a name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Give the loan a name"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dai un nome al prestito"
           }
         }
       }
@@ -5305,6 +6505,134 @@
         }
       }
     },
+    "Installment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installment"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rata"
+          }
+        }
+      }
+    },
+    "Interest": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interest"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interessi"
+          }
+        }
+      }
+    },
+    "Interest over the whole schedule plus %@ of fees and penalties.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interest over the whole schedule plus %@ of fees and penalties."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interessi di tutto il piano più %@ di spese e penali."
+          }
+        }
+      }
+    },
+    "Interest over the whole schedule plus the upfront fees of %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interest over the whole schedule plus the upfront fees of %@."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interessi di tutto il piano più le spese iniziali di %@."
+          }
+        }
+      }
+    },
+    "Interest over the whole schedule.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interest over the whole schedule."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gli interessi di tutto il piano."
+          }
+        }
+      }
+    },
+    "Interest paid": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interest paid"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interessi pagati"
+          }
+        }
+      }
+    },
+    "Interest saved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interest saved"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interessi risparmiati"
+          }
+        }
+      }
+    },
+    "Interest to pay": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interest to pay"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interessi da pagare"
+          }
+        }
+      }
+    },
     "Interval": {
       "localizations": {
         "en": {
@@ -5449,6 +6777,22 @@
         }
       }
     },
+    "It records a loan's installments: unlink it from the loan first": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It records a loan's installments: unlink it from the loan first"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registra le rate di un prestito: prima scollegala dal prestito"
+          }
+        }
+      }
+    },
     "It was deleted, on this Mac or another, before the change reached it.": {
       "localizations": {
         "en": {
@@ -5461,6 +6805,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "È stata eliminata, su questo Mac o su un altro, prima che arrivasse il cambio."
+          }
+        }
+      }
+    },
+    "Its amount and end follow the schedule from now on, what was typed in it included.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Its amount and end follow the schedule from now on, what was typed in it included."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "D'ora in poi importo e fine seguono il piano, anche se scritti a mano."
           }
         }
       }
@@ -5605,6 +6965,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ultimo riparto"
+          }
+        }
+      }
+    },
+    "Last installment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last installment"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ultima rata"
           }
         }
       }
@@ -5833,6 +7209,86 @@
         }
       }
     },
+    "Link loan to recurring": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link loan to recurring"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collega prestito a ricorrenza"
+          }
+        }
+      }
+    },
+    "Link to an existing one": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link to an existing one"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collega a una esistente"
+          }
+        }
+      }
+    },
+    "Link…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collega…"
+          }
+        }
+      }
+    },
+    "Liquidity": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liquidity"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liquidità"
+          }
+        }
+      }
+    },
+    "Loans and mortgages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loans and mortgages"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prestiti e mutui"
+          }
+        }
+      }
+    },
     "Local only": {
       "localizations": {
         "en": {
@@ -5909,6 +7365,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abbassa gli importi per spostare"
+          }
+        }
+      }
+    },
+    "Lower the installment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lower the installment"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riduci la rata"
           }
         }
       }
@@ -6217,6 +7689,22 @@
         }
       }
     },
+    "More than the debt left on that date: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More than the debt left on that date: %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Più del debito residuo a quella data: %@"
+          }
+        }
+      }
+    },
     "Move": {
       "localizations": {
         "en": {
@@ -6465,6 +7953,22 @@
         }
       }
     },
+    "Name the loan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name the loan"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dai un nome al prestito"
+          }
+        }
+      }
+    },
     "Needs the other wallet": {
       "localizations": {
         "en": {
@@ -6497,6 +8001,22 @@
         }
       }
     },
+    "Net worth": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Net worth"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Patrimonio netto"
+          }
+        }
+      }
+    },
     "Never": {
       "localizations": {
         "en": {
@@ -6525,6 +8045,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nuova"
+          }
+        }
+      }
+    },
+    "New Loan…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Loan…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuovo prestito…"
           }
         }
       }
@@ -6625,6 +8161,22 @@
         }
       }
     },
+    "New end": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New end"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuova fine"
+          }
+        }
+      }
+    },
     "New flow…": {
       "localizations": {
         "en": {
@@ -6641,6 +8193,54 @@
         }
       }
     },
+    "New installment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New installment"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuova rata"
+          }
+        }
+      }
+    },
+    "New loan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New loan"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuovo prestito"
+          }
+        }
+      }
+    },
+    "New loan…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New loan…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuovo prestito…"
+          }
+        }
+      }
+    },
     "New password": {
       "localizations": {
         "en": {
@@ -6653,6 +8253,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nuova password"
+          }
+        }
+      }
+    },
+    "New rate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New rate"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuovo TAN"
           }
         }
       }
@@ -6929,6 +8545,22 @@
         }
       }
     },
+    "No expense template to link": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No expense template to link"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna ricorrenza in uscita da collegare"
+          }
+        }
+      }
+    },
     "No expenses this year": {
       "localizations": {
         "en": {
@@ -7005,6 +8637,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessuna entrata arrivata in Non allocato"
+          }
+        }
+      }
+    },
+    "No loans": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No loans"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun prestito"
           }
         }
       }
@@ -7089,6 +8737,22 @@
         }
       }
     },
+    "No rate changes or early repayments.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No rate changes or early repayments."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun cambio tasso né estinzione."
+          }
+        }
+      }
+    },
     "No recurring templates": {
       "localizations": {
         "en": {
@@ -7117,6 +8781,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessun server collegato"
+          }
+        }
+      }
+    },
+    "No template was made": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No template was made"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna ricorrenza creata"
           }
         }
       }
@@ -7185,6 +8865,22 @@
         }
       }
     },
+    "No.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "N°"
+          }
+        }
+      }
+    },
     "None": {
       "localizations": {
         "en": {
@@ -7213,6 +8909,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Non è un membro di questo vault"
+          }
+        }
+      }
+    },
+    "Not an amount: type it like 1.234,56": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not an amount: type it like 1.234,56"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non è un importo: scrivilo come 1.234,56"
           }
         }
       }
@@ -7793,6 +9505,54 @@
         }
       }
     },
+    "Payment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Payment"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pagamento"
+          }
+        }
+      }
+    },
+    "Penalties": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Penalties"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Penali"
+          }
+        }
+      }
+    },
+    "Penalty": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Penalty"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Penale"
+          }
+        }
+      }
+    },
     "Pending": {
       "localizations": {
         "en": {
@@ -7921,6 +9681,22 @@
         }
       }
     },
+    "Pick the recurring expense to link": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick the recurring expense to link"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scegli la ricorrenza da collegare"
+          }
+        }
+      }
+    },
     "Possible duplicate": {
       "localizations": {
         "en": {
@@ -8001,6 +9777,22 @@
         }
       }
     },
+    "Progress": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Progress"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avanzamento"
+          }
+        }
+      }
+    },
     "Quick Add": {
       "localizations": {
         "en": {
@@ -8045,6 +9837,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tasso"
+          }
+        }
+      }
+    },
+    "Rate change": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rate change"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambio tasso"
           }
         }
       }
@@ -8109,6 +9917,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Registrata da %@"
+          }
+        }
+      }
+    },
+    "Recorded in the ledger": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorded in the ledger"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registrate nel Mastro"
           }
         }
       }
@@ -8205,6 +10029,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Registrati"
+          }
+        }
+      }
+    },
+    "Remaining debt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remaining debt"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Debito residuo"
+          }
+        }
+      }
+    },
+    "Remaining debt over time": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remaining debt over time"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Debito residuo nel tempo"
           }
         }
       }
@@ -8333,6 +10189,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Togli la riga per spostare il resto."
+          }
+        }
+      }
+    },
+    "Remove loan event": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove loan event"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimuovi evento del prestito"
           }
         }
       }
@@ -8637,6 +10509,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ripristina flusso"
+          }
+        }
+      }
+    },
+    "Restore loan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore loan"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ripristina prestito"
           }
         }
       }
@@ -9365,6 +11253,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Condividi…"
+          }
+        }
+      }
+    },
+    "Shorten the term": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shorten the term"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riduci la durata"
           }
         }
       }
@@ -10185,6 +12089,22 @@
         }
       }
     },
+    "Terms": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terms"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Termini"
+          }
+        }
+      }
+    },
     "That action is not allowed": {
       "localizations": {
         "en": {
@@ -10297,6 +12217,54 @@
         }
       }
     },
+    "The TAN cannot be worked out from this TAEG": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The TAN cannot be worked out from this TAEG"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Da questo TAEG non si ricava il TAN"
+          }
+        }
+      }
+    },
+    "The amortization schedule follows from the terms: the bank charges the installments itself, Sparagne keeps count of the debt.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The amortization schedule follows from the terms: the bank charges the installments itself, Sparagne keeps count of the debt."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il piano d'ammortamento si calcola dai termini: la banca addebita da sola, Sparagne tiene il conto del debito."
+          }
+        }
+      }
+    },
+    "The amount must be above zero": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The amount must be above zero"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'importo deve essere sopra zero"
+          }
+        }
+      }
+    },
     "The bank’s category only picks one of yours with the same name or alias; it never creates one.": {
       "localizations": {
         "en": {
@@ -10341,6 +12309,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "La password attuale non è corretta."
+          }
+        }
+      }
+    },
+    "The early repayment was not recorded": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The early repayment was not recorded"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'estinzione parziale non è stata registrata"
           }
         }
       }
@@ -10549,6 +12533,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "L’anteprima non era aggiornata: non è stato scritto nulla. Controllala e importa di nuovo."
+          }
+        }
+      }
+    },
+    "The recurring entry «%@» goes to %@ and ends on %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The recurring entry «%1$@» goes to %2$@ and ends on %3$@."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La ricorrenza «%1$@» passa a %2$@ e finisce il %3$@."
+          }
+        }
+      }
+    },
+    "The recurring entry «%@» stays at %@ and ends on %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The recurring entry «%1$@» stays at %2$@ and ends on %3$@."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La ricorrenza «%1$@» resta a %2$@ e finisce il %3$@."
+          }
+        }
+      }
+    },
+    "The schedule could not be worked out.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The schedule could not be worked out."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il piano non si può calcolare."
           }
         }
       }
@@ -10821,6 +12853,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Questo file non è testo"
+          }
+        }
+      }
+    },
+    "This installment does not repay the amount in that time": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This installment does not repay the amount in that time"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questa rata non restituisce l'importo in quel tempo"
+          }
+        }
+      }
+    },
+    "This installment means a rate above 50%": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This installment means a rate above 50%"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questa rata vuol dire un tasso sopra il 50%"
           }
         }
       }
@@ -11265,6 +13329,54 @@
         }
       }
     },
+    "Total cost": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total cost"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Costo totale"
+          }
+        }
+      }
+    },
+    "Total cost of credit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total cost of credit"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Costo totale del credito"
+          }
+        }
+      }
+    },
+    "Total interest": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total interest"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interessi totali"
+          }
+        }
+      }
+    },
     "Total over the average month of expenses of the last twelve finished months: how long the money lasts with nothing coming in": {
       "localizations": {
         "en": {
@@ -11521,6 +13633,22 @@
         }
       }
     },
+    "Type how long the loan lasts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type how long the loan lasts"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrivi quanto dura il prestito"
+          }
+        }
+      }
+    },
     "Type something first": {
       "localizations": {
         "en": {
@@ -11533,6 +13661,118 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scrivi qualcosa prima"
+          }
+        }
+      }
+    },
+    "Type the amount borrowed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type the amount borrowed"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrivi l'importo del prestito"
+          }
+        }
+      }
+    },
+    "Type the amount repaid": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type the amount repaid"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrivi l'importo estinto"
+          }
+        }
+      }
+    },
+    "Type the installment of the contract": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type the installment of the contract"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrivi la rata del contratto"
+          }
+        }
+      }
+    },
+    "Type the installment the bank's letter states": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type the installment the bank's letter states"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrivi la rata della lettera della banca"
+          }
+        }
+      }
+    },
+    "Type the new rate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type the new rate"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrivi il nuovo tasso"
+          }
+        }
+      }
+    },
+    "Type the rate in percent, like 3,125": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type the rate in percent, like 3,125"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrivi il tasso in percentuale, come 3,125"
+          }
+        }
+      }
+    },
+    "Type the rate, or the contract's installment to work it out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type the rate, or the contract's installment to work it out"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrivi il tasso, oppure la rata del contratto per ricavarlo"
           }
         }
       }
@@ -11729,6 +13969,22 @@
         }
       }
     },
+    "Unlink": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlink"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scollega"
+          }
+        }
+      }
+    },
     "Unreadable amount": {
       "localizations": {
         "en": {
@@ -11793,6 +14049,22 @@
         }
       }
     },
+    "Upfront fees": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upfront fees"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spese iniziali"
+          }
+        }
+      }
+    },
     "Username": {
       "localizations": {
         "en": {
@@ -11805,6 +14077,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nome utente"
+          }
+        }
+      }
+    },
+    "Variable rate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Variable rate"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasso variabile"
           }
         }
       }
@@ -12017,6 +14305,22 @@
         }
       }
     },
+    "Wealth as of today": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wealth as of today"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Patrimonio a oggi"
+          }
+        }
+      }
+    },
     "Week": {
       "localizations": {
         "en": {
@@ -12157,6 +14461,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Con più wallet serve un wallet per registrarla"
+          }
+        }
+      }
+    },
+    "With «%@» the end stays %@, the installment goes down to %@ and the interest saved is %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With «%1$@» the end stays %2$@, the installment goes down to %3$@ and the interest saved is %4$@."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con «%1$@» la fine resta %2$@, la rata scende a %3$@ e gli interessi risparmiati sono %4$@."
+          }
+        }
+      }
+    },
+    "With «%@» the installment stays %@, the loan ends on %@ and the interest saved is %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With «%1$@» the installment stays %2$@, the loan ends on %3$@ and the interest saved is %4$@."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con «%1$@» la rata resta %2$@, il prestito finisce il %3$@ e gli interessi risparmiati sono %4$@."
+          }
+        }
+      }
+    },
+    "Without a recurring entry the installments are yours to record.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Without a recurring entry the installments are yours to record."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Senza una ricorrenza le rate le registri tu."
           }
         }
       }
@@ -12337,6 +14689,38 @@
         }
       }
     },
+    "a new one, %@ a month": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a new one, %@ a month"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "una nuova, %@ al mese"
+          }
+        }
+      }
+    },
+    "a new one, monthly": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a new one, monthly"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "una nuova, mensile"
+          }
+        }
+      }
+    },
     "add": {
       "localizations": {
         "en": {
@@ -12513,6 +14897,22 @@
         }
       }
     },
+    "also creates the recurring entry «%@»": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "also creates the recurring entry «%@»"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "crea anche la ricorrenza «%@»"
+          }
+        }
+      }
+    },
     "and %lld more to confirm": {
       "localizations": {
         "en": {
@@ -12549,6 +14949,22 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "application, survey, substitute tax": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "application, survey, substitute tax"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "istruttoria, perizia, imposta sostitutiva"
           }
         }
       }
@@ -12645,6 +15061,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "saldo al %1$@ %2$@"
+          }
+        }
+      }
+    },
+    "before: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "before: %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "prima: %@"
           }
         }
       }
@@ -12805,6 +15237,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "chiudi"
+          }
+        }
+      }
+    },
+    "collection fee, if the bank charges it": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "collection fee, if the bank charges it"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "incasso rata, se la banca lo addebita"
           }
         }
       }
@@ -13001,6 +15449,22 @@
         }
       }
     },
+    "estimate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "estimate"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "stima"
+          }
+        }
+      }
+    },
     "every": {
       "localizations": {
         "en": {
@@ -13045,6 +15509,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "uscita %@"
+          }
+        }
+      }
+    },
+    "figures as of today, %@ · the tab ignores the month and the person": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "figures as of today, %@ · the tab ignores the month and the person"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "cifre a oggi, %@ · la scheda ignora mese e persona"
           }
         }
       }
@@ -13241,6 +15721,54 @@
         }
       }
     },
+    "installment %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "installment %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "rata %@"
+          }
+        }
+      }
+    },
+    "installments a month": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "installments a month"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "rate al mese"
+          }
+        }
+      }
+    },
+    "interest and fees": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "interest and fees"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "interessi e spese"
+          }
+        }
+      }
+    },
     "is archived, so its line gets nothing.": {
       "localizations": {
         "en": {
@@ -13253,6 +15781,166 @@
           "stringUnit": {
             "state": "translated",
             "value": "è archiviato, quindi la sua riga non riceve nulla."
+          }
+        }
+      }
+    },
+    "liquidity − debt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "liquidity − debt"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "liquidità − debito"
+          }
+        }
+      }
+    },
+    "loan.archived": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "archived"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "archiviato"
+          }
+        }
+      }
+    },
+    "loan.category": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mortgage"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mutuo"
+          }
+        }
+      }
+    },
+    "loan.column.rate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rate"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TAN"
+          }
+        }
+      }
+    },
+    "loan.mode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modalità"
+          }
+        }
+      }
+    },
+    "loan.payment.none": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna"
+          }
+        }
+      }
+    },
+    "loan.recurring": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recurring entry"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ricorrenza"
+          }
+        }
+      }
+    },
+    "loan.recurring.none": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "none"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nessuna"
+          }
+        }
+      }
+    },
+    "loan.taeg": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "APR"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TAEG"
+          }
+        }
+      }
+    },
+    "loan.tan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nominal"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TAN"
           }
         }
       }
@@ -13401,6 +16089,22 @@
         }
       }
     },
+    "note, optional": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "note, optional"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nota, facoltativa"
+          }
+        }
+      }
+    },
     "note…": {
       "localizations": {
         "en": {
@@ -13545,6 +16249,22 @@
         }
       }
     },
+    "paid off": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "paid off"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "estinto"
+          }
+        }
+      }
+    },
     "paused": {
       "localizations": {
         "en": {
@@ -13561,6 +16281,22 @@
         }
       }
     },
+    "penalty %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "penalty %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "penale %@"
+          }
+        }
+      }
+    },
     "percentages %@ · fixed %@": {
       "localizations": {
         "en": {
@@ -13573,6 +16309,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "percentuali %1$@ · fissi %2$@"
+          }
+        }
+      }
+    },
+    "plus %@ of fees": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "plus %@ of fees"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "più %@ di spese"
           }
         }
       }
@@ -13621,6 +16373,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "registrata da %@"
+          }
+        }
+      }
+    },
+    "recurring entry archived — unlink it or link another": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "recurring entry archived — unlink it or link another"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ricorrenza in archivio — scollega o collega un'altra"
           }
         }
       }
@@ -13865,6 +16633,22 @@
         }
       }
     },
+    "the amount follows the schedule": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the amount follows the schedule"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "l'importo segue il piano"
+          }
+        }
+      }
+    },
     "the order is the priority: when the total runs short, the last lines get less": {
       "localizations": {
         "en": {
@@ -13893,6 +16677,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "l'ordine è la priorità: se il totale non basta, le ultime righe ricevono meno · ⌥↑ ⌥↓ spostano la riga"
+          }
+        }
+      }
+    },
+    "then every month, on day %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "then every month, on day %lld"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "poi ogni mese, il giorno %lld"
           }
         }
       }
@@ -14025,6 +16825,22 @@
         }
       }
     },
+    "unchanged": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "unchanged"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "invariata"
+          }
+        }
+      }
+    },
     "undoing the latest allocation deletes its transfers and puts it back to share out": {
       "localizations": {
         "en": {
@@ -14053,6 +16869,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "valore"
+          }
+        }
+      }
+    },
+    "variable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "variable"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "variabile"
           }
         }
       }
@@ -14153,6 +16985,38 @@
         }
       }
     },
+    "with the fees": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "with the fees"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "con le spese"
+          }
+        }
+      }
+    },
+    "worked out from the rate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "worked out from the rate"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "calcolata sul tasso"
+          }
+        }
+      }
+    },
     "year": {
       "localizations": {
         "en": {
@@ -14197,6 +17061,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "sì"
+          }
+        }
+      }
+    },
+    "you record the installments": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "you record the installments"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "le rate le registri tu"
           }
         }
       }
