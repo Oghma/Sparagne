@@ -8,6 +8,7 @@ use crate::{
     CommandEnvelope, CommandRecord, Core, Currency, DomainError, FlowMode, Result, TargetKind,
     TransactionKind,
     engine::{FLOW_COLUMNS, flow_row},
+    store::{parse_column, query_all},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -238,26 +239,27 @@ impl Core {
             .vault(vault_id)?
             .ok_or_else(|| DomainError::NotFound("vault".to_string()))?;
 
-        let mut stmt = self.conn.prepare(
+        let wallets = query_all(
+            &self.conn,
             "SELECT id, name, balance, archived FROM wallets WHERE vault_id = ?1 ORDER BY lower(name)",
-        )?;
-        let wallets = stmt
-            .query_map(params![vault_id], |r| {
+            params![vault_id],
+            |r| {
                 Ok(WalletView {
                     id: r.get(0)?,
                     name: r.get(1)?,
                     balance: r.get(2)?,
                     archived: r.get(3)?,
                 })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
-        let mut stmt = self.conn.prepare(&format!(
-            "SELECT {FLOW_COLUMNS} FROM flows WHERE vault_id = ?1
-             ORDER BY (system_kind IS NULL), lower(name)"
-        ))?;
-        let flows = stmt
-            .query_map(params![vault_id], |r| {
+            },
+        )?;
+        let flows = query_all(
+            &self.conn,
+            &format!(
+                "SELECT {FLOW_COLUMNS} FROM flows WHERE vault_id = ?1
+                 ORDER BY (system_kind IS NULL), lower(name)"
+            ),
+            params![vault_id],
+            |r| {
                 let flow = flow_row(r)?;
                 Ok(FlowView {
                     mode: flow.mode(),
@@ -269,8 +271,8 @@ impl Core {
                     archived: flow.archived,
                     is_unallocated: flow.is_unallocated,
                 })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
+            },
+        )?;
         let unallocated_flow_id = flows
             .iter()
             .find(|f| f.is_unallocated)
@@ -302,24 +304,22 @@ impl Core {
         from: DateTime<Utc>,
         target: TargetKind,
     ) -> Result<Vec<BalanceRange>> {
-        let mut stmt = self.conn.prepare(match target {
+        let ids = match target {
             TargetKind::Flow => {
                 "SELECT id FROM flows WHERE vault_id = ?1
                  ORDER BY (system_kind IS NULL), lower(name)"
             }
             TargetKind::Wallet => "SELECT id FROM wallets WHERE vault_id = ?1 ORDER BY lower(name)",
+        };
+        let mut ranges = query_all(&self.conn, ids, params![vault_id], |r| {
+            Ok(BalanceRange {
+                target_id: r.get(0)?,
+                balance: 0,
+                low: 0,
+                low_at: None,
+                high: 0,
+            })
         })?;
-        let mut ranges = stmt
-            .query_map(params![vault_id], |r| {
-                Ok(BalanceRange {
-                    target_id: r.get(0)?,
-                    balance: 0,
-                    low: 0,
-                    low_at: None,
-                    high: 0,
-                })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         let mut stmt = self.conn.prepare(
             "SELECT l.target_id, t.occurred_at, SUM(l.amount)
@@ -369,22 +369,21 @@ impl Core {
     }
 
     pub fn categories(&self, vault_id: Uuid, include_archived: bool) -> Result<Vec<CategoryView>> {
-        let mut stmt = self.conn.prepare(
+        query_all(
+            &self.conn,
             "SELECT id, name, is_system, archived FROM categories
              WHERE vault_id = ?1 AND (?2 OR archived = 0)
              ORDER BY is_system DESC, lower(name)",
-        )?;
-        let rows = stmt
-            .query_map(params![vault_id, include_archived], |r| {
+            params![vault_id, include_archived],
+            |r| {
                 Ok(CategoryView {
                     id: r.get(0)?,
                     name: r.get(1)?,
                     is_system: r.get(2)?,
                     archived: r.get(3)?,
                 })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(rows)
+            },
+        )
     }
 
     /// Newest first, keyset-paginated on `(occurred_at, id)`.
@@ -483,13 +482,11 @@ impl Core {
             i64::try_from(limit).unwrap_or(i64::MAX).saturating_add(1),
         ));
 
-        let mut stmt = self.conn.prepare(&sql)?;
         // The raw `occurred_at` goes into the cursor.
-        let mut rows: Vec<(TransactionView, i64)> = stmt
-            .query_map(params_from_iter(args.iter()), |r| {
+        let mut rows: Vec<(TransactionView, i64)> =
+            query_all(&self.conn, &sql, params_from_iter(args.iter()), |r| {
                 Ok((transaction_view(r)?, r.get(2)?))
-            })?
-            .collect::<std::result::Result<_, _>>()?;
+            })?;
 
         let next_cursor = if rows.len() > limit {
             rows.truncate(limit);
@@ -526,49 +523,20 @@ pub(crate) fn log_records(
         "SELECT id, vault_id, seq, author, payload, created_at, result_id, server_seq
          FROM commands WHERE {where_clause} ORDER BY seq"
     );
-    let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt
-        .query_map(args, |r| {
-            Ok(LogRowFields {
+    query_all(conn, &sql, args, |r| {
+        Ok(CommandRecord {
+            envelope: CommandEnvelope {
                 id: r.get(0)?,
                 vault_id: r.get(1)?,
-                seq: r.get(2)?,
                 author: r.get(3)?,
-                payload: r.get(4)?,
-                created_at: r.get(5)?,
-                result_id: r.get(6)?,
-                server_seq: r.get(7)?,
-            })
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    rows.into_iter()
-        .map(|row| {
-            Ok(CommandRecord {
-                envelope: CommandEnvelope {
-                    id: row.id,
-                    vault_id: row.vault_id,
-                    author: row.author,
-                    command: serde_json::from_str(&row.payload)?,
-                },
-                seq: row.seq,
-                created_at: row.created_at,
-                result_id: row.result_id,
-                server_seq: row.server_seq,
-            })
+                command: parse_column(r, 4, |text| serde_json::from_str(text))?,
+            },
+            seq: r.get(2)?,
+            created_at: r.get(5)?,
+            result_id: r.get(6)?,
+            server_seq: r.get(7)?,
         })
-        .collect()
-}
-
-/// One `commands` row as SQLite hands it over, before the payload is parsed.
-struct LogRowFields {
-    id: Uuid,
-    vault_id: Uuid,
-    seq: i64,
-    author: String,
-    payload: String,
-    created_at: i64,
-    result_id: Option<Uuid>,
-    server_seq: Option<i64>,
+    })
 }
 
 /// Re-execute a log into `target`. Ids and balances come out identical; only

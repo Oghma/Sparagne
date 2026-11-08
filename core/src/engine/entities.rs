@@ -10,7 +10,7 @@ use crate::{
     CategoryView, CommandEnvelope, Core, DomainError, FlowMode, Result,
     category::{normalize_category_display, normalize_category_key, validate_category_name},
     flow::UNALLOCATED_NAME,
-    store::str_enum,
+    store::{query_all, str_enum},
 };
 
 pub(super) fn rename_wallet(
@@ -430,20 +430,19 @@ impl Core {
 
     /// Every alias of the vault, ordered by alias.
     pub fn aliases(&self, vault_id: Uuid) -> Result<Vec<AliasView>> {
-        let mut stmt = self.conn.prepare(
+        query_all(
+            &self.conn,
             "SELECT id, category_id, alias FROM category_aliases
              WHERE vault_id = ?1 ORDER BY lower(alias), alias",
-        )?;
-        let rows = stmt
-            .query_map(params![vault_id], |r| {
+            params![vault_id],
+            |r| {
                 Ok(AliasView {
                     id: r.get(0)?,
                     category_id: r.get(1)?,
                     alias: r.get(2)?,
                 })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(rows)
+            },
+        )
     }
 
     /// Active, non-system categories whose key is close to `name`, nearest
@@ -451,19 +450,19 @@ impl Core {
     pub fn similar_categories(&self, vault_id: Uuid, name: &str) -> Result<Vec<CategoryView>> {
         let key = normalize_category_key(name)?;
         let threshold = if key.chars().count() <= 6 { 1 } else { 2 };
-        let mut stmt = self.conn.prepare(
+        let rows = query_all(
+            &self.conn,
             "SELECT id, name, name_norm FROM categories
              WHERE vault_id = ?1 AND is_system = 0 AND archived = 0",
-        )?;
-        let rows = stmt
-            .query_map(params![vault_id], |r| {
+            params![vault_id],
+            |r| {
                 Ok((
                     r.get::<_, Uuid>(0)?,
                     r.get::<_, String>(1)?,
                     r.get::<_, String>(2)?,
                 ))
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
+            },
+        )?;
 
         let mut scored: Vec<(usize, String, CategoryView)> = rows
             .into_iter()

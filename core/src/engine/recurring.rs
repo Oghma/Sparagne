@@ -17,6 +17,7 @@ use crate::{
     command::explicit_person,
     normalize_category_key,
     recurring::{PendingRecurring, RecurringRunView, RecurringView, RunOutcome, Schedule},
+    store::{parse_column, query_all},
 };
 
 /// Borrowed view of `Command::CreateRecurring`.
@@ -241,15 +242,16 @@ impl Core {
         vault_id: Uuid,
         include_archived: bool,
     ) -> Result<Vec<RecurringView>> {
-        let mut stmt = self.conn.prepare(&format!(
-            "SELECT {TEMPLATE_COLUMNS} FROM recurring_templates
-             WHERE vault_id = ?1 AND (?2 OR archived_at IS NULL)
-             ORDER BY created_at, id"
-        ))?;
-        let rows: Vec<TemplateRow> = stmt
-            .query_map(params![vault_id, include_archived], template_row)?
-            .collect::<std::result::Result<_, _>>()?;
-        rows.into_iter().map(to_view).collect()
+        query_all(
+            &self.conn,
+            &format!(
+                "SELECT {TEMPLATE_COLUMNS} FROM recurring_templates
+                 WHERE vault_id = ?1 AND (?2 OR archived_at IS NULL)
+                 ORDER BY created_at, id"
+            ),
+            params![vault_id, include_archived],
+            template_view,
+        )
     }
 
     /// Enabled, non-archived templates with at least one period that has
@@ -276,11 +278,8 @@ impl Core {
                 continue;
             }
             let handled: HashSet<NaiveDate> = stmt
-                .query_map(params![template.id], |r| r.get::<_, String>(0))?
-                .collect::<std::result::Result<Vec<_>, _>>()?
-                .iter()
-                .map(|s| parse_date(s))
-                .collect::<Result<_>>()?;
+                .query_map(params![template.id], |r| parse_column(r, 0, parse_date))?
+                .collect::<rusqlite::Result<_>>()?;
             due.retain(|date| !handled.contains(date));
             if !due.is_empty() {
                 out.push(PendingRecurring { template, due });
@@ -296,87 +295,39 @@ impl Core {
         recurring_id: Uuid,
     ) -> Result<Vec<RecurringRunView>> {
         load_template(&self.conn, vault_id, recurring_id)?;
-        let mut stmt = self.conn.prepare(
+        query_all(
+            &self.conn,
             "SELECT period_date, outcome, transaction_id FROM recurring_runs
              WHERE recurring_id = ?1 ORDER BY period_date",
-        )?;
-        let rows: Vec<(String, RunOutcome, Option<Uuid>)> = stmt
-            .query_map(params![recurring_id], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-            })?
-            .collect::<std::result::Result<_, _>>()?;
-        rows.into_iter()
-            .map(|(period_date, outcome, transaction_id)| {
+            params![recurring_id],
+            |r| {
                 Ok(RecurringRunView {
-                    period_date: parse_date(&period_date)?,
-                    outcome,
-                    transaction_id,
+                    period_date: parse_column(r, 0, parse_date)?,
+                    outcome: r.get(1)?,
+                    transaction_id: r.get(2)?,
                 })
-            })
-            .collect()
+            },
+        )
     }
 }
 
 const TEMPLATE_COLUMNS: &str =
     "id, kind, amount, wallet_id, flow_id, category, note, schedule, enabled, archived_at, owner";
 
-/// Raw `TEMPLATE_COLUMNS` row; turned into a [`RecurringView`] by [`to_view`].
-type TemplateRow = (
-    Uuid,
-    TransactionKind,
-    i64,
-    Option<Uuid>,
-    Option<Uuid>,
-    Option<String>,
-    Option<String>,
-    String,
-    bool,
-    Option<i64>,
-    String,
-);
-
-fn template_row(r: &Row<'_>) -> rusqlite::Result<TemplateRow> {
-    Ok((
-        r.get(0)?,
-        r.get(1)?,
-        r.get(2)?,
-        r.get(3)?,
-        r.get(4)?,
-        r.get(5)?,
-        r.get(6)?,
-        r.get(7)?,
-        r.get(8)?,
-        r.get(9)?,
-        r.get(10)?,
-    ))
-}
-
-fn to_view(row: TemplateRow) -> Result<RecurringView> {
-    let (
-        id,
-        kind,
-        amount,
-        wallet_id,
-        flow_id,
-        category,
-        note,
-        schedule,
-        enabled,
-        archived_at,
-        owner,
-    ) = row;
+/// A [`RecurringView`] from a [`TEMPLATE_COLUMNS`] row.
+fn template_view(r: &Row<'_>) -> rusqlite::Result<RecurringView> {
     Ok(RecurringView {
-        id,
-        kind,
-        amount,
-        wallet_id,
-        flow_id,
-        category,
-        note,
-        schedule: serde_json::from_str(&schedule)?,
-        enabled,
-        archived: archived_at.is_some(),
-        owner,
+        id: r.get(0)?,
+        kind: r.get(1)?,
+        amount: r.get(2)?,
+        wallet_id: r.get(3)?,
+        flow_id: r.get(4)?,
+        category: r.get(5)?,
+        note: r.get(6)?,
+        schedule: parse_column(r, 7, |text| serde_json::from_str(text))?,
+        enabled: r.get(8)?,
+        archived: r.get::<_, Option<i64>>(9)?.is_some(),
+        owner: r.get(10)?,
     })
 }
 
@@ -391,17 +342,15 @@ fn template_creator(tx: &Transaction<'_>, recurring_id: Uuid) -> Result<String> 
 }
 
 fn load_template(conn: &Connection, vault_id: Uuid, recurring_id: Uuid) -> Result<RecurringView> {
-    let row = conn
-        .query_row(
-            &format!(
-                "SELECT {TEMPLATE_COLUMNS} FROM recurring_templates WHERE id = ?1 AND vault_id = ?2"
-            ),
-            params![recurring_id, vault_id],
-            template_row,
-        )
-        .optional()?
-        .ok_or_else(|| DomainError::NotFound("recurring".to_string()))?;
-    to_view(row)
+    conn.query_row(
+        &format!(
+            "SELECT {TEMPLATE_COLUMNS} FROM recurring_templates WHERE id = ?1 AND vault_id = ?2"
+        ),
+        params![recurring_id, vault_id],
+        template_view,
+    )
+    .optional()?
+    .ok_or_else(|| DomainError::NotFound("recurring".to_string()))
 }
 
 /// The template of a period that can still be executed or skipped.

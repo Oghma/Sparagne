@@ -22,7 +22,7 @@ use crate::{
     Core, DomainError, PeriodTotals, Result,
     category::OPENING_KEY,
     query::{blob, to_fixed},
-    store::str_enum,
+    store::{query_all, str_enum},
 };
 
 /// Income, expense and refund on one envelope for one person.
@@ -296,15 +296,14 @@ impl Core {
     /// Distinct persons of live transactions, ordered case-insensitively.
     /// Feeds the `TUTTI / ELISA / MATTEO` segmented control.
     pub fn people(&self, vault_id: Uuid) -> Result<Vec<String>> {
-        let mut stmt = self.conn.prepare(
+        query_all(
+            &self.conn,
             "SELECT DISTINCT person FROM transactions
              WHERE vault_id = ?1 AND voided_at IS NULL
              ORDER BY lower(person)",
-        )?;
-        let rows = stmt
-            .query_map([blob(vault_id)], |r| r.get::<_, String>(0))?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(rows)
+            [blob(vault_id)],
+            |r| r.get(0),
+        )
     }
 
     /// Envelope x person matrix over the range, opening balances left out
@@ -327,18 +326,14 @@ impl Core {
              GROUP BY l.target_id, t.person, t.kind
              ORDER BY lower(t.person)"
         );
-
-        let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt
-            .query_map(params_from_iter(args.iter()), |r| {
-                Ok((
-                    r.get::<_, Uuid>(0)?,
-                    r.get::<_, String>(1)?,
-                    r.get::<_, String>(2)?,
-                    r.get::<_, i64>(3)?,
-                ))
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let rows = query_all(&self.conn, &sql, params_from_iter(args.iter()), |r| {
+            Ok((
+                r.get::<_, Uuid>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, i64>(3)?,
+            ))
+        })?;
 
         // Three kind rows collapse into one record per (flow, person); the
         // SQL order keeps the output stable for the tests and the UI.
@@ -379,7 +374,8 @@ impl Core {
         to: DateTime<Utc>,
     ) -> Result<Vec<FlowTransferTotals>> {
         check_range(from, to)?;
-        let mut stmt = self.conn.prepare(
+        query_all(
+            &self.conn,
             "SELECT l.target_id, t.person,
                     SUM(CASE WHEN l.amount > 0 THEN l.amount ELSE 0 END),
                     SUM(CASE WHEN l.amount < 0 THEN -l.amount ELSE 0 END)
@@ -389,21 +385,16 @@ impl Core {
                AND t.occurred_at >= ?2 AND t.occurred_at < ?3
              GROUP BY l.target_id, t.person
              ORDER BY lower(t.person), l.target_id",
-        )?;
-        let rows = stmt
-            .query_map(
-                params![blob(vault_id), from.timestamp(), to.timestamp()],
-                |r| {
-                    Ok(FlowTransferTotals {
-                        flow_id: r.get(0)?,
-                        person: r.get(1)?,
-                        moved_in: r.get(2)?,
-                        moved_out: r.get(3)?,
-                    })
-                },
-            )?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(rows)
+            params![blob(vault_id), from.timestamp(), to.timestamp()],
+            |r| {
+                Ok(FlowTransferTotals {
+                    flow_id: r.get(0)?,
+                    person: r.get(1)?,
+                    moved_in: r.get(2)?,
+                    moved_out: r.get(3)?,
+                })
+            },
+        )
     }
 
     /// Category breakdown over the range, heaviest net expense first, opening
@@ -423,20 +414,16 @@ impl Core {
              {where_sql}
              GROUP BY t.category_id, t.kind"
         );
-
-        let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt
-            .query_map(params_from_iter(args.iter()), |r| {
-                Ok((
-                    r.get::<_, Uuid>(0)?,
-                    r.get::<_, String>(1)?,
-                    r.get::<_, bool>(2)?,
-                    r.get::<_, String>(3)?,
-                    r.get::<_, i64>(4)?,
-                    r.get::<_, u32>(5)?,
-                ))
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let rows = query_all(&self.conn, &sql, params_from_iter(args.iter()), |r| {
+            Ok((
+                r.get::<_, Uuid>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, bool>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, i64>(4)?,
+                r.get::<_, u32>(5)?,
+            ))
+        })?;
 
         let mut out: Vec<CategoryTotals> = Vec::new();
         for (category_id, name, is_system, kind, amount, count) in rows {
@@ -754,21 +741,16 @@ impl Core {
              LIMIT ?"
         );
         args.push(Value::Integer(i64::from(limit)));
-
-        let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt
-            .query_map(params_from_iter(args.iter()), |r| {
-                Ok(TopExpense {
-                    transaction_id: r.get(0)?,
-                    occurred_at: to_fixed(r.get(1)?, r.get(2)?),
-                    note: r.get(3)?,
-                    category: r.get(4)?,
-                    category_is_system: r.get(5)?,
-                    person: r.get(6)?,
-                    amount: r.get(7)?,
-                })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(rows)
+        query_all(&self.conn, &sql, params_from_iter(args.iter()), |r| {
+            Ok(TopExpense {
+                transaction_id: r.get(0)?,
+                occurred_at: to_fixed(r.get(1)?, r.get(2)?),
+                note: r.get(3)?,
+                category: r.get(4)?,
+                category_is_system: r.get(5)?,
+                person: r.get(6)?,
+                amount: r.get(7)?,
+            })
+        })
     }
 }

@@ -21,6 +21,7 @@ use crate::{
     Command, Core, Result, TransactionKind, TransactionPatch, TransactionView,
     category::OPENING_KEY,
     query::{TRANSACTION_VIEW_COLUMNS, blob, load_legs, transaction_view},
+    store::query_all,
 };
 
 /// The most days a row and the other side of its transfer are apart.
@@ -900,12 +901,10 @@ fn read_pool(
         .map(|kind| Value::Text(kind.as_str().to_string())),
     );
     args.push(Value::Text(OPENING_KEY.to_string()));
-    let mut stmt = core.conn.prepare(&sql)?;
-    let (mut views, own): (Vec<TransactionView>, Vec<bool>) = stmt
-        .query_map(params_from_iter(args), |r| {
+    let (mut views, own): (Vec<TransactionView>, Vec<bool>) =
+        query_all(&core.conn, &sql, params_from_iter(args), |r| {
             Ok((transaction_view(r)?, r.get::<_, bool>(own_id)?))
         })?
-        .collect::<std::result::Result<Vec<_>, _>>()?
         .into_iter()
         .unzip();
     load_legs(&core.conn, &mut views)?;

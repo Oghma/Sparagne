@@ -20,6 +20,7 @@ use crate::{
     command::explicit_person,
     flow::UNALLOCATED_NAME,
     recurring::Schedule,
+    store::query_all,
 };
 
 impl Core {
@@ -946,11 +947,12 @@ fn resolve_wallet(tx: &Transaction<'_>, vault_id: Uuid, wallet_id: Option<Uuid>)
             Ok(id)
         }
         None => {
-            let mut stmt =
-                tx.prepare("SELECT id FROM wallets WHERE vault_id = ?1 AND archived = 0 LIMIT 2")?;
-            let ids: Vec<Uuid> = stmt
-                .query_map(params![vault_id], |r| r.get(0))?
-                .collect::<std::result::Result<_, _>>()?;
+            let ids: Vec<Uuid> = query_all(
+                tx,
+                "SELECT id FROM wallets WHERE vault_id = ?1 AND archived = 0 LIMIT 2",
+                params![vault_id],
+                |r| r.get(0),
+            )?;
             match ids.as_slice() {
                 [only] => Ok(*only),
                 [] => Err(DomainError::NotFound("wallet".to_string())),

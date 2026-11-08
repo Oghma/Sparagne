@@ -9,7 +9,7 @@
 use std::collections::HashSet;
 
 use chrono::{DateTime, FixedOffset, NaiveDate};
-use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Row, Transaction, params, types::Type};
 use uuid::Uuid;
 
 use super::{check_amount, encode_schedule, invalid, parse_date};
@@ -23,6 +23,7 @@ use crate::{
     category::{OPENING_KEY, UNCATEGORIZED_KEY},
     query::{TRANSACTION_VIEW_COLUMNS, load_legs, transaction_view},
     recurring::{RunOutcome, Schedule},
+    store::{parse_column, query_all},
 };
 
 /// Borrowed view of `Command::ExecuteAllocation`.
@@ -183,11 +184,12 @@ pub(super) fn reopen_allocation(
         return Err(invalid("only the latest decided period can be reopened"));
     }
     if run.outcome == RunOutcome::Executed {
-        let live: Vec<Uuid> = {
-            let mut stmt = tx.prepare(LIVE_MOVES_SQL)?;
-            stmt.query_map(params![env.vault_id, run.command_id], |r| r.get(0))?
-                .collect::<std::result::Result<_, _>>()?
-        };
+        let live: Vec<Uuid> = query_all(
+            tx,
+            LIVE_MOVES_SQL,
+            params![env.vault_id, run.command_id],
+            |r| r.get(0),
+        )?;
         for transaction_id in live {
             super::void_live_transaction(tx, env, transaction_id, now)?;
         }
@@ -271,19 +273,18 @@ impl Core {
             None => None,
         };
         let unallocated = super::unallocated_id(&self.conn, vault_id)?;
-        let mut stmt = self.conn.prepare(&base_sql())?;
-        let mut incomes: Vec<TransactionView> = stmt
-            .query_map(
-                params![
-                    vault_id,
-                    unallocated,
-                    TransactionKind::Income,
-                    OPENING_KEY,
-                    after_seq
-                ],
-                transaction_view,
-            )?
-            .collect::<std::result::Result<_, _>>()?;
+        let mut incomes: Vec<TransactionView> = query_all(
+            &self.conn,
+            &base_sql(),
+            params![
+                vault_id,
+                unallocated,
+                TransactionKind::Income,
+                OPENING_KEY,
+                after_seq
+            ],
+            transaction_view,
+        )?;
         let start = plan.schedule.start_date;
         incomes.retain(|income| income.occurred_at.date_naive() >= start);
         load_legs(&self.conn, &mut incomes)?;
@@ -328,29 +329,8 @@ impl Core {
                 let moves = match run.outcome {
                     RunOutcome::Skipped => Vec::new(),
                     RunOutcome::Executed => stmt
-                        .query_map(params![vault_id, run.command_id], |r| {
-                            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
-                        })?
-                        .map(|row| {
-                            let (transaction_id, amount, voided, flow_id): (
-                                Uuid,
-                                i64,
-                                bool,
-                                Option<Uuid>,
-                            ) = row?;
-                            let flow_id = flow_id.ok_or_else(|| {
-                                DomainError::Storage(format!(
-                                    "allocation transfer {transaction_id} has no destination"
-                                ))
-                            })?;
-                            Ok(RunMove {
-                                flow_id,
-                                amount,
-                                transaction_id,
-                                voided,
-                            })
-                        })
-                        .collect::<Result<_>>()?,
+                        .query_map(params![vault_id, run.command_id], run_move)?
+                        .collect::<rusqlite::Result<_>>()?,
                 };
                 Ok(AllocationRunView {
                     period_date: run.period_date,
@@ -401,6 +381,25 @@ const MOVES_SQL: &str = "
     WHERE t.vault_id = ?1 AND t.command_id = ?2
     ORDER BY t.rowid";
 
+/// A [`MOVES_SQL`] row. A transfer without a destination envelope is a
+/// corrupt row, so it fails the read like one.
+fn run_move(r: &Row<'_>) -> rusqlite::Result<RunMove> {
+    let transaction_id = r.get(0)?;
+    let flow_id = r.get::<_, Option<Uuid>>(3)?.ok_or_else(|| {
+        rusqlite::Error::FromSqlConversionFailure(
+            3,
+            Type::Null,
+            format!("allocation transfer {transaction_id} has no destination").into(),
+        )
+    })?;
+    Ok(RunMove {
+        flow_id,
+        amount: r.get(1)?,
+        transaction_id,
+        voided: r.get(2)?,
+    })
+}
+
 /// The transfers of an executed run still live, in the order they were
 /// written: `?1` the vault, `?2` the run's command.
 const LIVE_MOVES_SQL: &str = "
@@ -410,47 +409,37 @@ const LIVE_MOVES_SQL: &str = "
 
 const PLAN_COLUMNS: &str = "id, schedule, lines, enabled, created_by";
 
-/// Raw [`PLAN_COLUMNS`] row, before [`to_view`].
-type PlanRow = (Uuid, String, String, bool, String);
-
-fn plan_row(r: &Row<'_>) -> rusqlite::Result<PlanRow> {
-    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
-}
-
-fn to_view(row: PlanRow) -> Result<AllocationPlanView> {
-    let (id, schedule, lines, enabled, created_by) = row;
+/// An [`AllocationPlanView`] from a [`PLAN_COLUMNS`] row.
+fn plan_view(r: &Row<'_>) -> rusqlite::Result<AllocationPlanView> {
     Ok(AllocationPlanView {
-        id,
-        schedule: serde_json::from_str(&schedule)?,
-        lines: serde_json::from_str(&lines)?,
-        enabled,
-        created_by,
+        id: r.get(0)?,
+        schedule: parse_column(r, 1, |text| serde_json::from_str(text))?,
+        lines: parse_column(r, 2, |text| serde_json::from_str(text))?,
+        enabled: r.get(3)?,
+        created_by: r.get(4)?,
     })
 }
 
 fn vault_plan(conn: &Connection, vault_id: Uuid) -> Result<Option<AllocationPlanView>> {
-    conn.query_row(
-        &format!("SELECT {PLAN_COLUMNS} FROM allocation_plans WHERE vault_id = ?1"),
-        params![vault_id],
-        plan_row,
-    )
-    .optional()?
-    .map(to_view)
-    .transpose()
+    Ok(conn
+        .query_row(
+            &format!("SELECT {PLAN_COLUMNS} FROM allocation_plans WHERE vault_id = ?1"),
+            params![vault_id],
+            plan_view,
+        )
+        .optional()?)
 }
 
 /// A plan by id, only when it belongs to `vault_id`: a command of one vault
 /// never reaches the plan of another.
 fn load_plan(conn: &Connection, vault_id: Uuid, plan_id: Uuid) -> Result<AllocationPlanView> {
-    let row = conn
-        .query_row(
-            &format!("SELECT {PLAN_COLUMNS} FROM allocation_plans WHERE id = ?1 AND vault_id = ?2"),
-            params![plan_id, vault_id],
-            plan_row,
-        )
-        .optional()?
-        .ok_or_else(|| DomainError::NotFound("allocation plan".to_string()))?;
-    to_view(row)
+    conn.query_row(
+        &format!("SELECT {PLAN_COLUMNS} FROM allocation_plans WHERE id = ?1 AND vault_id = ?2"),
+        params![plan_id, vault_id],
+        plan_view,
+    )
+    .optional()?
+    .ok_or_else(|| DomainError::NotFound("allocation plan".to_string()))
 }
 
 /// The plan of a period that can still be executed or skipped: enabled, the
@@ -492,27 +481,21 @@ struct RunRow {
 /// The decided periods of a plan, the most recent first. Sorted here rather
 /// than by SQLite, which would compare the dates as text.
 fn decided_runs(conn: &Connection, plan_id: Uuid) -> Result<Vec<RunRow>> {
-    let mut stmt = conn.prepare(
+    let mut runs = query_all(
+        conn,
         "SELECT period_date, outcome, total, command_id, created_by
          FROM allocation_runs WHERE plan_id = ?1",
-    )?;
-    let rows: Vec<(String, RunOutcome, i64, Uuid, String)> = stmt
-        .query_map(params![plan_id], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
-        })?
-        .collect::<std::result::Result<_, _>>()?;
-    let mut runs = rows
-        .into_iter()
-        .map(|(period_date, outcome, total, command_id, created_by)| {
+        params![plan_id],
+        |r| {
             Ok(RunRow {
-                period_date: parse_date(&period_date)?,
-                outcome,
-                total,
-                command_id,
-                created_by,
+                period_date: parse_column(r, 0, parse_date)?,
+                outcome: r.get(1)?,
+                total: r.get(2)?,
+                command_id: r.get(3)?,
+                created_by: r.get(4)?,
             })
-        })
-        .collect::<Result<Vec<_>>>()?;
+        },
+    )?;
     runs.sort_by_key(|run| std::cmp::Reverse(run.period_date));
     Ok(runs)
 }
@@ -645,14 +628,13 @@ mod tests {
 
     /// The `detail` column of `EXPLAIN QUERY PLAN` for `sql`, step by step.
     fn query_plan(core: &Core, sql: &str, args: impl rusqlite::Params) -> Vec<String> {
-        let mut stmt = core
-            .conn
-            .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
-            .unwrap();
-        stmt.query_map(args, |r| r.get(3))
-            .unwrap()
-            .collect::<std::result::Result<_, _>>()
-            .unwrap()
+        query_all(
+            &core.conn,
+            &format!("EXPLAIN QUERY PLAN {sql}"),
+            args,
+            |r| r.get(3),
+        )
+        .unwrap()
     }
 
     /// The steps that read the legs (aliased `l`).

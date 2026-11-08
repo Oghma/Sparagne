@@ -12,7 +12,7 @@ use super::{check_amount, invalid, require_active_flow};
 
 use crate::{
     CommandEnvelope, DomainError, Result, TargetKind, TransactionKind, TransactionPatch,
-    command::explicit_person, query::LEGS_SQL,
+    command::explicit_person, query::LEGS_SQL, store::query_all,
 };
 
 pub(super) fn update_transaction(
@@ -227,60 +227,33 @@ struct Row {
 }
 
 fn load_transaction(tx: &Transaction<'_>, vault_id: Uuid, id: Uuid) -> Result<Row> {
-    let row = tx
-        .query_row(
-            "SELECT kind, amount, occurred_at, occurred_offset, category_id, note, voided_at,
-                    created_by, person
-             FROM transactions WHERE id = ?1 AND vault_id = ?2",
-            params![id, vault_id],
-            |r| {
-                Ok((
-                    r.get::<_, TransactionKind>(0)?,
-                    r.get::<_, i64>(1)?,
-                    r.get::<_, i64>(2)?,
-                    r.get::<_, i32>(3)?,
-                    r.get::<_, Uuid>(4)?,
-                    r.get::<_, Option<String>>(5)?,
-                    r.get::<_, Option<i64>>(6)?,
-                    r.get::<_, String>(7)?,
-                    r.get::<_, String>(8)?,
-                ))
-            },
-        )
-        .optional()?
-        .ok_or_else(|| DomainError::NotFound("transaction".to_string()))?;
-    let (
-        kind,
-        amount,
-        occurred_at,
-        occurred_offset,
-        category_id,
-        note,
-        voided_at,
-        created_by,
-        person,
-    ) = row;
-    Ok(Row {
-        kind,
-        amount,
-        occurred_at,
-        occurred_offset,
-        category_id,
-        note,
-        voided: voided_at.is_some(),
-        created_by,
-        person,
-    })
+    tx.query_row(
+        "SELECT kind, amount, occurred_at, occurred_offset, category_id, note, voided_at,
+                created_by, person
+         FROM transactions WHERE id = ?1 AND vault_id = ?2",
+        params![id, vault_id],
+        |r| {
+            Ok(Row {
+                kind: r.get(0)?,
+                amount: r.get(1)?,
+                occurred_at: r.get(2)?,
+                occurred_offset: r.get(3)?,
+                category_id: r.get(4)?,
+                note: r.get(5)?,
+                voided: r.get::<_, Option<i64>>(6)?.is_some(),
+                created_by: r.get(7)?,
+                person: r.get(8)?,
+            })
+        },
+    )
+    .optional()?
+    .ok_or_else(|| DomainError::NotFound("transaction".to_string()))
 }
 
 pub(super) fn load_legs(tx: &Transaction<'_>, transaction_id: Uuid) -> Result<Vec<Leg>> {
-    let mut stmt = tx.prepare(LEGS_SQL)?;
-    let legs = stmt
-        .query_map(params![transaction_id], |r| {
-            Ok(Leg::new(r.get(0)?, r.get(1)?, r.get(2)?))
-        })?
-        .collect::<rusqlite::Result<_>>()?;
-    Ok(legs)
+    query_all(tx, LEGS_SQL, params![transaction_id], |r| {
+        Ok(Leg::new(r.get(0)?, r.get(1)?, r.get(2)?))
+    })
 }
 
 /// The only leg of that kind; entries have exactly one wallet and one flow.

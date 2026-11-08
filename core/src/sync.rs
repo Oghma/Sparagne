@@ -14,7 +14,7 @@ use crate::{
     CommandEnvelope, CommandRecord, Core, Currency, DomainError, Receipt, Result,
     engine::{LogRow, apply_envelope, log_row, try_apply_envelope},
     query::log_records,
-    store::str_enum,
+    store::{query_all, str_enum},
 };
 
 /// Body of `POST /vaults/{vault_id}/push`.
@@ -291,12 +291,13 @@ impl Core {
     /// vaults of one account without a query per vault. Vaults whose log is
     /// empty are absent.
     pub fn last_seqs(&self) -> Result<Vec<(Uuid, i64)>> {
-        let mut stmt = self.conn.prepare(
+        query_all(
+            &self.conn,
             "SELECT vault_id, MAX(seq) FROM commands
              WHERE status = 'applied' GROUP BY vault_id",
-        )?;
-        let rows = stmt.query_map([], |r| Ok((r.get::<_, Uuid>(0)?, r.get::<_, i64>(1)?)))?;
-        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
     }
 
     /// Vaults the log still knows and the projection no longer holds: the ones
@@ -304,12 +305,13 @@ impl Core {
     /// the deletion itself first of all, which is why the app pushes them
     /// alongside the live vaults.
     pub fn deleted_vaults(&self) -> Result<Vec<Uuid>> {
-        let mut stmt = self.conn.prepare(
+        query_all(
+            &self.conn,
             "SELECT DISTINCT vault_id FROM commands
              WHERE vault_id NOT IN (SELECT id FROM vaults) ORDER BY vault_id",
-        )?;
-        let rows = stmt.query_map([], |r| r.get::<_, Uuid>(0))?;
-        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+            [],
+            |r| r.get(0),
+        )
     }
 
     /// Where the vault stands with the server. A vault this database has never
@@ -840,16 +842,15 @@ fn outbox_records(conn: &Connection, vault_id: Uuid) -> Result<Vec<CommandRecord
 }
 
 fn rejected_rows(conn: &Connection, vault_id: Uuid) -> Result<Vec<RejectedRow>> {
-    let reasons: HashMap<Uuid, String> = {
-        let mut stmt = conn.prepare(
-            "SELECT id, COALESCE(rejection, '') FROM commands
-             WHERE vault_id = ?1 AND status = 'rejected'",
-        )?;
-        let rows = stmt.query_map(params![vault_id], |r| {
-            Ok((r.get::<_, Uuid>(0)?, r.get::<_, String>(1)?))
-        })?;
-        rows.collect::<std::result::Result<_, _>>()?
-    };
+    let reasons: HashMap<Uuid, String> = query_all(
+        conn,
+        "SELECT id, COALESCE(rejection, '') FROM commands
+         WHERE vault_id = ?1 AND status = 'rejected'",
+        params![vault_id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?
+    .into_iter()
+    .collect();
     Ok(log_records(
         conn,
         "vault_id = ?1 AND status = 'rejected'",

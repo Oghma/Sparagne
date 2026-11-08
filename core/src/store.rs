@@ -1,9 +1,9 @@
-//! SQLite connection and schema management, and how the enums stored as text
-//! go in and out of their columns.
+//! SQLite connection and schema management, and the helpers every reader
+//! shares: rows decoded in one pass, and the enums stored as text.
 
 use std::path::Path;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, Params, Row};
 
 use crate::{DomainError, Result};
 
@@ -119,6 +119,39 @@ impl Core {
     }
 }
 
+/// Every row `sql` returns, each decoded by `row`.
+pub(crate) fn query_all<T>(
+    conn: &Connection,
+    sql: &str,
+    args: impl Params,
+    row: impl FnMut(&Row<'_>) -> rusqlite::Result<T>,
+) -> Result<Vec<T>> {
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt
+        .query_map(args, row)?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(rows)
+}
+
+/// Column `idx` as text, decoded by `parse` inside the row closure: a value
+/// `parse` refuses fails the read like a column of the wrong type, which
+/// reaches the caller as [`DomainError::Storage`].
+pub(crate) fn parse_column<T, E>(
+    row: &Row<'_>,
+    idx: usize,
+    parse: impl FnOnce(&str) -> std::result::Result<T, E>,
+) -> rusqlite::Result<T>
+where
+    E: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
+    let value = row.get_ref(idx)?;
+    let failed = |err: Box<dyn std::error::Error + Send + Sync>| {
+        rusqlite::Error::FromSqlConversionFailure(idx, value.data_type(), err)
+    };
+    let text = value.as_str().map_err(|err| failed(Box::new(err)))?;
+    parse(text).map_err(|err| failed(err.into()))
+}
+
 /// `as_str`, `ToSql` and `FromSql` for an enum stored as text, all three from
 /// one table of variants and strings, so a column and the variant it names
 /// cannot drift apart. The enum keeps its own docs and derives. A string no
@@ -171,8 +204,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        CommandEnvelope, Currency, MergeConflictKind, RunOutcome, TargetKind, TransactionKind,
-        sync::MemberRole,
+        Command, CommandEnvelope, Currency, MergeConflictKind, RunOutcome, TargetKind,
+        TransactionFilter, TransactionKind, sync::MemberRole,
     };
 
     fn has_column(conn: &Connection, table: &str, column: &str) -> bool {
@@ -399,6 +432,29 @@ mod tests {
             (MergeConflictKind::SourceSystem, "source_system"),
             (MergeConflictKind::TargetArchived, "target_archived"),
         ]);
+    }
+
+    /// A stored kind no variant names fails the ledger's read instead of
+    /// reading as an expense.
+    #[test]
+    fn a_corrupt_kind_fails_the_ledger_read() {
+        let mut core = Core::open_in_memory().unwrap();
+        let casa = create_vault(&mut core, "Casa");
+        let wallet = Command::CreateWallet {
+            name: "Conto".to_string(),
+            opening_balance: 1000,
+            occurred_at: chrono::DateTime::parse_from_rfc3339("2026-01-05T10:00:00+01:00").unwrap(),
+        };
+        core.execute(CommandEnvelope::new(casa, "alice", wallet))
+            .unwrap();
+        let ledger =
+            |core: &Core| core.list_transactions(casa, &TransactionFilter::default(), 10, None);
+        assert_eq!(ledger(&core).unwrap().items.len(), 1);
+
+        core.conn
+            .execute("UPDATE transactions SET kind = 'bogus'", [])
+            .unwrap();
+        assert!(matches!(ledger(&core), Err(DomainError::Storage(_))));
     }
 
     #[test]

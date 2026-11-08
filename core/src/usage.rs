@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::{
     Core, Currency, DomainError, Result, TransactionView,
     query::{TRANSACTION_VIEW_COLUMNS, load_legs, transaction_view},
+    store::{parse_column, query_all},
 };
 
 /// One row of [`Core::vaults`].
@@ -52,31 +53,20 @@ impl Core {
     }
 
     fn read_vaults(&self, tail: &str, args: impl rusqlite::Params) -> Result<Vec<VaultView>> {
-        let mut stmt = self.conn.prepare(&format!(
-            "SELECT id, name, currency, owner_user_id, created_at FROM vaults {tail}"
-        ))?;
-        let rows = stmt
-            .query_map(args, |r| {
-                Ok((
-                    r.get::<_, Uuid>(0)?,
-                    r.get::<_, String>(1)?,
-                    r.get::<_, String>(2)?,
-                    r.get::<_, String>(3)?,
-                    r.get::<_, i64>(4)?,
-                ))
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        rows.into_iter()
-            .map(|(id, name, currency, owner, created_at)| {
+        query_all(
+            &self.conn,
+            &format!("SELECT id, name, currency, owner_user_id, created_at FROM vaults {tail}"),
+            args,
+            |r| {
                 Ok(VaultView {
-                    id,
-                    name,
-                    currency: Currency::try_from(currency.as_str())?,
-                    owner,
-                    created_at,
+                    id: r.get(0)?,
+                    name: r.get(1)?,
+                    currency: parse_column(r, 2, |text| Currency::try_from(text))?,
+                    owner: r.get(3)?,
+                    created_at: r.get(4)?,
                 })
-            })
-            .collect()
+            },
+        )
     }
 
     /// One transaction, voided included.
@@ -110,7 +100,8 @@ impl Core {
         let since = since.timestamp();
         let limit = i64::try_from(limit).unwrap_or(i64::MAX);
 
-        let mut cat_stmt = self.conn.prepare(
+        let categories = query_all(
+            &self.conn,
             "SELECT t.category_id
              FROM transactions t
              WHERE t.vault_id = ?1 AND t.voided_at IS NULL
@@ -120,11 +111,9 @@ impl Core {
              GROUP BY t.category_id
              ORDER BY MAX(t.occurred_at) DESC, MAX(t.id) DESC
              LIMIT ?3",
+            params![vault_id, since, limit],
+            |r| r.get(0),
         )?;
-        let categories = cat_stmt
-            .query_map(params![vault_id, since, limit], |r| r.get(0))?
-            .collect::<std::result::Result<Vec<Uuid>, _>>()?;
-
         Ok(RecentUsage { categories })
     }
 }
