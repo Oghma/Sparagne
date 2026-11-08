@@ -24,15 +24,9 @@ pub fn normalize_category_display(value: &str) -> Result<String> {
 
 /// Lookup key: `"Caffè"` -> `"caffe"`, `"Auto-Moto"` -> `"auto moto"`.
 pub fn normalize_category_key(value: &str) -> Result<String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Err(DomainError::InvalidName(
-            "category name must not be empty".to_string(),
-        ));
-    }
     let mut out = String::new();
     let mut prev_space = false;
-    for ch in trimmed.nfkd() {
+    for ch in value.trim().nfkd() {
         if is_combining_mark(ch) {
             continue;
         }

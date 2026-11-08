@@ -285,16 +285,15 @@ pub(super) fn replacing(
 /// A patch naming `wallet` as the source (`from`) or the destination of a
 /// transfer.
 fn side(from: bool, wallet: Uuid) -> TransactionPatch {
-    if from {
-        TransactionPatch {
-            from_id: Some(wallet),
-            ..TransactionPatch::default()
-        }
+    let (from_id, to_id) = if from {
+        (Some(wallet), None)
     } else {
-        TransactionPatch {
-            to_id: Some(wallet),
-            ..TransactionPatch::default()
-        }
+        (None, Some(wallet))
+    };
+    TransactionPatch {
+        from_id,
+        to_id,
+        ..TransactionPatch::default()
     }
 }
 
