@@ -53,14 +53,25 @@ struct LoanChartView: View {
             }
         }
         .chartYScale(domain: scale.lower...scale.upper)
-        .chartXScale(domain: date(first)...date(last))
-        .chartXAxis {
-            AxisMarks(values: .stride(by: .year, count: yearStep)) { value in
-                AxisValueLabel(collisionResolution: .greedy) {
-                    if let day = value.as(Date.self) {
-                        Text(day, format: .dateTime.year())
-                            .font(Face.small)
-                            .foregroundStyle(Ink.text3)
+        // Room at both ends for the first and the last year, centred on
+        // their ticks.
+        .chartXScale(domain: date(first)...date(last), range: .plotDimension(startPadding: 14, endPadding: 14))
+        // The years are drawn by hand, centred on their dates: the axis
+        // starts a date's label at its tick whatever the anchor, and drops
+        // the last one, the loan's end, off the plot's edge.
+        .chartXAxis(.hidden)
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                if let plot = proxy.plotFrame {
+                    let frame = geometry[plot]
+                    ForEach(axisDates, id: \.self) { day in
+                        if let x = proxy.position(forX: day) {
+                            Text(day, format: .dateTime.year())
+                                .font(Face.small)
+                                .foregroundStyle(Ink.text3)
+                                .fixedSize()
+                                .position(x: frame.minX + x, y: frame.maxY + 10)
+                        }
                     }
                 }
             }
@@ -79,6 +90,8 @@ struct LoanChartView: View {
         }
         .chartLegend(.hidden)
         .chartPlotStyle { $0.frame(height: 110) }
+        // Room for the years under the plot.
+        .padding(.bottom, 16)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(localized: "Remaining debt over time"))
         .accessibilityValue(spoken)
@@ -92,10 +105,31 @@ struct LoanChartView: View {
     private var first: NaiveDate { line.first?.day ?? "" }
     private var last: NaiveDate { line.last?.day ?? "" }
 
-    /// One label every so many years: about five across.
-    private var yearStep: Int {
-        let years = (Int(last.prefix(4)) ?? 0) - (Int(first.prefix(4)) ?? 0)
-        return max(1, Int((Double(years) / 5).rounded(.up)))
+    /// The years under the chart: the start's, one every few years after
+    /// it, about five across, and the end's; the one before the end goes
+    /// when it would crowd it, and a year is never written twice.
+    private var axisDates: [Date] {
+        guard line.count > 1 else { return [] }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = CoreDate.utc
+        let start = date(first)
+        let end = date(last)
+        let years = calendar.dateComponents([.year], from: start, to: end).year ?? 0
+        let step = max(1, Int((Double(years) / 5).rounded(.up)))
+        var dates: [Date] = []
+        var index = 0
+        while let next = calendar.date(byAdding: .year, value: index * step, to: start), next < end {
+            dates.append(next)
+            index += 1
+        }
+        if dates.count > 1, let previous = dates.last,
+           (calendar.dateComponents([.month], from: previous, to: end).month ?? 0) < step * 6 {
+            dates.removeLast()
+        }
+        if let previous = dates.last, calendar.component(.year, from: previous) == calendar.component(.year, from: end) {
+            return dates
+        }
+        return dates + [end]
     }
 
     private func date(_ day: NaiveDate) -> Date {

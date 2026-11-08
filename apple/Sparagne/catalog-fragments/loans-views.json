@@ -205,6 +205,7 @@
   "loan.recurring.none": {"en": "none", "it": "nessuna"},
   "loan.taeg": {"en": "APR", "it": "TAEG"},
   "loan.tan": {"en": "Nominal", "it": "TAN"},
+  "note, optional": {"en": "note, optional", "it": "nota, facoltativa"},
   "paid off": {"en": "paid off", "it": "estinto"},
   "penalty %@": {"en": "penalty %@", "it": "penale %@"},
   "plus %@ of fees": {"en": "plus %@ of fees", "it": "più %@ di spese"},

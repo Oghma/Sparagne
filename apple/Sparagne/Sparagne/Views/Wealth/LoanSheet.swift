@@ -42,12 +42,12 @@ struct LoanSheet: View {
             width: 720
         ) {
             FormGroup {
+                // The note beside the name: the canvas has no row for it.
                 FormRow(String(localized: "Name")) {
-                    FormTextField(label: String(localized: "Name"), text: $draft.name).frame(width: 300)
-                }
-                FormRow(String(localized: "Note")) {
-                    FormTextField(label: String(localized: "Note"), text: $draft.note, prompt: String(localized: "optional"))
-                        .frame(width: 300)
+                    HStack(spacing: 10) {
+                        FormTextField(label: String(localized: "Name"), text: $draft.name).frame(width: 260)
+                        FormTextField(label: String(localized: "Note"), text: $draft.note, prompt: String(localized: "note, optional"))
+                    }
                 }
                 FormRow(String(localized: "Amount")) {
                     UnitField(label: String(localized: "Amount"), text: $draft.principal, unit: "\u{20AC}").frame(width: 160)
