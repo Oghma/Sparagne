@@ -174,7 +174,10 @@ struct SankeyLayout: Equatable, Sendable {
             let weight = links.reduce(Int64(0)) { $0 + $1.value }
             guard weight > 0 else { return .greatestFiniteMagnitude }
             let sum = links.reduce(CGFloat(0)) { $0 + CGFloat($1.value) * (placed[$1.from]?.midY ?? 0) }
-            return sum / CGFloat(weight)
+            // To a thousandth of a point: two categories of one flow tie
+            // whatever the rounding of their own weights, and the heavier
+            // goes first.
+            return (sum / CGFloat(weight) * 1000).rounded() / 1000
         }
         return nodes.enumerated()
             .map { (offset: $0.offset, node: $0.element, centre: centre($0.element)) }

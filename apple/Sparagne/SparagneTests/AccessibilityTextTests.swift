@@ -41,6 +41,29 @@ struct AccessibilityTextTests {
         let label = AccessibilityText.figure("Income", person: "Elisa", amount: "€1,200.00")
         #expect(label == "Income, Elisa: €1,200.00")
     }
+
+    @Test("The cash flow reads what came in, then where it went")
+    func sankeyReadsIncomeThenSpending() {
+        let label = AccessibilityText.sankey(
+            sources: [("Income", "€4,200.00")],
+            spending: [("Casa", "€1,800.00"), ("Cash", "€900.00"), ("Savings", "€1,500.00")]
+        )
+        #expect(label == "Income €4,200.00: Casa €1,800.00, Cash €900.00, Savings €1,500.00")
+    }
+
+    @Test("Money from the balance is read after the income")
+    func sankeyReadsTheBalanceAfterTheIncome() {
+        let label = AccessibilityText.sankey(
+            sources: [("Income", "€2,520.00"), ("From the balance", "€828.60")],
+            spending: [("Vacanze", "€1,500.00"), ("Casa", "€1,848.60")]
+        )
+        #expect(label == "Income €2,520.00, From the balance €828.60: Vacanze €1,500.00, Casa €1,848.60")
+    }
+
+    @Test("With nothing spent there is no colon to open")
+    func sankeyWithNothingSpent() {
+        #expect(AccessibilityText.sankey(sources: [("Income", "€100.00")], spending: []) == "Income €100.00")
+    }
 }
 
 /// `SummaryText` is the RIEPILOGO's small pure text
