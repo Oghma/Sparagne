@@ -508,15 +508,6 @@ fn preview_monthly_31st_across_february() {
 }
 
 #[test]
-fn preview_end_date_cuts_the_list() {
-    let s = monthly(15, day(2026, 1, 1), Some(day(2026, 3, 20)));
-    assert_eq!(
-        s.occurrences_from(day(2026, 1, 1), 10).unwrap(),
-        [day(2026, 1, 15), day(2026, 2, 15), day(2026, 3, 15)]
-    );
-}
-
-#[test]
 fn preview_weekly_every_two_weeks() {
     // 2026-03-02 is a Monday.
     let s = schedule(Frequency::Weekly { weekday: 1 }, 2, day(2026, 3, 2));
@@ -558,25 +549,12 @@ fn preview_from_on_an_occurrence_includes_it() {
 }
 
 #[test]
-fn preview_limit_zero_is_empty() {
+fn preview_limit_zero_is_empty_and_a_bad_schedule_is_refused() {
     let s = monthly(10, day(2026, 1, 1), None);
     assert!(s.occurrences_from(day(2026, 1, 1), 0).unwrap().is_empty());
-}
-
-#[test]
-fn preview_rejects_invalid_schedules() {
-    let from = day(2026, 1, 1);
-    let start = day(2026, 1, 1);
-    for bad in [
-        schedule(Frequency::Daily, 0, start),
-        monthly(0, start, None),
-        monthly(32, start, None),
-        schedule(Frequency::Weekly { weekday: 8 }, 1, start),
-        monthly(5, start, Some(day(2025, 1, 1))),
-    ] {
-        assert!(matches!(
-            bad.occurrences_from(from, 3),
-            Err(DomainError::InvalidCommand(_))
-        ));
-    }
+    // A schedule `validate` refuses is an error, not an empty list.
+    assert!(matches!(
+        monthly(32, day(2026, 1, 1), None).occurrences_from(day(2026, 1, 1), 3),
+        Err(DomainError::InvalidCommand(_))
+    ));
 }

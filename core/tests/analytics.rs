@@ -169,14 +169,55 @@ fn flow_transfer_totals_count_a_move_in_on_one_envelope_and_out_on_the_other() {
     assert!(matches!(err, DomainError::InvalidCommand(_)));
 }
 
+/// Every aggregation over boundaries refuses fewer than two of them, or
+/// boundaries that do not strictly increase; the envelope x person matrix
+/// refuses an inverted range.
 #[test]
-fn flow_person_totals_rejects_an_inverted_range() {
-    let s = shared_month();
-    let err =
-        s.fx.core
-            .flow_person_totals(s.fx.vault, utc(T0 + DAY), utc(T0))
-            .unwrap_err();
-    assert!(matches!(err, DomainError::InvalidCommand(_)));
+fn the_aggregations_reject_bad_boundaries() {
+    let fx = setup();
+    let (core, vault) = (&fx.core, fx.vault);
+    assert!(matches!(
+        core.flow_person_totals(vault, utc(T0 + DAY), utc(T0)),
+        Err(DomainError::InvalidCommand(_))
+    ));
+    for bounds in [
+        vec![],
+        vec![utc(T0)],
+        vec![utc(T0 + DAY), utc(T0)],
+        vec![utc(T0), utc(T0), utc(T0 + DAY)],
+    ] {
+        let refused = [
+            (
+                "bucket_totals",
+                core.bucket_totals(vault, bounds.clone(), None).err(),
+            ),
+            (
+                "category_bucket_totals",
+                core.category_bucket_totals(vault, bounds.clone(), None)
+                    .err(),
+            ),
+            (
+                "year_breakdown",
+                core.year_breakdown(vault, bounds.clone()).err(),
+            ),
+            (
+                "balance_breakdown of the wallets",
+                core.balance_breakdown(vault, bounds.clone(), TargetKind::Wallet)
+                    .err(),
+            ),
+            (
+                "balance_breakdown of the flows",
+                core.balance_breakdown(vault, bounds.clone(), TargetKind::Flow)
+                    .err(),
+            ),
+        ];
+        for (what, err) in refused {
+            assert!(
+                matches!(err, Some(DomainError::InvalidCommand(_))),
+                "{what} on {bounds:?}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -291,7 +332,7 @@ fn bucket_totals_split_the_range_on_the_boundaries() {
 }
 
 #[test]
-fn bucket_totals_can_be_filtered_by_person_and_reject_bad_boundaries() {
+fn bucket_totals_can_be_filtered_by_person() {
     let s = shared_month();
     let bounds = vec![utc(T0), utc(T0 + 30 * DAY)];
     let elisa =
@@ -300,16 +341,6 @@ fn bucket_totals_can_be_filtered_by_person_and_reject_bad_boundaries() {
             .unwrap();
     assert_eq!(elisa.len(), 1);
     assert_eq!((elisa[0].income, elisa[0].expense), (0, 30));
-
-    assert!(matches!(
-        s.fx.core.bucket_totals(s.fx.vault, vec![utc(T0)], None),
-        Err(DomainError::InvalidCommand(_))
-    ));
-    assert!(matches!(
-        s.fx.core
-            .bucket_totals(s.fx.vault, vec![utc(T0 + DAY), utc(T0)], None),
-        Err(DomainError::InvalidCommand(_))
-    ));
 }
 
 #[test]
@@ -453,24 +484,6 @@ fn year_breakdown_returns_one_ordered_row_per_person_with_movement() {
     );
 }
 
-#[test]
-fn year_breakdown_rejects_bad_boundaries() {
-    let s = year_fx();
-    assert!(matches!(
-        s.fx.core.year_breakdown(s.fx.vault, vec![utc(T0)]),
-        Err(DomainError::InvalidCommand(_))
-    ));
-    assert!(matches!(
-        s.fx.core.year_breakdown(s.fx.vault, vec![]),
-        Err(DomainError::InvalidCommand(_))
-    ));
-    assert!(matches!(
-        s.fx.core
-            .year_breakdown(s.fx.vault, vec![utc(T0 + DAY), utc(T0)]),
-        Err(DomainError::InvalidCommand(_))
-    ));
-}
-
 /// `(bucket, name, net_expense, count)` in the order the query returns them.
 fn cells(rows: &[BucketCategoryTotals]) -> Vec<(u32, &str, i64, u32)> {
     rows.iter()
@@ -609,22 +622,6 @@ fn category_bucket_totals_order_by_bucket_then_heaviest_then_name() {
             (2, "Casa", 0, 1),
         ]
     );
-}
-
-#[test]
-fn category_bucket_totals_reject_bad_boundaries() {
-    let s = shared_month();
-    for bounds in [
-        vec![],
-        vec![utc(T0)],
-        vec![utc(T0 + DAY), utc(T0)],
-        vec![utc(T0), utc(T0), utc(T0 + DAY)],
-    ] {
-        assert!(matches!(
-            s.fx.core.category_bucket_totals(s.fx.vault, bounds, None),
-            Err(DomainError::InvalidCommand(_))
-        ));
-    }
 }
 
 /// `(bucket, target, delta)` in the order the query returns them.
@@ -846,24 +843,6 @@ fn balance_breakdown_leaves_voided_rows_and_rows_past_the_range_out() {
         deltas(&fx, month_bounds(), TargetKind::Flow),
         [(1, fx.unallocated, -100)]
     );
-}
-
-#[test]
-fn balance_breakdown_rejects_bad_boundaries() {
-    let fx = setup();
-    for target in [TargetKind::Wallet, TargetKind::Flow] {
-        for bounds in [
-            vec![],
-            vec![utc(T0)],
-            vec![utc(T0 + DAY), utc(T0)],
-            vec![utc(T0), utc(T0), utc(T0 + DAY)],
-        ] {
-            assert!(matches!(
-                fx.core.balance_breakdown(fx.vault, bounds, target),
-                Err(DomainError::InvalidCommand(_))
-            ));
-        }
-    }
 }
 
 /// The shared month plus two wallets opened inside it: matteo's account at

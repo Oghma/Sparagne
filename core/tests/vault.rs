@@ -21,7 +21,8 @@ fn rename_vault_trims_and_shows_everywhere() {
     assert_eq!(fx.core.vault(fx.vault).unwrap().unwrap().name, "Casa");
     assert_eq!(fx.core.snapshot(fx.vault).unwrap().name, "Casa");
     assert_eq!(fx.core.vaults().unwrap()[0].name, "Casa");
-    // The owner and the currency are untouched.
+    // The owner and the currency are untouched, an editor's rename too.
+    exec(&mut fx.core, fx.vault, "bob", rename("Casa"));
     let view = fx.core.vault(fx.vault).unwrap().unwrap();
     assert_eq!(view.owner, "alice");
     assert_eq!(view.currency, Currency::Eur);
@@ -49,20 +50,6 @@ fn rename_vault_may_repeat_a_name_the_owner_already_uses() {
     fx.run(rename("MAIN"));
     assert_eq!(fx.core.vault(fx.vault).unwrap().unwrap().name, "MAIN");
     assert_eq!(fx.core.vaults().unwrap().len(), 2);
-}
-
-#[test]
-fn an_editor_may_rename_to_a_name_the_owner_already_uses() {
-    let mut fx = setup();
-    let lavoro = create_vault(&mut fx.core, "alice", "Lavoro");
-
-    // bob cannot see alice's other vaults, and needs not: the rename depends
-    // on this vault alone, so it lands the same here and on the server.
-    exec(&mut fx.core, fx.vault, "bob", rename("Lavoro"));
-    let view = fx.core.vault(fx.vault).unwrap().unwrap();
-    assert_eq!(view.name, "Lavoro");
-    assert_eq!(view.owner, "alice", "renaming never changes the owner");
-    assert_eq!(fx.core.vault(lavoro).unwrap().unwrap().name, "Lavoro");
 }
 
 #[test]

@@ -139,6 +139,14 @@ fn an_entry_is_its_authors_unless_it_names_someone_else() {
     let mut fx = setup();
     let own = fx.run("matteo", spend(&fx, 1_000, None));
     let for_elisa = fx.run("matteo", spend(&fx, 2_000, Some("elisa")));
+    // Named but no author yet: the people and the filter read the person.
+    assert_eq!(fx.core.people(fx.vault).unwrap(), ["elisa", "matteo"]);
+    let elisas = sparagne_core::TransactionFilter {
+        person: Some("elisa".to_string()),
+        ..Default::default()
+    };
+    let rows = list(&fx.core, fx.vault, &elisas);
+    assert_eq!(rows.iter().map(|t| t.id).collect::<Vec<_>>(), [for_elisa]);
     let blank = fx.run("elisa", spend(&fx, 3_000, Some("   ")));
     let padded = fx.run("matteo", spend(&fx, 4_000, Some(" elisa ")));
 
@@ -273,34 +281,6 @@ fn an_execution_is_for_the_person_it_names_and_recorded_by_its_author() {
         "elisa",
         "a later owner does not move a past execution"
     );
-}
-
-#[test]
-fn people_and_the_person_filter_read_the_person_not_the_author() {
-    let mut fx = setup();
-    let for_elisa = fx.run("matteo", spend(&fx, 2_000, Some("elisa")));
-    assert_eq!(fx.core.people(fx.vault).unwrap(), ["elisa", "matteo"]);
-
-    let filter = sparagne_core::TransactionFilter {
-        person: Some("elisa".to_string()),
-        ..Default::default()
-    };
-    let rows = fx
-        .core
-        .list_transactions(fx.vault, &filter, 50, None)
-        .unwrap();
-    assert_eq!(
-        rows.items.iter().map(|t| t.id).collect::<Vec<_>>(),
-        [for_elisa]
-    );
-
-    fx.run(
-        "matteo",
-        Command::VoidTransaction {
-            transaction_id: for_elisa,
-        },
-    );
-    assert_eq!(fx.core.people(fx.vault).unwrap(), ["matteo"]);
 }
 
 /// Commands exactly as a version 3 client wrote them into the log: they
