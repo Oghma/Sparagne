@@ -491,8 +491,59 @@ impl Core {
         person: Option<String>,
     ) -> Result<Vec<FlowCategoryTotals>> {
         check_range(from, to)?;
-        let _ = (vault_id, person);
-        Ok(Vec::new())
+        let (where_sql, args) = without_openings(scope(vault_id, from, to, person.as_deref()));
+        let sql = format!(
+            "SELECT l.target_id, t.category_id, c.name, c.is_system, t.kind, SUM(ABS(l.amount))
+             FROM transactions t
+             JOIN legs l ON l.transaction_id = t.id AND l.target_kind = 'flow'
+             JOIN categories c ON c.id = t.category_id
+             {where_sql} AND t.kind IN ('expense', 'refund')
+             GROUP BY l.target_id, t.category_id, t.kind"
+        );
+        let rows = query_all(&self.conn, &sql, params_from_iter(args.iter()), |r| {
+            Ok((
+                r.get::<_, Uuid>(0)?,
+                r.get::<_, Uuid>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, bool>(3)?,
+                r.get::<_, String>(4)?,
+                r.get::<_, i64>(5)?,
+            ))
+        })?;
+
+        let mut out: Vec<FlowCategoryTotals> = Vec::new();
+        for (flow_id, category_id, name, is_system, kind, amount) in rows {
+            let slot = find_or_push(
+                &mut out,
+                |f| f.flow_id == flow_id && f.category_id == category_id,
+                || FlowCategoryTotals {
+                    flow_id,
+                    category_id,
+                    name,
+                    is_system,
+                    expense: 0,
+                    refund: 0,
+                    net_expense: 0,
+                },
+            );
+            let mut income = 0;
+            accumulate(
+                &kind,
+                amount,
+                &mut income,
+                &mut slot.expense,
+                &mut slot.refund,
+            );
+            slot.net_expense = (slot.expense - slot.refund).max(0);
+        }
+        out.retain(|f| f.expense != 0 || f.refund != 0);
+        out.sort_by(|a, b| {
+            b.net_expense
+                .cmp(&a.net_expense)
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+                .then_with(|| a.flow_id.cmp(&b.flow_id))
+        });
+        Ok(out)
     }
 
     /// Totals of the `bounds.len() - 1` consecutive ranges the boundaries
