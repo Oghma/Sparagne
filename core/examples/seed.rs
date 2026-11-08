@@ -13,7 +13,9 @@
 //! household's expenses, transfers between wallets and between envelopes,
 //! refunds, rows without a category, a voided row and three recurring
 //! templates: the mortgage has this month's payment still due, and the gym
-//! was cancelled half way.
+//! was cancelled half way. Three loans sit in the Patrimonio tab: the
+//! variable-rate mortgage, linked to the mortgage template, a car loan with
+//! an early repayment and an archived kitchen loan.
 //!
 //! For the last five months the household shares its money out with an
 //! allocation plan: the incomes land in Unallocated and, on the 2nd of every
@@ -40,7 +42,8 @@
 use chrono::{DateTime, Datelike, FixedOffset, Local, Months, NaiveDate, TimeZone};
 use sparagne_core::{
     AllocationLine, AllocationMove, AllocationRule, Command, CommandEnvelope, Core, Currency,
-    Entry, FlowMode, Frequency, Schedule, TransactionKind,
+    Entry, FlowMode, Frequency, RecurringPatch, Schedule, TransactionKind,
+    loan::{LoanEvent, LoanInstallment, LoanTerms, PrepaymentMode},
 };
 use uuid::Uuid;
 
@@ -304,6 +307,100 @@ impl Seeder {
 
 /// How many months, the current one included, the allocation plan has run.
 const PLAN_MONTHS: u32 = 5;
+
+/// The variable-rate mortgage, linked to the mortgage template, a car loan
+/// with an early repayment and a paid-off kitchen loan, archived. The template
+/// is brought to the installment of the day, as the app does after a change.
+fn seed_loans(seed: &mut Seeder, mortgage_template: Uuid, today: NaiveDate) {
+    let date = |y, m, d| NaiveDate::from_ymd_opt(y, m, d).unwrap();
+    let terms = |principal, annual_rate_ppm, months, first_due| LoanTerms {
+        principal,
+        annual_rate_ppm,
+        months,
+        first_due,
+        installment: LoanInstallment::Computed,
+        upfront_fees: 0,
+        installment_fee: 0,
+    };
+
+    let mortgage = seed.run(
+        "matteo",
+        Command::CreateLoan {
+            name: "Mutuo casa".to_string(),
+            note: None,
+            terms: terms(16_500_000, 32_500, 300, date(2024, 3, 1)),
+            recurring_id: None,
+        },
+    );
+    seed.run(
+        "matteo",
+        Command::AddLoanEvent {
+            loan_id: mortgage,
+            event: LoanEvent::RateChange {
+                date: date(2026, 1, 1),
+                annual_rate_ppm: 28_500,
+                installment: LoanInstallment::Computed,
+            },
+        },
+    );
+    seed.run(
+        "matteo",
+        Command::SetLoanRecurring {
+            loan_id: mortgage,
+            recurring_id: Some(mortgage_template),
+        },
+    );
+    let schedule = seed.core.loan_schedule(seed.vault, mortgage).unwrap();
+    let current = schedule
+        .rows
+        .iter()
+        .find(|row| row.due_date >= today)
+        .or(schedule.rows.last())
+        .unwrap();
+    seed.run(
+        "matteo",
+        Command::UpdateRecurring {
+            recurring_id: mortgage_template,
+            patch: RecurringPatch {
+                amount: Some(current.payment + current.fee),
+                ..Default::default()
+            },
+        },
+    );
+
+    let car = seed.run(
+        "elisa",
+        Command::CreateLoan {
+            name: "Prestito auto".to_string(),
+            note: None,
+            terms: terms(1_800_000, 59_000, 60, date(2025, 1, 15)),
+            recurring_id: None,
+        },
+    );
+    seed.run(
+        "elisa",
+        Command::AddLoanEvent {
+            loan_id: car,
+            event: LoanEvent::Prepayment {
+                date: date(2026, 6, 15),
+                amount: 300_000,
+                mode: PrepaymentMode::Lower,
+                fee: 0,
+            },
+        },
+    );
+
+    let kitchen = seed.run(
+        "matteo",
+        Command::CreateLoan {
+            name: "Rata cucina".to_string(),
+            note: None,
+            terms: terms(480_000, 0, 24, date(2024, 10, 5)),
+            recurring_id: None,
+        },
+    );
+    seed.run("matteo", Command::ArchiveLoan { loan_id: kitchen });
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -951,6 +1048,8 @@ fn main() {
             recurring_id: palestra,
         },
     );
+
+    seed_loans(&mut seed, mutuo, now.date_naive());
 
     println!("seeded {path}");
 }
