@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The year's expenses by category: the heaviest eight with a bar and their
-/// share, then "other". Drawn as the Mastro's panel draws a month's
+/// share, then "other". The lines are the Mastro's panel's for a month
 /// (`CategoryBreakdown`), so the two read alike.
 struct CategoryYearCard: View {
     let categories: [CategoryShare]
@@ -17,7 +17,7 @@ struct CategoryYearCard: View {
                         .foregroundStyle(Ink.text3)
                 } else {
                     VStack(spacing: 7) {
-                        ForEach(categories) { line($0) }
+                        ForEach(categories) { CategoryShareLine(category: $0, heaviest: heaviest) }
                     }
                 }
             }
@@ -26,13 +26,27 @@ struct CategoryYearCard: View {
         }
     }
 
-    private func line(_ category: CategoryShare) -> some View {
+    /// Against the heaviest line, "other" included: the lines past the
+    /// eighth can add up to more than the first, and a bar never runs past
+    /// its track.
+    private var heaviest: Int64 {
+        categories.map(\.amount).max() ?? 0
+    }
+}
+
+/// One category's line: the name, the amount and its share, over a bar
+/// against the heaviest line's amount.
+struct CategoryShareLine: View {
+    let category: CategoryShare
+    let heaviest: Int64
+
+    var body: some View {
         let name = SummaryText.categoryName(category.name, isSystem: category.isSystem, isOther: category.isOther)
         let share = SummaryText.percent(category.share)
         // "Other" folds what is left: told apart from a category by the
         // secondary ink, as a sum is.
         let tint = category.isOther ? Ink.text2 : Ink.text
-        return VStack(spacing: 3) {
+        VStack(spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(name)
                     .foregroundStyle(tint)
@@ -47,7 +61,7 @@ struct CategoryYearCard: View {
                     .frame(width: 32, alignment: .trailing)
             }
             .font(Face.row)
-            MeterBar(fraction: fraction(category), track: Ink.track, height: 4, rounded: true)
+            MeterBar(fraction: fraction, track: Ink.track, height: 4, rounded: true)
         }
         // The bar is decoration for the same figure, not a second one: one
         // stop, "Casa: €4,800.00", 22%.
@@ -56,11 +70,7 @@ struct CategoryYearCard: View {
         .accessibilityValue(share)
     }
 
-    /// Against the heaviest line, "other" included: the lines past the
-    /// eighth can add up to more than the first, and a bar never runs past
-    /// its track.
-    private func fraction(_ category: CategoryShare) -> Double {
-        let heaviest = categories.map(\.amount).max() ?? 0
+    private var fraction: Double {
         guard heaviest > 0 else { return 0 }
         return Double(category.amount) / Double(heaviest)
     }

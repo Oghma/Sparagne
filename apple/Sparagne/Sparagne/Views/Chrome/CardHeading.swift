@@ -7,6 +7,8 @@ struct CardHeading<Trailing: View>: View {
     var hint: String?
     /// A Setup card's column headings sit closer under it.
     var bottomPadding: CGFloat = 8
+    /// Room for a control; the Mastro's panel, whose cards carry none, passes 0.
+    var minHeight: CGFloat = 22
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
@@ -31,14 +33,16 @@ struct CardHeading<Trailing: View>: View {
             }
             trailing
         }
-        .frame(minHeight: 22)
+        .frame(minHeight: minHeight)
         .padding(.bottom, bottomPadding)
     }
 }
 
 extension CardHeading where Trailing == EmptyView {
-    init(title: String, count: Int? = nil, hint: String? = nil, bottomPadding: CGFloat = 8) {
-        self.init(title: title, count: count, hint: hint, bottomPadding: bottomPadding) { EmptyView() }
+    init(title: String, count: Int? = nil, hint: String? = nil, bottomPadding: CGFloat = 8, minHeight: CGFloat = 22) {
+        self.init(title: title, count: count, hint: hint, bottomPadding: bottomPadding, minHeight: minHeight) {
+            EmptyView()
+        }
     }
 }
 

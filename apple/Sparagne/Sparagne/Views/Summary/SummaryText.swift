@@ -27,6 +27,13 @@ enum SummaryText {
         positive ? "+\(text)" : text
     }
 
+    /// `"▼ 180,14 vs settembre"`: how savings moved since `month`, the arrow
+    /// saying which way and the figure how much; `=` when they did not move.
+    static func savingsChange(_ change: Int64, since month: Int, locale: Locale = .autoupdatingCurrent) -> String {
+        let arrow = change > 0 ? "\u{25B2}" : change < 0 ? "\u{25BC}" : "="
+        return String(localized: "\(arrow) \(LedgerMoney.bare(abs(change))) vs \(monthName(month, locale: locale))")
+    }
+
     // MARK: - Shares
 
     /// `"38%"`: a fraction of one written as the cards write a share, the
@@ -42,13 +49,7 @@ enum SummaryText {
     }
 
     private static func decimal(_ value: Double, decimals: Int) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.decimalSeparator = ","
-        formatter.groupingSeparator = "."
-        formatter.minimumFractionDigits = decimals
-        formatter.maximumFractionDigits = decimals
-        return formatter.string(from: NSNumber(value: value)) ?? "0"
+        LedgerMoney.number(NSNumber(value: value), decimals: decimals)
     }
 
     // MARK: - Help

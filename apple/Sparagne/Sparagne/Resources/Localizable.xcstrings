@@ -369,22 +369,6 @@
         }
       }
     },
-    "%@ vs %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ vs %@"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ su %@"
-          }
-        }
-      }
-    },
     "%@ · due": {
       "localizations": {
         "en": {

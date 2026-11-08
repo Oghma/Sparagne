@@ -2,21 +2,26 @@ import Foundation
 
 /// Money as the ledger writes it (`€2.448,53`), fixed whatever the locale: the layout depends on it.
 enum LedgerMoney {
+    /// The one formatter behind every figure; each call sets its decimals.
     private static let formatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.groupingSeparator = "."
         formatter.decimalSeparator = ","
         formatter.usesGroupingSeparator = true
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
         return formatter
     }()
 
+    /// `"2.448,53"` with `decimals` digits after the comma.
+    static func number(_ value: NSNumber, decimals: Int) -> String {
+        formatter.minimumFractionDigits = decimals
+        formatter.maximumFractionDigits = decimals
+        return formatter.string(from: value) ?? "0"
+    }
+
     /// `"2.448,53"`. Negative amounts keep their minus sign.
     static func bare(_ minorUnits: Int64) -> String {
-        let value = Decimal(minorUnits) / 100
-        return formatter.string(from: value as NSDecimalNumber) ?? "0,00"
+        number(Decimal(minorUnits) / 100 as NSDecimalNumber, decimals: 2)
     }
 
     /// `"€2.448,53"`.
@@ -29,14 +34,7 @@ enum LedgerMoney {
     /// zero, so the caller can print a dash instead of a fake `0,0%`.
     static func percent(_ value: Int64, of base: Int64, decimals: Int = 1) -> String? {
         guard base != 0 else { return nil }
-        let ratio = (Decimal(value) / Decimal(base) * 100) as NSDecimalNumber
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.decimalSeparator = ","
-        formatter.groupingSeparator = "."
-        formatter.minimumFractionDigits = decimals
-        formatter.maximumFractionDigits = decimals
-        return formatter.string(from: ratio).map { "\($0)%" }
+        return number((Decimal(value) / Decimal(base) * 100) as NSDecimalNumber, decimals: decimals) + "%"
     }
 
     /// Savings as a share of income, as the summary card and the ledger's

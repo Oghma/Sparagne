@@ -35,32 +35,6 @@ struct SummaryPanel: View {
 
 // MARK: - Shared pieces
 
-/// A card's title line (`.ch`): the title on the left, an optional tag on
-/// the right.
-private struct CardHeader<Trailing: View>: View {
-    let title: String
-    @ViewBuilder var trailing: Trailing
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text(title)
-                .font(Face.ui(11.5, .semibold))
-                .foregroundStyle(Ink.text2)
-                .lineLimit(1)
-                .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 0)
-            trailing
-        }
-        .padding(.bottom, 8)
-    }
-}
-
-extension CardHeader where Trailing == EmptyView {
-    init(title: String) {
-        self.init(title: title) { EmptyView() }
-    }
-}
-
 /// Figures as the panel writes them: no symbol (the hero carries it once),
 /// and a true minus sign, which is as wide as a digit's neighbours and reads
 /// as one.
@@ -83,7 +57,7 @@ struct SavingsHero: View {
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: 0) {
-                CardHeader(title: String(localized: "Savings in \(SummaryText.monthName(summary.month.month))")) {
+                CardHeading(title: String(localized: "Savings in \(SummaryText.monthName(summary.month.month))"), minHeight: 0) {
                     if isCurrent {
                         SetupTag(text: String(localized: "in progress"))
                     }
@@ -137,18 +111,15 @@ struct SavingsHero: View {
         LedgerMoney.savingsRate(summary.savings, of: summary.totals.income)
     }
 
-    /// `"▼ 180,14 su settembre"`: the change in savings since the month
-    /// before, as an amount, green when it grew and red when it shrank.
-    /// Nothing when the month before had no activity to compare with.
+    /// The change in savings since the month before
+    /// (`SummaryText.savingsChange`), green when it grew and red when it
+    /// shrank. Nothing when the month before had no activity to compare with.
     private var delta: (text: String, tint: Color)? {
         let previous = summary.previous
         guard previous.income != 0 || previous.expense != 0 || previous.refund != 0 else { return nil }
         let change = summary.savings - summary.previousSavings
-        let arrow = change > 0 ? "\u{25B2}" : change < 0 ? "\u{25BC}" : "="
         let tint = change > 0 ? Ink.positive : change < 0 ? Ink.negative : Ink.text2
-        let month = SummaryText.monthName(summary.month.adding(months: -1).month)
-        let amount = "\(arrow) \(LedgerMoney.bare(abs(change)))"
-        return (String(localized: "\(amount) vs \(month)"), tint)
+        return (SummaryText.savingsChange(change, since: summary.month.adding(months: -1).month), tint)
     }
 
     private func figure(_ label: String, _ amount: Int64) -> some View {
@@ -189,7 +160,7 @@ struct PersonMatrix: View {
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: 0) {
-                CardHeader(title: String(localized: "By person"))
+                CardHeading(title: String(localized: "By person"), minHeight: 0)
                 if people.isEmpty {
                     Text(String(localized: "No activity this month"))
                         .font(Face.row)
@@ -280,74 +251,31 @@ struct PersonMatrix: View {
 // MARK: - Categories
 
 /// Where the month's spending went (`.cat`): the six heaviest categories,
-/// each with its share of the month's expenses and a bar against the
-/// heaviest one.
+/// each with its share of what the categories spent and a bar against the
+/// heaviest one, drawn as the RIEPILOGO's year card draws its lines. Nothing
+/// folds into "other": the card lists only what it names.
 struct CategoryBreakdown: View {
     let summary: LedgerSummary
-    var limit = 6
 
-    private var shown: [CategoryTotals] {
-        Array(summary.categories.filter { $0.netExpense > 0 }.prefix(limit))
-    }
-
-    /// What the categories spent between them, the base of each share. Not
-    /// the month's net expense: a refund filed in a category with nothing
-    /// spent (a reimbursement of last month's bill) lowers that total but no
-    /// category's figure, and the shares would add up to more than 100%.
-    private var spent: Int64 {
-        summary.categories.reduce(0) { $0 + max($1.netExpense, 0) }
+    private var shown: [CategoryShare] {
+        SummaryCategories.rows(summary.categories, limit: 6, foldingRest: false)
     }
 
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: 0) {
-                CardHeader(title: String(localized: "Expenses by category"))
+                CardHeading(title: String(localized: "Expenses by category"), minHeight: 0)
                 if shown.isEmpty {
                     Text(String(localized: "Nothing spent this month"))
                         .font(Face.row)
                         .foregroundStyle(Ink.text3)
                 } else {
                     VStack(spacing: 7) {
-                        ForEach(shown, id: \.categoryId) { category in
-                            line(category)
-                        }
+                        ForEach(shown) { CategoryShareLine(category: $0, heaviest: shown.first?.amount ?? 0) }
                     }
                 }
             }
         }
-    }
-
-    private func line(_ category: CategoryTotals) -> some View {
-        let name = SummaryText.categoryName(category.name, isSystem: category.isSystem)
-        let share = LedgerMoney.percent(category.netExpense, of: spent, decimals: 0)
-        return VStack(spacing: 3) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(name)
-                    .foregroundStyle(Ink.text)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 0)
-                Text(PanelMoney.bare(category.netExpense))
-                    .foregroundStyle(Ink.text)
-                Text(share ?? "")
-                    .font(Face.footnote)
-                    .foregroundStyle(Ink.text3)
-                    .frame(width: 32, alignment: .trailing)
-            }
-            .font(Face.row)
-            MeterBar(fraction: fraction(category), track: Ink.track, height: 4, rounded: true)
-        }
-        // The bar is decoration for the same figure, not a second one: one
-        // stop, "Casa: €480,00".
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(AccessibilityText.figure(name, amount: LedgerMoney.amount(category.netExpense)))
-        .accessibilityValue(share ?? "")
-    }
-
-    private func fraction(_ category: CategoryTotals) -> Double {
-        let heaviest = shown.first?.netExpense ?? 0
-        guard heaviest > 0 else { return 0 }
-        return Double(category.netExpense) / Double(heaviest)
     }
 }
 
@@ -362,7 +290,7 @@ struct TrailingMonths: View {
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: 0) {
-                CardHeader(title: heading)
+                CardHeading(title: heading, minHeight: 0)
                 SavingsBars(
                     values: summary.trailing.map(LedgerSummary.savings),
                     labels: summary.trailingMonths.map { LedgerDate.monthInitial($0.month) },

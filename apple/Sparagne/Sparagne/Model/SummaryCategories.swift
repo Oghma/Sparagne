@@ -26,14 +26,20 @@ enum SummaryCategories {
     /// How many categories get a line of their own before "other".
     static let limit = 8
 
-    /// The heaviest `limit` categories with a net expense, then one "other"
-    /// line for the rest when there is any. The share is on the total the
-    /// categories spent between them, as the Mastro's panel counts it: a
-    /// refund filed where nothing was spent lowers no category's figure.
+    /// The heaviest `limit` categories with a net expense, then, when
+    /// `foldingRest`, one "other" line for the rest when there is any. The
+    /// share is on the total the categories spent between them, not the net
+    /// expense: a refund filed where nothing was spent (a reimbursement of
+    /// last month's bill) lowers no category's figure, and the shares would
+    /// add up to more than 100%.
     ///
     /// `totals` come from the core heaviest first, and keep that order: the
     /// core breaks the ties, so the list and the Mastro's panel agree on them.
-    static func rows(_ totals: [CategoryTotals]) -> [CategoryShare] {
+    static func rows(
+        _ totals: [CategoryTotals],
+        limit: Int = SummaryCategories.limit,
+        foldingRest: Bool = true
+    ) -> [CategoryShare] {
         let spent = totals.reduce(Int64(0)) { $0 + max($1.netExpense, 0) }
         let spending = totals.filter { $0.netExpense > 0 }
         guard spent > 0, !spending.isEmpty else { return [] }
@@ -51,7 +57,7 @@ enum SummaryCategories {
             )
         }
         let rest = spending.dropFirst(limit)
-        if !rest.isEmpty {
+        if foldingRest, !rest.isEmpty {
             let amount = rest.reduce(Int64(0)) { $0 + $1.netExpense }
             lines.append(
                 CategoryShare(

@@ -96,12 +96,9 @@ struct SummaryCards: View {
 
     private var previousName: String { SummaryText.monthName(year.upTo.adding(months: -1).month) }
 
-    /// "▼ 180,14 vs September": the arrow says which way, the figure how much.
     /// January has no month to compare with, so no line.
     private var deltaCaption: String? {
-        guard let delta = kpis.savingsDelta else { return nil }
-        let arrow = delta >= 0 ? "\u{25B2}" : "\u{25BC}"
-        return String(localized: "\(arrow) \(LedgerMoney.bare(abs(delta))) vs \(previousName)")
+        kpis.savingsDelta.map { SummaryText.savingsChange($0, since: year.upTo.adding(months: -1).month) }
     }
 
     /// A rate over no income is a dash, never a fake 0%.
