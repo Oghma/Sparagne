@@ -434,21 +434,24 @@ struct LedgerStoreTests {
         #expect(LedgerAccessibility.label(for: voided).hasSuffix(String(localized: "deleted")))
     }
 
-    // MARK: - The optional WALLET column
+    // MARK: - The View menu's toggles and the optional WALLET column
 
-    @Test("The wallet column is off until it is asked for, and the choice is remembered")
-    func walletColumnIsRememberedOff() throws {
+    @Test("Show deleted, show transfers and the wallet column are off until asked for, and a later launch reads them back under the menus' keys")
+    func viewTogglesAreRemembered() async throws {
         let defaults = try TestStore.defaults()
         let store = try TestStore.fresh(defaults: defaults)
-        #expect(store.showWalletColumn == false)
+        #expect(!store.showVoided && !store.showTransfers && !store.showWalletColumn)
 
+        store.showVoided = true
+        store.showTransfers = true
         store.showWalletColumn = true
+        await store.settle()
 
-        // A later launch reads the preference back, the same key the View
-        // menu's toggle writes.
         let relaunched = try TestStore.fresh(defaults: defaults)
-        #expect(relaunched.showWalletColumn)
-        #expect(defaults.bool(forKey: AppStore.walletColumnKey))
+        #expect(relaunched.showVoided && relaunched.showTransfers && relaunched.showWalletColumn)
+        for key in [AppStore.showVoidedKey, AppStore.showTransfersKey, AppStore.walletColumnKey] {
+            #expect(defaults.bool(forKey: key), "\(key)")
+        }
     }
 
     @Test("A row carries the name of its wallet, and the empty line offers the sticky default")
