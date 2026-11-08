@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 sparagne_core = { path = "../core" }
-axum = "0.8"
+axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
 tower-http = { version = "0.7", features = ["trace"] }
 tracing = "0.1"

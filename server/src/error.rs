@@ -2,6 +2,7 @@
 
 use axum::{
     Json,
+    extract::rejection::{JsonRejection, PathRejection, QueryRejection},
     http::{HeaderValue, StatusCode, header::RETRY_AFTER},
     response::{IntoResponse, Response},
 };
@@ -125,6 +126,26 @@ impl From<DomainError> for ApiError {
 impl From<rusqlite::Error> for ApiError {
     fn from(err: rusqlite::Error) -> Self {
         Self::internal(err.to_string())
+    }
+}
+
+/// A body, path or query the extractors of [`crate::extract`] could not read:
+/// `400 invalid_request` with axum's explanation.
+impl From<JsonRejection> for ApiError {
+    fn from(rejection: JsonRejection) -> Self {
+        Self::invalid_request(rejection.body_text())
+    }
+}
+
+impl From<PathRejection> for ApiError {
+    fn from(rejection: PathRejection) -> Self {
+        Self::invalid_request(rejection.body_text())
+    }
+}
+
+impl From<QueryRejection> for ApiError {
+    fn from(rejection: QueryRejection) -> Self {
+        Self::invalid_request(rejection.body_text())
     }
 }
 

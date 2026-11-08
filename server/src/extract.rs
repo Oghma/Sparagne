@@ -1,32 +1,18 @@
 //! Extractors that answer with an [`ErrorBody`](sparagne_core::sync::ErrorBody)
 //! instead of axum's plain-text rejections: a malformed body, path or query
-//! is `400 invalid_request`.
+//! is `400 invalid_request`, through the `From` impls of [`ApiError`].
 
 use axum::{
-    extract::{FromRequest, FromRequestParts, Request},
-    http::request::Parts,
+    extract::{FromRequest, FromRequestParts},
     response::{IntoResponse, Response},
 };
-use serde::{Serialize, de::DeserializeOwned};
+use serde::Serialize;
 
 use crate::error::ApiError;
 
+#[derive(FromRequest)]
+#[from_request(via(axum::Json), rejection(ApiError))]
 pub struct Json<T>(pub T);
-
-impl<T, S> FromRequest<S> for Json<T>
-where
-    T: DeserializeOwned,
-    S: Send + Sync,
-{
-    type Rejection = ApiError;
-
-    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        match axum::Json::<T>::from_request(req, state).await {
-            Ok(axum::Json(value)) => Ok(Self(value)),
-            Err(rejection) => Err(ApiError::invalid_request(rejection.body_text())),
-        }
-    }
-}
 
 impl<T: Serialize> IntoResponse for Json<T> {
     fn into_response(self) -> Response {
@@ -34,36 +20,10 @@ impl<T: Serialize> IntoResponse for Json<T> {
     }
 }
 
+#[derive(FromRequestParts)]
+#[from_request(via(axum::extract::Path), rejection(ApiError))]
 pub struct Path<T>(pub T);
 
-impl<T, S> FromRequestParts<S> for Path<T>
-where
-    T: DeserializeOwned + Send,
-    S: Send + Sync,
-{
-    type Rejection = ApiError;
-
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        match axum::extract::Path::<T>::from_request_parts(parts, state).await {
-            Ok(axum::extract::Path(value)) => Ok(Self(value)),
-            Err(rejection) => Err(ApiError::invalid_request(rejection.body_text())),
-        }
-    }
-}
-
+#[derive(FromRequestParts)]
+#[from_request(via(axum::extract::Query), rejection(ApiError))]
 pub struct Query<T>(pub T);
-
-impl<T, S> FromRequestParts<S> for Query<T>
-where
-    T: DeserializeOwned,
-    S: Send + Sync,
-{
-    type Rejection = ApiError;
-
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        match axum::extract::Query::<T>::from_request_parts(parts, state).await {
-            Ok(axum::extract::Query(value)) => Ok(Self(value)),
-            Err(rejection) => Err(ApiError::invalid_request(rejection.body_text())),
-        }
-    }
-}
