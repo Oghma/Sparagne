@@ -182,8 +182,6 @@ pub(super) fn restore_recurring(
     Ok(())
 }
 
-/// Posts the template as an entry, then records the run. `person` is the
-/// command's, never the template's owner (see `Command::ExecuteRecurring`).
 /// Borrowed view of `Command::ExecuteRecurring`.
 #[derive(Clone, Copy)]
 pub(super) struct Execution<'a> {
@@ -195,6 +193,9 @@ pub(super) struct Execution<'a> {
     pub amount: Option<i64>,
 }
 
+/// Posts the template as an entry, then records the run. `person` is the
+/// command's, never the template's owner (see `Command::ExecuteRecurring`);
+/// `amount`, when given, is the entry's instead of the template's.
 pub(super) fn execute_recurring(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
