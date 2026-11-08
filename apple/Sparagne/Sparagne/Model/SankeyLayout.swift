@@ -34,7 +34,7 @@ struct SankeyLayout: Equatable, Sendable {
     /// Left of the income column, for its labels, which sit on the left.
     static let leadingRoom: CGFloat = 180
     /// Right of the categories, for theirs.
-    static let trailingRoom: CGFloat = 170
+    static let trailingRoom: CGFloat = 180
 
     static func make(
         _ sankey: CashFlowSankey,
