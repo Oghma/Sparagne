@@ -180,7 +180,7 @@ other hand, comes from the real schedule, events included.
 A loan can be linked to a recurring entry, created from the loan form or an
 existing one (a mortgage already in Ricorrenze). The installment is then
 recorded at the schedule's amount for that due date, the fee included,
-whichever way it is confirmed (Ricorrenze, the Mastro's due rows, Confirm
+whichever way it is confirmed (Ricorrenze, the Mastro's due rows, Register
 All), so a rate change reaches the ledger; the entry's template keeps the
 current installment and the last due date, updated with every change to the
 loan (an amount typed by hand on the template is overwritten by the first
