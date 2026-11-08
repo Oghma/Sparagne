@@ -5,7 +5,7 @@
 //! is for when that is not the author (see `person_marker`).
 //!
 //! ```text
-//! [+|-|r] importo  [nota…]  [#categoria]  [@wallet]  [>busta]  [!persona]  [data]
+//! [+|-|r] importo  [nota…]  [#categoria]  [@wallet]  [>flusso]  [!persona]  [data]
 //! tw> importo @da @a [nota] [data]        transfer between wallets
 //! tf> importo >da >a [nota] [data]        transfer between flows
 //! ```
