@@ -6113,22 +6113,6 @@
         }
       }
     },
-    "Give the loan a name": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Give the loan a name"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dai un nome al prestito"
-          }
-        }
-      }
-    },
     "Go to %@": {
       "localizations": {
         "en": {
@@ -7237,6 +7221,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Collega a una esistente"
+          }
+        }
+      }
+    },
+    "Linked, «%@» goes from %@ to %@ and ends on %@: the schedule's installment replaces what was typed in it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linked, «%1$@» goes from %2$@ to %3$@ and ends on %4$@: the schedule's installment replaces what was typed in it."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collegata, «%1$@» passa da %2$@ a %3$@ e finisce il %4$@: la rata del piano sostituisce l'importo scritto a mano."
+          }
+        }
+      }
+    },
+    "Linked, «%@» keeps its amount and ends on %@, with the schedule's last installment.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linked, «%1$@» keeps its amount and ends on %2$@, with the schedule's last installment."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collegata, «%1$@» tiene il suo importo e finisce il %2$@, con l'ultima rata del piano."
           }
         }
       }
@@ -16853,6 +16869,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "annullare l'ultimo riparto elimina i suoi trasferimenti e lo rimette da distribuire"
+          }
+        }
+      }
+    },
+    "until %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "until %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "fino al %@"
           }
         }
       }
