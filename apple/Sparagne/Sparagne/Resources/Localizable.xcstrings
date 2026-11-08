@@ -12001,6 +12001,22 @@
         }
       }
     },
+    "Wealth": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wealth"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Patrimonio"
+          }
+        }
+      }
+    },
     "Week": {
       "localizations": {
         "en": {

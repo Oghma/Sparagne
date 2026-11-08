@@ -176,7 +176,7 @@ struct CommandPaletteTests {
 
         let actions = CommandPaletteModel.ledgerActions(store: store, engine: nil)
         let tabIds = actions.map(\.id).filter { $0.hasPrefix("tab.") }
-        #expect(tabIds == ["tab.summary", "tab.ledger", "tab.recurring", "tab.allocation", "tab.setup"])
+        #expect(tabIds == ["tab.summary", "tab.ledger", "tab.recurring", "tab.allocation", "tab.wealth", "tab.setup"])
 
         // From another tab each time, so the run is what moved it.
         for tab in LedgerTab.allCases {

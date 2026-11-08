@@ -56,6 +56,39 @@ CREATE TABLE allocation_runs (
 );
 CREATE INDEX IF NOT EXISTS ix_transactions_command ON transactions(command_id);
 ";
+/// Loans and their events. Before version 6 no command made a loan, so both
+/// tables start empty, as replaying the same log gives.
+const MIGRATION_V6: &str = "
+CREATE TABLE loans (
+    id              BLOB PRIMARY KEY,
+    vault_id        BLOB NOT NULL REFERENCES vaults(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    note            TEXT,
+    principal       INTEGER NOT NULL,
+    annual_rate_ppm INTEGER NOT NULL,
+    months          INTEGER NOT NULL,
+    first_due       TEXT NOT NULL,
+    installment     TEXT NOT NULL,
+    upfront_fees    INTEGER NOT NULL DEFAULT 0,
+    installment_fee INTEGER NOT NULL DEFAULT 0,
+    recurring_id    BLOB,
+    archived_at     INTEGER,
+    created_by      TEXT NOT NULL,
+    created_at      INTEGER NOT NULL
+);
+CREATE INDEX ix_loans_vault ON loans(vault_id);
+CREATE UNIQUE INDEX ux_loans_recurring ON loans(recurring_id) WHERE recurring_id IS NOT NULL;
+CREATE TABLE loan_events (
+    id         BLOB PRIMARY KEY,
+    loan_id    BLOB NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+    date       TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    payload    TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX ix_loan_events_loan ON loan_events(loan_id);
+";
 /// Every step, keyed by the version it leads to: a database at version `v`
 /// runs, in order, each step whose key is above `v`.
 const MIGRATIONS: &[(i64, &str)] = &[
@@ -63,8 +96,9 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (3, MIGRATION_V3),
     (4, MIGRATION_V4),
     (5, MIGRATION_V5),
+    (6, MIGRATION_V6),
 ];
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
 
 /// Handle to one local database (one file per account, many vaults).
 pub struct Core {
@@ -257,21 +291,28 @@ mod tests {
             .command_id
     }
 
-    /// A file as `version` left it, holding alice's vault "Casa": the
-    /// allocation tables and the index on the transactions' command are
-    /// gone, before version 4 the person and owner columns too, before
-    /// version 3 the index on the owner and the vault name is back, and
-    /// before version 2 the server seq column is gone too.
+    /// A file as `version` left it, holding alice's vault "Casa": the loan
+    /// tables are gone, before version 5 the allocation tables and the index
+    /// on the transactions' command too, before version 4 the person and
+    /// owner columns, before version 3 the index on the owner and the vault
+    /// name is back, and before version 2 the server seq column is gone too.
     fn old_database(version: i64) -> (PathBuf, Uuid) {
         let path = temp_database();
         let casa = create_vault(&mut Core::open(&path).unwrap(), "Casa");
         let conn = Connection::open(&path).unwrap();
         conn.execute_batch(
-            "DROP TABLE allocation_runs;
-             DROP TABLE allocation_plans;
-             DROP INDEX ix_transactions_command;",
+            "DROP TABLE loan_events;
+             DROP TABLE loans;",
         )
         .unwrap();
+        if version < 5 {
+            conn.execute_batch(
+                "DROP TABLE allocation_runs;
+                 DROP TABLE allocation_plans;
+                 DROP INDEX ix_transactions_command;",
+            )
+            .unwrap();
+        }
         if version < 4 {
             conn.execute_batch(
                 "ALTER TABLE transactions DROP COLUMN person;
@@ -310,6 +351,9 @@ mod tests {
         assert!(has_table(&core.conn, "allocation_plans"));
         assert!(has_table(&core.conn, "allocation_runs"));
         assert!(has_index(&core.conn, "ix_transactions_command"));
+        assert!(has_table(&core.conn, "loans"));
+        assert!(has_table(&core.conn, "loan_events"));
+        assert!(has_index(&core.conn, "ux_loans_recurring"));
 
         let vaults = core.vaults().unwrap();
         assert_eq!(vaults.len(), 1);
@@ -335,6 +379,9 @@ mod tests {
         assert!(has_table(&core.conn, "allocation_plans"));
         assert!(has_table(&core.conn, "allocation_runs"));
         assert!(has_index(&core.conn, "ix_transactions_command"));
+        assert!(has_table(&core.conn, "loans"));
+        assert!(has_table(&core.conn, "loan_events"));
+        assert!(has_index(&core.conn, "ux_loans_recurring"));
     }
 
     #[test]
@@ -355,6 +402,11 @@ mod tests {
     #[test]
     fn a_version_4_database_migrates_to_the_current_version() {
         migrates_from(4);
+    }
+
+    #[test]
+    fn a_version_5_database_migrates_to_the_current_version() {
+        migrates_from(5);
     }
 
     #[test]

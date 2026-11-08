@@ -715,6 +715,12 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
      */
     func lastSeq(vaultId: Uuid) throws  -> Int64
     
+    /**
+     * For every active loan with a linked template, the amount each due
+     * date's installment should be recorded with.
+     */
+    func linkedInstallments(vaultId: Uuid) throws  -> [LinkedInstallment]
+    
     func listRecurring(vaultId: Uuid, includeArchived: Bool) throws  -> [RecurringView]
     
     /**
@@ -722,6 +728,21 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
      * next (older) page.
      */
     func listTransactions(vaultId: Uuid, filter: TransactionFilter, limit: UInt32, cursor: String?) throws  -> Page
+    
+    /**
+     * Every active loan on `today`: residual, progress, next installment.
+     */
+    func loanOverview(vaultId: Uuid, today: NaiveDate) throws  -> [LoanOverview]
+    
+    /**
+     * One loan's schedule, its events applied.
+     */
+    func loanSchedule(vaultId: Uuid, loanId: Uuid) throws  -> LoanSchedule
+    
+    /**
+     * Every loan of the vault, archived included, by name.
+     */
+    func loans(vaultId: Uuid) throws  -> [LoanView]
     
     /**
      * The period of the allocation plan waiting for a decision on `today`,
@@ -745,6 +766,11 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
      * are now; the lines may be an unsaved draft.
      */
     func previewAllocation(vaultId: Uuid, lines: [AllocationLine], total: Int64) throws  -> AllocationPreview
+    
+    /**
+     * The schedule of terms and events not saved yet, for the forms.
+     */
+    func previewLoan(terms: LoanTerms, events: [LoanEventView]) throws  -> LoanSchedule
     
     /**
      * What `MergeCategory` would refuse, without changing anything.
@@ -1266,6 +1292,20 @@ open func lastSeq(vaultId: Uuid)throws  -> Int64  {
 })
 }
     
+    /**
+     * For every active loan with a linked template, the amount each due
+     * date's installment should be recorded with.
+     */
+open func linkedInstallments(vaultId: Uuid)throws  -> [LinkedInstallment]  {
+    return try  FfiConverterSequenceTypeLinkedInstallment.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_linked_installments(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
+    )
+})
+}
+    
 open func listRecurring(vaultId: Uuid, includeArchived: Bool)throws  -> [RecurringView]  {
     return try  FfiConverterSequenceTypeRecurringView.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
         uniffiCallStatus in
@@ -1290,6 +1330,47 @@ open func listTransactions(vaultId: Uuid, filter: TransactionFilter, limit: UInt
         FfiConverterTypeTransactionFilter_lower(filter),
         FfiConverterUInt32.lower(limit),
         FfiConverterOptionString.lower(cursor),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Every active loan on `today`: residual, progress, next installment.
+     */
+open func loanOverview(vaultId: Uuid, today: NaiveDate)throws  -> [LoanOverview]  {
+    return try  FfiConverterSequenceTypeLoanOverview.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_loan_overview(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterTypeNaiveDate_lower(today),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * One loan's schedule, its events applied.
+     */
+open func loanSchedule(vaultId: Uuid, loanId: Uuid)throws  -> LoanSchedule  {
+    return try  FfiConverterTypeLoanSchedule_lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_loan_schedule(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterTypeUuid_lower(loanId),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Every loan of the vault, archived included, by name.
+     */
+open func loans(vaultId: Uuid)throws  -> [LoanView]  {
+    return try  FfiConverterSequenceTypeLoanView.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_loans(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
     )
 })
 }
@@ -1349,6 +1430,20 @@ open func previewAllocation(vaultId: Uuid, lines: [AllocationLine], total: Int64
         FfiConverterTypeUuid_lower(vaultId),
         FfiConverterSequenceTypeAllocationLine.lower(lines),
         FfiConverterInt64.lower(total),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The schedule of terms and events not saved yet, for the forms.
+     */
+open func previewLoan(terms: LoanTerms, events: [LoanEventView])throws  -> LoanSchedule  {
+    return try  FfiConverterTypeLoanSchedule_lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_preview_loan(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeLoanTerms_lower(terms),
+        FfiConverterSequenceTypeLoanEventView.lower(events),uniffiCallStatus
     )
 })
 }
@@ -3418,6 +3513,817 @@ public func FfiConverterTypeFlowView_lift(_ buf: RustBuffer) throws -> FlowView 
 #endif
 public func FfiConverterTypeFlowView_lower(_ value: FlowView) -> RustBuffer {
     return FfiConverterTypeFlowView.lower(value)
+}
+
+
+/**
+ * What the linked template should record for one due date: the schedule's
+ * payment plus the installment fee.
+ */
+public struct LinkedInstallment: Equatable, Hashable, Codable {
+    public var recurringId: Uuid
+    public var dueDate: NaiveDate
+    public var amount: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(recurringId: Uuid, dueDate: NaiveDate, amount: Int64) {
+        self.recurringId = recurringId
+        self.dueDate = dueDate
+        self.amount = amount
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LinkedInstallment: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLinkedInstallment: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LinkedInstallment {
+        return
+            try LinkedInstallment(
+                recurringId: FfiConverterTypeUuid.read(from: &buf), 
+                dueDate: FfiConverterTypeNaiveDate.read(from: &buf), 
+                amount: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LinkedInstallment, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.recurringId, into: &buf)
+        FfiConverterTypeNaiveDate.write(value.dueDate, into: &buf)
+        FfiConverterInt64.write(value.amount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLinkedInstallment_lift(_ buf: RustBuffer) throws -> LinkedInstallment {
+    return try FfiConverterTypeLinkedInstallment.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLinkedInstallment_lower(_ value: LinkedInstallment) -> RustBuffer {
+    return FfiConverterTypeLinkedInstallment.lower(value)
+}
+
+
+/**
+ * One event of a loan with its id, the id of the `AddLoanEvent` that made
+ * it: a v7 id, so ids order events made on the same day.
+ */
+public struct LoanEventView: Equatable, Hashable, Codable {
+    public var id: Uuid
+    public var event: LoanEvent
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: Uuid, event: LoanEvent) {
+        self.id = id
+        self.event = event
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LoanEventView: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLoanEventView: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LoanEventView {
+        return
+            try LoanEventView(
+                id: FfiConverterTypeUuid.read(from: &buf), 
+                event: FfiConverterTypeLoanEvent.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LoanEventView, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.id, into: &buf)
+        FfiConverterTypeLoanEvent.write(value.event, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanEventView_lift(_ buf: RustBuffer) throws -> LoanEventView {
+    return try FfiConverterTypeLoanEventView.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanEventView_lower(_ value: LoanEventView) -> RustBuffer {
+    return FfiConverterTypeLoanEventView.lower(value)
+}
+
+
+/**
+ * A loan on a given day: what the Patrimonio tab lists.
+ */
+public struct LoanOverview: Equatable, Hashable, Codable {
+    public var loanId: Uuid
+    /**
+     * The debt after every installment due on or before the day.
+     */
+    public var residual: Int64
+    /**
+     * Installments due on or before the day.
+     */
+    public var paidCount: UInt32
+    /**
+     * Installments of the schedule.
+     */
+    public var totalCount: UInt32
+    /**
+     * The next installment after the day, with its fee.
+     */
+    public var nextDue: NaiveDate?
+    public var nextPayment: Int64?
+    public var capitalRepaid: Int64
+    public var interestPaid: Int64
+    public var interestLeft: Int64
+    /**
+     * The last installment's due date.
+     */
+    public var endDate: NaiveDate?
+    public var taegPpm: UInt32?
+    public var totalCost: Int64
+    /**
+     * Due installments on or after `first_due` the linked template recorded
+     * with a live transaction; `None` without a linked template.
+     */
+    public var registeredCount: UInt32?
+    public var warnings: [LoanWarning]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(loanId: Uuid, 
+        /**
+         * The debt after every installment due on or before the day.
+         */residual: Int64, 
+        /**
+         * Installments due on or before the day.
+         */paidCount: UInt32, 
+        /**
+         * Installments of the schedule.
+         */totalCount: UInt32, 
+        /**
+         * The next installment after the day, with its fee.
+         */nextDue: NaiveDate?, nextPayment: Int64?, capitalRepaid: Int64, interestPaid: Int64, interestLeft: Int64, 
+        /**
+         * The last installment's due date.
+         */endDate: NaiveDate?, taegPpm: UInt32?, totalCost: Int64, 
+        /**
+         * Due installments on or after `first_due` the linked template recorded
+         * with a live transaction; `None` without a linked template.
+         */registeredCount: UInt32?, warnings: [LoanWarning]) {
+        self.loanId = loanId
+        self.residual = residual
+        self.paidCount = paidCount
+        self.totalCount = totalCount
+        self.nextDue = nextDue
+        self.nextPayment = nextPayment
+        self.capitalRepaid = capitalRepaid
+        self.interestPaid = interestPaid
+        self.interestLeft = interestLeft
+        self.endDate = endDate
+        self.taegPpm = taegPpm
+        self.totalCost = totalCost
+        self.registeredCount = registeredCount
+        self.warnings = warnings
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LoanOverview: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLoanOverview: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LoanOverview {
+        return
+            try LoanOverview(
+                loanId: FfiConverterTypeUuid.read(from: &buf), 
+                residual: FfiConverterInt64.read(from: &buf), 
+                paidCount: FfiConverterUInt32.read(from: &buf), 
+                totalCount: FfiConverterUInt32.read(from: &buf), 
+                nextDue: FfiConverterOptionTypeNaiveDate.read(from: &buf), 
+                nextPayment: FfiConverterOptionInt64.read(from: &buf), 
+                capitalRepaid: FfiConverterInt64.read(from: &buf), 
+                interestPaid: FfiConverterInt64.read(from: &buf), 
+                interestLeft: FfiConverterInt64.read(from: &buf), 
+                endDate: FfiConverterOptionTypeNaiveDate.read(from: &buf), 
+                taegPpm: FfiConverterOptionUInt32.read(from: &buf), 
+                totalCost: FfiConverterInt64.read(from: &buf), 
+                registeredCount: FfiConverterOptionUInt32.read(from: &buf), 
+                warnings: FfiConverterSequenceTypeLoanWarning.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LoanOverview, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.loanId, into: &buf)
+        FfiConverterInt64.write(value.residual, into: &buf)
+        FfiConverterUInt32.write(value.paidCount, into: &buf)
+        FfiConverterUInt32.write(value.totalCount, into: &buf)
+        FfiConverterOptionTypeNaiveDate.write(value.nextDue, into: &buf)
+        FfiConverterOptionInt64.write(value.nextPayment, into: &buf)
+        FfiConverterInt64.write(value.capitalRepaid, into: &buf)
+        FfiConverterInt64.write(value.interestPaid, into: &buf)
+        FfiConverterInt64.write(value.interestLeft, into: &buf)
+        FfiConverterOptionTypeNaiveDate.write(value.endDate, into: &buf)
+        FfiConverterOptionUInt32.write(value.taegPpm, into: &buf)
+        FfiConverterInt64.write(value.totalCost, into: &buf)
+        FfiConverterOptionUInt32.write(value.registeredCount, into: &buf)
+        FfiConverterSequenceTypeLoanWarning.write(value.warnings, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanOverview_lift(_ buf: RustBuffer) throws -> LoanOverview {
+    return try FfiConverterTypeLoanOverview.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanOverview_lower(_ value: LoanOverview) -> RustBuffer {
+    return FfiConverterTypeLoanOverview.lower(value)
+}
+
+
+/**
+ * The fields `UpdateLoan` can change. `None` leaves the field as it is; a
+ * blank `name` is refused, a blank `note` clears it.
+ */
+public struct LoanPatch: Equatable, Hashable, Codable {
+    public var name: String?
+    public var note: String?
+    public var principal: Int64?
+    public var annualRatePpm: UInt32?
+    public var months: UInt32?
+    public var firstDue: NaiveDate?
+    public var installment: LoanInstallment?
+    public var upfrontFees: Int64?
+    public var installmentFee: Int64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String? = nil, note: String? = nil, principal: Int64? = nil, annualRatePpm: UInt32? = nil, months: UInt32? = nil, firstDue: NaiveDate? = nil, installment: LoanInstallment? = nil, upfrontFees: Int64? = nil, installmentFee: Int64? = nil) {
+        self.name = name
+        self.note = note
+        self.principal = principal
+        self.annualRatePpm = annualRatePpm
+        self.months = months
+        self.firstDue = firstDue
+        self.installment = installment
+        self.upfrontFees = upfrontFees
+        self.installmentFee = installmentFee
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LoanPatch: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLoanPatch: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LoanPatch {
+        return
+            try LoanPatch(
+                name: FfiConverterOptionString.read(from: &buf), 
+                note: FfiConverterOptionString.read(from: &buf), 
+                principal: FfiConverterOptionInt64.read(from: &buf), 
+                annualRatePpm: FfiConverterOptionUInt32.read(from: &buf), 
+                months: FfiConverterOptionUInt32.read(from: &buf), 
+                firstDue: FfiConverterOptionTypeNaiveDate.read(from: &buf), 
+                installment: FfiConverterOptionTypeLoanInstallment.read(from: &buf), 
+                upfrontFees: FfiConverterOptionInt64.read(from: &buf), 
+                installmentFee: FfiConverterOptionInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LoanPatch, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.note, into: &buf)
+        FfiConverterOptionInt64.write(value.principal, into: &buf)
+        FfiConverterOptionUInt32.write(value.annualRatePpm, into: &buf)
+        FfiConverterOptionUInt32.write(value.months, into: &buf)
+        FfiConverterOptionTypeNaiveDate.write(value.firstDue, into: &buf)
+        FfiConverterOptionTypeLoanInstallment.write(value.installment, into: &buf)
+        FfiConverterOptionInt64.write(value.upfrontFees, into: &buf)
+        FfiConverterOptionInt64.write(value.installmentFee, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanPatch_lift(_ buf: RustBuffer) throws -> LoanPatch {
+    return try FfiConverterTypeLoanPatch.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanPatch_lower(_ value: LoanPatch) -> RustBuffer {
+    return FfiConverterTypeLoanPatch.lower(value)
+}
+
+
+/**
+ * A loan's whole schedule, its events applied.
+ */
+public struct LoanSchedule: Equatable, Hashable, Codable {
+    public var rows: [LoanScheduleRow]
+    /**
+     * Early repayments applied before the first installment.
+     */
+    public var eventIdsBeforeFirst: [Uuid]
+    public var totalInterest: Int64
+    /**
+     * Every installment fee.
+     */
+    public var totalFees: Int64
+    /**
+     * Early repayments, as applied (clipped).
+     */
+    public var totalPrepaid: Int64
+    /**
+     * Early repayment penalties.
+     */
+    public var totalPenalties: Int64
+    /**
+     * Installments + upfront fees + installment fees + repayments +
+     * penalties − principal: what the loan costs on top of what was
+     * borrowed, events included.
+     */
+    public var totalCost: Int64
+    /**
+     * The TAEG of the terms alone (EU Directive 2008/48: a standard year of
+     * twelve equal months, the rate held for the whole loan), in millionths;
+     * `None` when it cannot be worked out (a schedule that never ends).
+     */
+    public var taegPpm: UInt32?
+    public var warnings: [LoanWarning]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(rows: [LoanScheduleRow], 
+        /**
+         * Early repayments applied before the first installment.
+         */eventIdsBeforeFirst: [Uuid], totalInterest: Int64, 
+        /**
+         * Every installment fee.
+         */totalFees: Int64, 
+        /**
+         * Early repayments, as applied (clipped).
+         */totalPrepaid: Int64, 
+        /**
+         * Early repayment penalties.
+         */totalPenalties: Int64, 
+        /**
+         * Installments + upfront fees + installment fees + repayments +
+         * penalties − principal: what the loan costs on top of what was
+         * borrowed, events included.
+         */totalCost: Int64, 
+        /**
+         * The TAEG of the terms alone (EU Directive 2008/48: a standard year of
+         * twelve equal months, the rate held for the whole loan), in millionths;
+         * `None` when it cannot be worked out (a schedule that never ends).
+         */taegPpm: UInt32?, warnings: [LoanWarning]) {
+        self.rows = rows
+        self.eventIdsBeforeFirst = eventIdsBeforeFirst
+        self.totalInterest = totalInterest
+        self.totalFees = totalFees
+        self.totalPrepaid = totalPrepaid
+        self.totalPenalties = totalPenalties
+        self.totalCost = totalCost
+        self.taegPpm = taegPpm
+        self.warnings = warnings
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LoanSchedule: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLoanSchedule: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LoanSchedule {
+        return
+            try LoanSchedule(
+                rows: FfiConverterSequenceTypeLoanScheduleRow.read(from: &buf), 
+                eventIdsBeforeFirst: FfiConverterSequenceTypeUuid.read(from: &buf), 
+                totalInterest: FfiConverterInt64.read(from: &buf), 
+                totalFees: FfiConverterInt64.read(from: &buf), 
+                totalPrepaid: FfiConverterInt64.read(from: &buf), 
+                totalPenalties: FfiConverterInt64.read(from: &buf), 
+                totalCost: FfiConverterInt64.read(from: &buf), 
+                taegPpm: FfiConverterOptionUInt32.read(from: &buf), 
+                warnings: FfiConverterSequenceTypeLoanWarning.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LoanSchedule, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeLoanScheduleRow.write(value.rows, into: &buf)
+        FfiConverterSequenceTypeUuid.write(value.eventIdsBeforeFirst, into: &buf)
+        FfiConverterInt64.write(value.totalInterest, into: &buf)
+        FfiConverterInt64.write(value.totalFees, into: &buf)
+        FfiConverterInt64.write(value.totalPrepaid, into: &buf)
+        FfiConverterInt64.write(value.totalPenalties, into: &buf)
+        FfiConverterInt64.write(value.totalCost, into: &buf)
+        FfiConverterOptionUInt32.write(value.taegPpm, into: &buf)
+        FfiConverterSequenceTypeLoanWarning.write(value.warnings, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanSchedule_lift(_ buf: RustBuffer) throws -> LoanSchedule {
+    return try FfiConverterTypeLoanSchedule.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanSchedule_lower(_ value: LoanSchedule) -> RustBuffer {
+    return FfiConverterTypeLoanSchedule.lower(value)
+}
+
+
+/**
+ * One installment of a schedule.
+ */
+public struct LoanScheduleRow: Equatable, Hashable, Codable {
+    /**
+     * From 1.
+     */
+    public var number: UInt32
+    public var dueDate: NaiveDate
+    /**
+     * Interest + capital, minor units, the fee excluded.
+     */
+    public var payment: Int64
+    public var interest: Int64
+    public var capital: Int64
+    /**
+     * The installment fee paid with it.
+     */
+    public var fee: Int64
+    /**
+     * The debt left once this installment and the events after it are
+     * applied.
+     */
+    public var residual: Int64
+    /**
+     * The yearly rate this installment's interest was worked out at.
+     */
+    public var annualRatePpm: UInt32
+    /**
+     * The events applied right after this installment, in order.
+     */
+    public var eventIds: [Uuid]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * From 1.
+         */number: UInt32, dueDate: NaiveDate, 
+        /**
+         * Interest + capital, minor units, the fee excluded.
+         */payment: Int64, interest: Int64, capital: Int64, 
+        /**
+         * The installment fee paid with it.
+         */fee: Int64, 
+        /**
+         * The debt left once this installment and the events after it are
+         * applied.
+         */residual: Int64, 
+        /**
+         * The yearly rate this installment's interest was worked out at.
+         */annualRatePpm: UInt32, 
+        /**
+         * The events applied right after this installment, in order.
+         */eventIds: [Uuid]) {
+        self.number = number
+        self.dueDate = dueDate
+        self.payment = payment
+        self.interest = interest
+        self.capital = capital
+        self.fee = fee
+        self.residual = residual
+        self.annualRatePpm = annualRatePpm
+        self.eventIds = eventIds
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LoanScheduleRow: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLoanScheduleRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LoanScheduleRow {
+        return
+            try LoanScheduleRow(
+                number: FfiConverterUInt32.read(from: &buf), 
+                dueDate: FfiConverterTypeNaiveDate.read(from: &buf), 
+                payment: FfiConverterInt64.read(from: &buf), 
+                interest: FfiConverterInt64.read(from: &buf), 
+                capital: FfiConverterInt64.read(from: &buf), 
+                fee: FfiConverterInt64.read(from: &buf), 
+                residual: FfiConverterInt64.read(from: &buf), 
+                annualRatePpm: FfiConverterUInt32.read(from: &buf), 
+                eventIds: FfiConverterSequenceTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LoanScheduleRow, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.number, into: &buf)
+        FfiConverterTypeNaiveDate.write(value.dueDate, into: &buf)
+        FfiConverterInt64.write(value.payment, into: &buf)
+        FfiConverterInt64.write(value.interest, into: &buf)
+        FfiConverterInt64.write(value.capital, into: &buf)
+        FfiConverterInt64.write(value.fee, into: &buf)
+        FfiConverterInt64.write(value.residual, into: &buf)
+        FfiConverterUInt32.write(value.annualRatePpm, into: &buf)
+        FfiConverterSequenceTypeUuid.write(value.eventIds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanScheduleRow_lift(_ buf: RustBuffer) throws -> LoanScheduleRow {
+    return try FfiConverterTypeLoanScheduleRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanScheduleRow_lower(_ value: LoanScheduleRow) -> RustBuffer {
+    return FfiConverterTypeLoanScheduleRow.lower(value)
+}
+
+
+/**
+ * What a loan was agreed on.
+ */
+public struct LoanTerms: Equatable, Hashable, Codable {
+    /**
+     * The amount borrowed, minor units, `> 0`.
+     */
+    public var principal: Int64
+    /**
+     * The TAN, yearly, in millionths: `0..=MAX_RATE_PPM`.
+     */
+    public var annualRatePpm: UInt32
+    /**
+     * Monthly installments: `1..=MAX_MONTHS`.
+     */
+    public var months: UInt32
+    /**
+     * The first installment's due date; the next ones fall on the same day
+     * of each following month, the month's last day when it is shorter.
+     */
+    public var firstDue: NaiveDate
+    public var installment: LoanInstallment
+    /**
+     * Paid once when the loan is signed (application, survey, substitute
+     * tax…), minor units, `>= 0`: they count in the TAEG and in the cost.
+     */
+    public var upfrontFees: Int64
+    /**
+     * Paid with every installment (collection fee), minor units, `>= 0`.
+     */
+    public var installmentFee: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The amount borrowed, minor units, `> 0`.
+         */principal: Int64, 
+        /**
+         * The TAN, yearly, in millionths: `0..=MAX_RATE_PPM`.
+         */annualRatePpm: UInt32, 
+        /**
+         * Monthly installments: `1..=MAX_MONTHS`.
+         */months: UInt32, 
+        /**
+         * The first installment's due date; the next ones fall on the same day
+         * of each following month, the month's last day when it is shorter.
+         */firstDue: NaiveDate, installment: LoanInstallment, 
+        /**
+         * Paid once when the loan is signed (application, survey, substitute
+         * tax…), minor units, `>= 0`: they count in the TAEG and in the cost.
+         */upfrontFees: Int64 = Int64(0), 
+        /**
+         * Paid with every installment (collection fee), minor units, `>= 0`.
+         */installmentFee: Int64 = Int64(0)) {
+        self.principal = principal
+        self.annualRatePpm = annualRatePpm
+        self.months = months
+        self.firstDue = firstDue
+        self.installment = installment
+        self.upfrontFees = upfrontFees
+        self.installmentFee = installmentFee
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LoanTerms: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLoanTerms: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LoanTerms {
+        return
+            try LoanTerms(
+                principal: FfiConverterInt64.read(from: &buf), 
+                annualRatePpm: FfiConverterUInt32.read(from: &buf), 
+                months: FfiConverterUInt32.read(from: &buf), 
+                firstDue: FfiConverterTypeNaiveDate.read(from: &buf), 
+                installment: FfiConverterTypeLoanInstallment.read(from: &buf), 
+                upfrontFees: FfiConverterInt64.read(from: &buf), 
+                installmentFee: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LoanTerms, into buf: inout [UInt8]) {
+        FfiConverterInt64.write(value.principal, into: &buf)
+        FfiConverterUInt32.write(value.annualRatePpm, into: &buf)
+        FfiConverterUInt32.write(value.months, into: &buf)
+        FfiConverterTypeNaiveDate.write(value.firstDue, into: &buf)
+        FfiConverterTypeLoanInstallment.write(value.installment, into: &buf)
+        FfiConverterInt64.write(value.upfrontFees, into: &buf)
+        FfiConverterInt64.write(value.installmentFee, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanTerms_lift(_ buf: RustBuffer) throws -> LoanTerms {
+    return try FfiConverterTypeLoanTerms.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanTerms_lower(_ value: LoanTerms) -> RustBuffer {
+    return FfiConverterTypeLoanTerms.lower(value)
+}
+
+
+/**
+ * A loan as the UI sees it.
+ */
+public struct LoanView: Equatable, Hashable, Codable {
+    public var id: Uuid
+    public var name: String
+    public var note: String?
+    public var terms: LoanTerms
+    /**
+     * By date, then by id.
+     */
+    public var events: [LoanEventView]
+    /**
+     * The recurring template that records the installments, if linked.
+     */
+    public var recurringId: Uuid?
+    public var archived: Bool
+    public var createdBy: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: Uuid, name: String, note: String?, terms: LoanTerms, 
+        /**
+         * By date, then by id.
+         */events: [LoanEventView], 
+        /**
+         * The recurring template that records the installments, if linked.
+         */recurringId: Uuid?, archived: Bool, createdBy: String) {
+        self.id = id
+        self.name = name
+        self.note = note
+        self.terms = terms
+        self.events = events
+        self.recurringId = recurringId
+        self.archived = archived
+        self.createdBy = createdBy
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LoanView: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLoanView: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LoanView {
+        return
+            try LoanView(
+                id: FfiConverterTypeUuid.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                note: FfiConverterOptionString.read(from: &buf), 
+                terms: FfiConverterTypeLoanTerms.read(from: &buf), 
+                events: FfiConverterSequenceTypeLoanEventView.read(from: &buf), 
+                recurringId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                archived: FfiConverterBool.read(from: &buf), 
+                createdBy: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LoanView, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.id, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.note, into: &buf)
+        FfiConverterTypeLoanTerms.write(value.terms, into: &buf)
+        FfiConverterSequenceTypeLoanEventView.write(value.events, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.recurringId, into: &buf)
+        FfiConverterBool.write(value.archived, into: &buf)
+        FfiConverterString.write(value.createdBy, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanView_lift(_ buf: RustBuffer) throws -> LoanView {
+    return try FfiConverterTypeLoanView.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanView_lower(_ value: LoanView) -> RustBuffer {
+    return FfiConverterTypeLoanView.lower(value)
 }
 
 
@@ -7628,7 +8534,15 @@ public enum Command: Equatable, Hashable, Codable {
          * `None` or blank = the author, whoever owns the template: reading
          * the owner when the command is applied would let a later change of
          * owner rewrite past executions on replay.
-         */person: String? = nil
+         */person: String? = nil, 
+        /**
+         * The amount of this period, minor units, `> 0`: a linked loan's
+         * installment for that due date, which the app reads from the
+         * schedule so a rate change reaches the ledger. `None` = the
+         * template's amount. Carried, never looked up when the command is
+         * applied, so a later change to the loan never rewrites a recorded
+         * installment on replay. Left out of the JSON when `None`.
+         */amount: Int64? = nil
     )
     /**
      * Marks a due period as handled without a transaction.
@@ -7680,6 +8594,35 @@ public enum Command: Equatable, Hashable, Codable {
      * transfers it made that are still live and makes the period due again.
      */
     case reopenAllocation(planId: Uuid, periodDate: NaiveDate
+    )
+    /**
+     * A loan or a mortgage; its id is the command id. `recurring_id` links
+     * the expense template that records its installments: an active expense
+     * template of the vault that no other loan links.
+     */
+    case createLoan(name: String, note: String? = nil, terms: LoanTerms, recurringId: Uuid? = nil
+    )
+    /**
+     * Partial update; the patch must carry at least one field. The
+     * schedule is worked out again from the new terms.
+     */
+    case updateLoan(loanId: Uuid, patch: LoanPatch
+    )
+    /**
+     * Links the loan to an expense template, or unlinks it with `None`.
+     */
+    case setLoanRecurring(loanId: Uuid, recurringId: Uuid?
+    )
+    case archiveLoan(loanId: Uuid
+    )
+    case restoreLoan(loanId: Uuid
+    )
+    /**
+     * A rate change or an early repayment; its id is the command id.
+     */
+    case addLoanEvent(loanId: Uuid, event: LoanEvent
+    )
+    case removeLoanEvent(loanId: Uuid, eventId: Uuid
     )
 
 
@@ -7788,7 +8731,7 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
         case 29: return .restoreRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
-        case 30: return .executeRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf), person: try FfiConverterOptionString.read(from: &buf)
+        case 30: return .executeRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf), person: try FfiConverterOptionString.read(from: &buf), amount: try FfiConverterOptionInt64.read(from: &buf)
         )
         
         case 31: return .skipRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf)
@@ -7807,6 +8750,27 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
         )
         
         case 36: return .reopenAllocation(planId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf)
+        )
+        
+        case 37: return .createLoan(name: try FfiConverterString.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), terms: try FfiConverterTypeLoanTerms.read(from: &buf), recurringId: try FfiConverterOptionTypeUuid.read(from: &buf)
+        )
+        
+        case 38: return .updateLoan(loanId: try FfiConverterTypeUuid.read(from: &buf), patch: try FfiConverterTypeLoanPatch.read(from: &buf)
+        )
+        
+        case 39: return .setLoanRecurring(loanId: try FfiConverterTypeUuid.read(from: &buf), recurringId: try FfiConverterOptionTypeUuid.read(from: &buf)
+        )
+        
+        case 40: return .archiveLoan(loanId: try FfiConverterTypeUuid.read(from: &buf)
+        )
+        
+        case 41: return .restoreLoan(loanId: try FfiConverterTypeUuid.read(from: &buf)
+        )
+        
+        case 42: return .addLoanEvent(loanId: try FfiConverterTypeUuid.read(from: &buf), event: try FfiConverterTypeLoanEvent.read(from: &buf)
+        )
+        
+        case 43: return .removeLoanEvent(loanId: try FfiConverterTypeUuid.read(from: &buf), eventId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -7993,12 +8957,13 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
             FfiConverterTypeUuid.write(recurringId, into: &buf)
             
         
-        case let .executeRecurring(recurringId,periodDate,occurredAt,person):
+        case let .executeRecurring(recurringId,periodDate,occurredAt,person,amount):
             writeInt(&buf, Int32(30))
             FfiConverterTypeUuid.write(recurringId, into: &buf)
             FfiConverterTypeNaiveDate.write(periodDate, into: &buf)
             FfiConverterTypeOffsetDateTime.write(occurredAt, into: &buf)
             FfiConverterOptionString.write(person, into: &buf)
+            FfiConverterOptionInt64.write(amount, into: &buf)
             
         
         case let .skipRecurring(recurringId,periodDate):
@@ -8039,6 +9004,48 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
             writeInt(&buf, Int32(36))
             FfiConverterTypeUuid.write(planId, into: &buf)
             FfiConverterTypeNaiveDate.write(periodDate, into: &buf)
+            
+        
+        case let .createLoan(name,note,terms,recurringId):
+            writeInt(&buf, Int32(37))
+            FfiConverterString.write(name, into: &buf)
+            FfiConverterOptionString.write(note, into: &buf)
+            FfiConverterTypeLoanTerms.write(terms, into: &buf)
+            FfiConverterOptionTypeUuid.write(recurringId, into: &buf)
+            
+        
+        case let .updateLoan(loanId,patch):
+            writeInt(&buf, Int32(38))
+            FfiConverterTypeUuid.write(loanId, into: &buf)
+            FfiConverterTypeLoanPatch.write(patch, into: &buf)
+            
+        
+        case let .setLoanRecurring(loanId,recurringId):
+            writeInt(&buf, Int32(39))
+            FfiConverterTypeUuid.write(loanId, into: &buf)
+            FfiConverterOptionTypeUuid.write(recurringId, into: &buf)
+            
+        
+        case let .archiveLoan(loanId):
+            writeInt(&buf, Int32(40))
+            FfiConverterTypeUuid.write(loanId, into: &buf)
+            
+        
+        case let .restoreLoan(loanId):
+            writeInt(&buf, Int32(41))
+            FfiConverterTypeUuid.write(loanId, into: &buf)
+            
+        
+        case let .addLoanEvent(loanId,event):
+            writeInt(&buf, Int32(42))
+            FfiConverterTypeUuid.write(loanId, into: &buf)
+            FfiConverterTypeLoanEvent.write(event, into: &buf)
+            
+        
+        case let .removeLoanEvent(loanId,eventId):
+            writeInt(&buf, Int32(43))
+            FfiConverterTypeUuid.write(loanId, into: &buf)
+            FfiConverterTypeUuid.write(eventId, into: &buf)
             
         }
     }
@@ -8702,6 +9709,288 @@ public func FfiConverterTypeLineStatus_lower(_ value: LineStatus) -> RustBuffer 
 
 
 /**
+ * Something that changes a loan's schedule from a date on. Tagged by
+ * `event` in the log.
+ */
+
+public enum LoanEvent: Equatable, Hashable, Codable {
+    
+    /**
+     * A new yearly rate for the installments due after `date` (the one due
+     * on `date` accrued at the old rate), the remaining number of
+     * installments unchanged.
+     */
+    case rateChange(date: NaiveDate, annualRatePpm: UInt32, installment: LoanInstallment
+    )
+    /**
+     * An early repayment of `amount` minor units on `date`, applied after
+     * the last installment due on or before it (to the principal when it
+     * comes before the first one), clipped to the residual: as much as the
+     * residual pays the loan off. `fee` is the penalty, a cost only.
+     */
+    case prepayment(date: NaiveDate, amount: Int64, mode: PrepaymentMode, fee: Int64
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension LoanEvent: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLoanEvent: FfiConverterRustBuffer {
+    typealias SwiftType = LoanEvent
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LoanEvent {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .rateChange(date: try FfiConverterTypeNaiveDate.read(from: &buf), annualRatePpm: try FfiConverterUInt32.read(from: &buf), installment: try FfiConverterTypeLoanInstallment.read(from: &buf)
+        )
+        
+        case 2: return .prepayment(date: try FfiConverterTypeNaiveDate.read(from: &buf), amount: try FfiConverterInt64.read(from: &buf), mode: try FfiConverterTypePrepaymentMode.read(from: &buf), fee: try FfiConverterInt64.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: LoanEvent, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .rateChange(date,annualRatePpm,installment):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeNaiveDate.write(date, into: &buf)
+            FfiConverterUInt32.write(annualRatePpm, into: &buf)
+            FfiConverterTypeLoanInstallment.write(installment, into: &buf)
+            
+        
+        case let .prepayment(date,amount,mode,fee):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeNaiveDate.write(date, into: &buf)
+            FfiConverterInt64.write(amount, into: &buf)
+            FfiConverterTypePrepaymentMode.write(mode, into: &buf)
+            FfiConverterInt64.write(fee, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanEvent_lift(_ buf: RustBuffer) throws -> LoanEvent {
+    return try FfiConverterTypeLoanEvent.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanEvent_lower(_ value: LoanEvent) -> RustBuffer {
+    return FfiConverterTypeLoanEvent.lower(value)
+}
+
+
+
+/**
+ * How the installment is set, for the loan or for the stretch after a rate
+ * change. Stored as data inside the loan's JSON, tagged by `installment`.
+ */
+
+public enum LoanInstallment: Equatable, Hashable, Codable {
+    
+    /**
+     * Worked out by the amortization formula on the residual debt.
+     */
+    case computed
+    /**
+     * The amount the contract or the bank's letter states, minor units,
+     * `> 0`. Above the formula the loan ends early with a smaller last
+     * installment; below it a balloon is left at the end (a warning).
+     */
+    case contract(amount: Int64
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension LoanInstallment: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLoanInstallment: FfiConverterRustBuffer {
+    typealias SwiftType = LoanInstallment
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LoanInstallment {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .computed
+        
+        case 2: return .contract(amount: try FfiConverterInt64.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: LoanInstallment, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .computed:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .contract(amount):
+            writeInt(&buf, Int32(2))
+            FfiConverterInt64.write(amount, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanInstallment_lift(_ buf: RustBuffer) throws -> LoanInstallment {
+    return try FfiConverterTypeLoanInstallment.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanInstallment_lower(_ value: LoanInstallment) -> RustBuffer {
+    return FfiConverterTypeLoanInstallment.lower(value)
+}
+
+
+
+/**
+ * Something in a schedule that is likely a typing mistake or worth a look.
+ */
+
+public enum LoanWarning: Equatable, Hashable, Codable {
+    
+    /**
+     * From installment `number` on, the installment does not cover the
+     * interest: the debt would never go down.
+     */
+    case installmentBelowInterest(number: UInt32
+    )
+    /**
+     * A contract installment below the formula leaves `amount` to pay with
+     * the last installment.
+     */
+    case balloon(amount: Int64
+    )
+    /**
+     * An early repayment larger than the residual was cut to it.
+     */
+    case prepaymentClipped(eventId: Uuid
+    )
+    /**
+     * An event dated after the loan's end (a shortened one, often).
+     */
+    case eventAfterEnd(eventId: Uuid
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension LoanWarning: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLoanWarning: FfiConverterRustBuffer {
+    typealias SwiftType = LoanWarning
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LoanWarning {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .installmentBelowInterest(number: try FfiConverterUInt32.read(from: &buf)
+        )
+        
+        case 2: return .balloon(amount: try FfiConverterInt64.read(from: &buf)
+        )
+        
+        case 3: return .prepaymentClipped(eventId: try FfiConverterTypeUuid.read(from: &buf)
+        )
+        
+        case 4: return .eventAfterEnd(eventId: try FfiConverterTypeUuid.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: LoanWarning, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .installmentBelowInterest(number):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt32.write(number, into: &buf)
+            
+        
+        case let .balloon(amount):
+            writeInt(&buf, Int32(2))
+            FfiConverterInt64.write(amount, into: &buf)
+            
+        
+        case let .prepaymentClipped(eventId):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeUuid.write(eventId, into: &buf)
+            
+        
+        case let .eventAfterEnd(eventId):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeUuid.write(eventId, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanWarning_lift(_ buf: RustBuffer) throws -> LoanWarning {
+    return try FfiConverterTypeLoanWarning.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoanWarning_lower(_ value: LoanWarning) -> RustBuffer {
+    return FfiConverterTypeLoanWarning.lower(value)
+}
+
+
+
+/**
  * Why a merge cannot go through.
  */
 
@@ -8782,6 +10071,81 @@ public func FfiConverterTypeMergeConflictKind_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeMergeConflictKind_lower(_ value: MergeConflictKind) -> RustBuffer {
     return FfiConverterTypeMergeConflictKind.lower(value)
+}
+
+
+
+/**
+ * What an early repayment keeps.
+ */
+
+public enum PrepaymentMode: Equatable, Hashable, Codable, CaseIterable {
+    
+    /**
+     * Keeps the installment: the loan ends earlier.
+     */
+    case shorten
+    /**
+     * Keeps the end: the installment is worked out again on the residual.
+     */
+    case lower
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PrepaymentMode: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePrepaymentMode: FfiConverterRustBuffer {
+    typealias SwiftType = PrepaymentMode
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrepaymentMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .shorten
+        
+        case 2: return .lower
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PrepaymentMode, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .shorten:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .lower:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrepaymentMode_lift(_ buf: RustBuffer) throws -> PrepaymentMode {
+    return try FfiConverterTypePrepaymentMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrepaymentMode_lower(_ value: PrepaymentMode) -> RustBuffer {
+    return FfiConverterTypePrepaymentMode.lower(value)
 }
 
 
@@ -10110,6 +11474,30 @@ fileprivate struct FfiConverterOptionTypeFlowMode: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeLoanInstallment: FfiConverterRustBuffer {
+    typealias SwiftType = LoanInstallment?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeLoanInstallment.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeLoanInstallment.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeStatementAction: FfiConverterRustBuffer {
     typealias SwiftType = StatementAction?
 
@@ -10750,6 +12138,131 @@ fileprivate struct FfiConverterSequenceTypeFlowView: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeLinkedInstallment: FfiConverterRustBuffer {
+    typealias SwiftType = [LinkedInstallment]
+
+    public static func write(_ value: [LinkedInstallment], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeLinkedInstallment.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LinkedInstallment] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [LinkedInstallment]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeLinkedInstallment.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeLoanEventView: FfiConverterRustBuffer {
+    typealias SwiftType = [LoanEventView]
+
+    public static func write(_ value: [LoanEventView], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeLoanEventView.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LoanEventView] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [LoanEventView]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeLoanEventView.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeLoanOverview: FfiConverterRustBuffer {
+    typealias SwiftType = [LoanOverview]
+
+    public static func write(_ value: [LoanOverview], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeLoanOverview.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LoanOverview] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [LoanOverview]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeLoanOverview.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeLoanScheduleRow: FfiConverterRustBuffer {
+    typealias SwiftType = [LoanScheduleRow]
+
+    public static func write(_ value: [LoanScheduleRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeLoanScheduleRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LoanScheduleRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [LoanScheduleRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeLoanScheduleRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeLoanView: FfiConverterRustBuffer {
+    typealias SwiftType = [LoanView]
+
+    public static func write(_ value: [LoanView], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeLoanView.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LoanView] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [LoanView]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeLoanView.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeMergeConflict: FfiConverterRustBuffer {
     typealias SwiftType = [MergeConflict]
 
@@ -11300,6 +12813,31 @@ fileprivate struct FfiConverterSequenceTypeWalletView: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeLoanWarning: FfiConverterRustBuffer {
+    typealias SwiftType = [LoanWarning]
+
+    public static func write(_ value: [LoanWarning], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeLoanWarning.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LoanWarning] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [LoanWarning]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeLoanWarning.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeTransactionKind: FfiConverterRustBuffer {
     typealias SwiftType = [TransactionKind]
 
@@ -11668,6 +13206,20 @@ public func guessStatementFormats(text: String, delimiter: String, dateColumn: S
 })
 }
 /**
+ * The French installment that repays `principal` minor units in `months`
+ * monthly installments at the yearly TAN `annual_rate_ppm` (millionths).
+ */
+public func loanInstallment(principal: Int64, annualRatePpm: UInt32, months: UInt32)throws  -> Int64  {
+    return try  FfiConverterInt64.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_func_loan_installment(
+        FfiConverterInt64.lower(principal),
+        FfiConverterUInt32.lower(annualRatePpm),
+        FfiConverterUInt32.lower(months),uniffiCallStatus
+    )
+})
+}
+/**
  * A command addressed to a vault, with a fresh UUID v7.
  *
  * Ids are minted here and nowhere else: the id is the idempotency key and the
@@ -11738,6 +13290,21 @@ public func scheduleOccurrences(schedule: Schedule, from: NaiveDate, limit: UInt
 })
 }
 /**
+ * The yearly TAN, in millionths, at which `installment` repays `principal`
+ * in `months`: what the loan form shows when the user knows the amount, the
+ * installment and the duration but not the rate.
+ */
+public func solveLoanRate(principal: Int64, installment: Int64, months: UInt32)throws  -> UInt32  {
+    return try  FfiConverterUInt32.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_func_solve_loan_rate(
+        FfiConverterInt64.lower(principal),
+        FfiConverterInt64.lower(installment),
+        FfiConverterUInt32.lower(months),uniffiCallStatus
+    )
+})
+}
+/**
  * The distinct values of a statement column with how many rows hold each,
  * most rows first: the accounts or the types of a file, for the mapping.
  */
@@ -11758,6 +13325,18 @@ public func statementPresets() -> [StatementPreset]  {
     return try!  FfiConverterSequenceTypeStatementPreset.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_sparagne_core_fn_func_statement_presets(uniffiCallStatus
+    )
+})
+}
+/**
+ * The TAN, in millionths, of a loan with no fees whose TAEG is `taeg_ppm`:
+ * an estimate when the user only knows the TAEG.
+ */
+public func tanFromTaeg(taegPpm: UInt32)throws  -> UInt32  {
+    return try  FfiConverterUInt32.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_func_tan_from_taeg(
+        FfiConverterUInt32.lower(taegPpm),uniffiCallStatus
     )
 })
 }
@@ -11792,6 +13371,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_func_guess_statement_formats() != 62778) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_sparagne_core_checksum_func_loan_installment() != 59995) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_sparagne_core_checksum_func_new_envelope() != 36132) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -11807,10 +13389,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_func_schedule_occurrences() != 12050) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_sparagne_core_checksum_func_solve_loan_rate() != 43336) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_sparagne_core_checksum_func_statement_column_values() != 29973) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_func_statement_presets() != 59997) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_func_tan_from_taeg() != 42459) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_aliases() != 6737) {
@@ -11882,10 +13470,22 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_method_corehandle_last_seq() != 19574) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_sparagne_core_checksum_method_corehandle_linked_installments() != 43952) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_sparagne_core_checksum_method_corehandle_list_recurring() != 7134) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_list_transactions() != 35052) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_loan_overview() != 45740) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_loan_schedule() != 25253) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_loans() != 30211) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_pending_allocation() != 13198) {
@@ -11898,6 +13498,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_preview_allocation() != 37697) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_preview_loan() != 15821) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_preview_merge() != 37701) {

@@ -208,7 +208,7 @@ enum DeleteTarget: Equatable, Sendable {
     }
 }
 
-/// The tab bar's sheets in its order, which is also ⌘1 to ⌘5.
+/// The tab bar's sheets in its order, which is also ⌘1 to ⌘6.
 enum LedgerTab: String, CaseIterable, Identifiable, Sendable {
     case summary
     case ledger
@@ -217,6 +217,9 @@ enum LedgerTab: String, CaseIterable, Identifiable, Sendable {
     /// The allocation plan: what each envelope gets out of Unallocated, and
     /// the period waiting to be shared out.
     case allocation
+    /// What the household owns and owes: the wallets' money, the loans and
+    /// mortgages and their schedules.
+    case wealth
     /// Envelopes and categories, as two editable tables.
     case setup
 
@@ -228,6 +231,7 @@ enum LedgerTab: String, CaseIterable, Identifiable, Sendable {
         case .ledger: String(localized: "Ledger")
         case .recurring: String(localized: "Recurring")
         case .allocation: String(localized: "Allocation")
+        case .wealth: String(localized: "Wealth")
         case .setup: String(localized: "Setup")
         }
     }

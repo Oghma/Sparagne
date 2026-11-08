@@ -24,7 +24,7 @@ enum LaunchOptions {
     }
 
     /// `-SparagneTab ledger`: the tab to open on (`summary`, `ledger`,
-    /// `recurring`, `allocation`, `setup`), `nil` for the usual one.
+    /// `recurring`, `allocation`, `wealth`, `setup`), `nil` for the usual one.
     static var tab: LedgerTab? { tab(in: arguments) }
 
     static func tab(in arguments: [String: Any]) -> LedgerTab? {

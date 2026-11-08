@@ -302,6 +302,18 @@ final class AppStore {
     private(set) var allocationPlan: AllocationPlanView?
     private(set) var pendingAllocation: PendingAllocation?
     private(set) var allocationBase = AllocationBase(total: 0, incomes: [])
+
+    // MARK: Loans
+
+    /// Every loan of the vault, archived included, by name, refreshed on
+    /// every `reload()` like the plan: the Patrimonio tab.
+    private(set) var loans: [LoanView] = []
+    /// Every active loan as of today: residual, progress, next installment.
+    private(set) var loanOverview: [LoanOverview] = []
+    /// The amount a linked template's due date is recorded with, by template
+    /// and due date: what `execution()` sends as `ExecuteRecurring.amount`.
+    private(set) var linkedInstallments: [LinkedInstallment] = []
+
     /// The plan's decided periods, most recent first. Written only by the
     /// loader in `AppStore+Allocation.swift`, hence not `private(set)`.
     var allocationRuns: [AllocationRunView] = []
@@ -711,6 +723,9 @@ final class AppStore {
             allocationPlan = nil
             pendingAllocation = nil
             allocationBase = AllocationBase(total: 0, incomes: [])
+            loans = []
+            loanOverview = []
+            linkedInstallments = []
             ledgerEditor.rowsChanged()
             return
         }
@@ -737,6 +752,9 @@ final class AppStore {
             allocationPlan = loaded.allocationPlan
             pendingAllocation = loaded.pendingAllocation
             allocationBase = loaded.allocationBase
+            loans = loaded.loans
+            loanOverview = loaded.loanOverview
+            linkedInstallments = loaded.linkedInstallments
             summary = Self.summary(month: month, from: loaded)
             let year = Self.year(month: month, from: loaded, person: person, today: MonthKey(Date()))
             self.year = year

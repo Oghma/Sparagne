@@ -1,4 +1,4 @@
--- Sparagne v2 core schema, version 5 (`store.rs` migrates older files).
+-- Sparagne v2 core schema, version 6 (`store.rs` migrates older files).
 -- UUIDs are 16-byte BLOBs (v7 for entities, v5-derived for entities created
 -- inside a command). Timestamps are unix seconds (UTC); `occurred_offset` keeps
 -- the user's UTC offset in seconds.
@@ -167,3 +167,38 @@ CREATE TABLE allocation_runs (
     created_at  INTEGER NOT NULL,
     PRIMARY KEY (plan_id, period_date)
 );
+
+-- Loans and mortgages: what the commands said, the terms as columns. The
+-- schedule is never stored: every read works it out again (`loan::math`).
+-- A template records at most one loan's installments.
+CREATE TABLE loans (
+    id              BLOB PRIMARY KEY,     -- the CreateLoan command id
+    vault_id        BLOB NOT NULL REFERENCES vaults(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    note            TEXT,
+    principal       INTEGER NOT NULL,     -- minor units, > 0
+    annual_rate_ppm INTEGER NOT NULL,     -- TAN, millionths
+    months          INTEGER NOT NULL,     -- monthly installments
+    first_due       TEXT NOT NULL,        -- ISO yyyy-mm-dd
+    installment     TEXT NOT NULL,        -- JSON of LoanInstallment
+    upfront_fees    INTEGER NOT NULL DEFAULT 0,
+    installment_fee INTEGER NOT NULL DEFAULT 0,
+    recurring_id    BLOB,                 -- the expense template that records the installments
+    archived_at     INTEGER,
+    created_by      TEXT NOT NULL,
+    created_at      INTEGER NOT NULL
+);
+CREATE INDEX ix_loans_vault ON loans(vault_id);
+CREATE UNIQUE INDEX ux_loans_recurring ON loans(recurring_id) WHERE recurring_id IS NOT NULL;
+
+-- A loan's rate changes and early repayments, one row per AddLoanEvent.
+CREATE TABLE loan_events (
+    id         BLOB PRIMARY KEY,          -- the AddLoanEvent command id
+    loan_id    BLOB NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+    date       TEXT NOT NULL,             -- ISO yyyy-mm-dd
+    kind       TEXT NOT NULL,             -- rate_change|prepayment
+    payload    TEXT NOT NULL,             -- JSON of LoanEvent
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX ix_loan_events_loan ON loan_events(loan_id);

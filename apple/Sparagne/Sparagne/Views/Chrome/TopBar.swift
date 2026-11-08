@@ -50,7 +50,7 @@ struct TopBar: View {
                 // Where the other tabs search: the Riepilogo has nothing to
                 // search, and the person it reads is the Mastro's.
                 PersonSegments(store: store)
-            case .allocation:
+            case .allocation, .wealth:
                 EmptyView()
             }
             // The pill leads to the Ricorrenze tab, where the periods are
@@ -96,7 +96,7 @@ struct TopBar: View {
                 TabActionButton(symbol: "arrow.left.arrow.right", title: String(localized: "Move\u{2026}")) {
                     NotificationCenter.default.post(name: .moveBetweenFlows, object: nil)
                 }
-            case .setup:
+            case .wealth, .setup:
                 EmptyView()
             }
         }

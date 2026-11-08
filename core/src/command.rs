@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::{
     Currency, FlowMode,
     allocation::{AllocationLine, AllocationMove, AllocationPlanPatch},
+    loan::{LoanEvent, LoanPatch, LoanTerms},
     recurring::Schedule,
     store::str_enum,
 };
@@ -250,6 +251,15 @@ pub enum Command {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[uniffi(default = None)]
         person: Option<String>,
+        /// The amount of this period, minor units, `> 0`: a linked loan's
+        /// installment for that due date, which the app reads from the
+        /// schedule so a rate change reaches the ledger. `None` = the
+        /// template's amount. Carried, never looked up when the command is
+        /// applied, so a later change to the loan never rewrites a recorded
+        /// installment on replay. Left out of the JSON when `None`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[uniffi(default = None)]
+        amount: Option<i64>,
     },
     /// Marks a due period as handled without a transaction.
     SkipRecurring {
@@ -302,6 +312,46 @@ pub enum Command {
     ReopenAllocation {
         plan_id: Uuid,
         period_date: NaiveDate,
+    },
+
+    /// A loan or a mortgage; its id is the command id. `recurring_id` links
+    /// the expense template that records its installments: an active expense
+    /// template of the vault that no other loan links.
+    CreateLoan {
+        name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[uniffi(default = None)]
+        note: Option<String>,
+        terms: LoanTerms,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[uniffi(default = None)]
+        recurring_id: Option<Uuid>,
+    },
+    /// Partial update; the patch must carry at least one field. The
+    /// schedule is worked out again from the new terms.
+    UpdateLoan {
+        loan_id: Uuid,
+        patch: LoanPatch,
+    },
+    /// Links the loan to an expense template, or unlinks it with `None`.
+    SetLoanRecurring {
+        loan_id: Uuid,
+        recurring_id: Option<Uuid>,
+    },
+    ArchiveLoan {
+        loan_id: Uuid,
+    },
+    RestoreLoan {
+        loan_id: Uuid,
+    },
+    /// A rate change or an early repayment; its id is the command id.
+    AddLoanEvent {
+        loan_id: Uuid,
+        event: LoanEvent,
+    },
+    RemoveLoanEvent {
+        loan_id: Uuid,
+        event_id: Uuid,
     },
 }
 
@@ -451,6 +501,13 @@ impl Command {
             Self::ExecuteAllocation { .. } => "execute_allocation",
             Self::SkipAllocation { .. } => "skip_allocation",
             Self::ReopenAllocation { .. } => "reopen_allocation",
+            Self::CreateLoan { .. } => "create_loan",
+            Self::UpdateLoan { .. } => "update_loan",
+            Self::SetLoanRecurring { .. } => "set_loan_recurring",
+            Self::ArchiveLoan { .. } => "archive_loan",
+            Self::RestoreLoan { .. } => "restore_loan",
+            Self::AddLoanEvent { .. } => "add_loan_event",
+            Self::RemoveLoanEvent { .. } => "remove_loan_event",
         }
     }
 
@@ -491,7 +548,14 @@ impl Command {
             | Self::CreateAllocationPlan { .. }
             | Self::UpdateAllocationPlan { .. }
             | Self::SkipAllocation { .. }
-            | Self::ReopenAllocation { .. } => None,
+            | Self::ReopenAllocation { .. }
+            | Self::CreateLoan { .. }
+            | Self::UpdateLoan { .. }
+            | Self::SetLoanRecurring { .. }
+            | Self::ArchiveLoan { .. }
+            | Self::RestoreLoan { .. }
+            | Self::AddLoanEvent { .. }
+            | Self::RemoveLoanEvent { .. } => None,
         }
     }
 
@@ -535,7 +599,14 @@ impl Command {
             | Self::UpdateAllocationPlan { .. }
             | Self::ExecuteAllocation { .. }
             | Self::SkipAllocation { .. }
-            | Self::ReopenAllocation { .. } => return Vec::new(),
+            | Self::ReopenAllocation { .. }
+            | Self::CreateLoan { .. }
+            | Self::UpdateLoan { .. }
+            | Self::SetLoanRecurring { .. }
+            | Self::ArchiveLoan { .. }
+            | Self::RestoreLoan { .. }
+            | Self::AddLoanEvent { .. }
+            | Self::RemoveLoanEvent { .. } => return Vec::new(),
         };
         explicit_person(named.as_deref()).into_iter().collect()
     }
@@ -578,7 +649,14 @@ impl Command {
             | Self::UpdateAllocationPlan { .. }
             | Self::ExecuteAllocation { .. }
             | Self::SkipAllocation { .. }
-            | Self::ReopenAllocation { .. } => return false,
+            | Self::ReopenAllocation { .. }
+            | Self::CreateLoan { .. }
+            | Self::UpdateLoan { .. }
+            | Self::SetLoanRecurring { .. }
+            | Self::ArchiveLoan { .. }
+            | Self::RestoreLoan { .. }
+            | Self::AddLoanEvent { .. }
+            | Self::RemoveLoanEvent { .. } => return false,
         };
         if explicit_person(slot.as_deref()) != Some(from) {
             return false;
@@ -626,7 +704,14 @@ impl Command {
             | Self::CreateAllocationPlan { .. }
             | Self::UpdateAllocationPlan { .. }
             | Self::SkipAllocation { .. }
-            | Self::ReopenAllocation { .. } => return,
+            | Self::ReopenAllocation { .. }
+            | Self::CreateLoan { .. }
+            | Self::UpdateLoan { .. }
+            | Self::SetLoanRecurring { .. }
+            | Self::ArchiveLoan { .. }
+            | Self::RestoreLoan { .. }
+            | Self::AddLoanEvent { .. }
+            | Self::RemoveLoanEvent { .. } => return,
         };
         if let Some(text) = note {
             capitalize_first_word(text);

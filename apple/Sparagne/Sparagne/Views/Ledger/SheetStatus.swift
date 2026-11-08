@@ -9,8 +9,14 @@ enum SheetStatus {
         case .ledger: ledger(store.sheetStats)
         case .recurring: recurring(store.recurringTemplates)
         case .allocation: allocation(store)
+        case .wealth: wealth(store)
         case .setup: setup(store)
         }
+    }
+
+    /// The Patrimonio's figures. Prepared as a contract: nothing yet.
+    private static func wealth(_ store: AppStore) -> [StatusItem] {
+        []
     }
 
     /// `Media 47,69 · Conteggio 13 · Somma 619,94`, opened by "Selezione:"

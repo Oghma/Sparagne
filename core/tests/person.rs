@@ -111,6 +111,7 @@ fn execute(recurring_id: Uuid, month: u32, person: Option<&str>) -> Command {
         period_date: day(2023, month, 1),
         occurred_at: at(T0 + i64::from(month)),
         person: person.map(str::to_string),
+        amount: None,
     }
 }
 
@@ -414,6 +415,8 @@ fn a_version_3_database_migrates_to_what_its_log_replays_to() {
              DROP TABLE allocation_runs;
              DROP TABLE allocation_plans;
              DROP INDEX ix_transactions_command;
+             DROP TABLE loan_events;
+             DROP TABLE loans;
              PRAGMA user_version = 3;",
         )
         .unwrap();
@@ -539,6 +542,7 @@ fn every_command(name: Option<&str>) -> Vec<Command> {
             period_date: day(2023, 11, 1),
             occurred_at: when,
             person: named,
+            amount: None,
         },
         Command::SkipRecurring {
             recurring_id: id,

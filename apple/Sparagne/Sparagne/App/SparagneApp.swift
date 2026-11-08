@@ -52,7 +52,7 @@ struct SparagneApp: App {
 
                 Divider()
 
-                // The sheet tabs, ⌘1 to ⌘5 in the tab bar's order, as a
+                // The sheet tabs, ⌘1 to ⌘6 in the tab bar's order, as a
                 // browser's tabs.
                 ForEach(LedgerTab.allCases) { tab in
                     Button(tab.label) { store?.tab = tab }

@@ -1894,6 +1894,7 @@ fn the_base_counts_recurring_executions_batched_incomes_and_edited_amounts() {
         period_date: start(),
         occurred_at: noon(start()),
         person: None,
+        amount: None,
     });
 
     let batch: Vec<CommandEnvelope> = [(10, 3), (20, 4), (30, 5)]

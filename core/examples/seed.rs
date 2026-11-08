@@ -237,6 +237,7 @@ impl Seeder {
                 period_date: day,
                 occurred_at,
                 person: Some(owner.to_string()),
+                amount: None,
             },
         );
     }

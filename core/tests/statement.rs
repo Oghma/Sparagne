@@ -2194,6 +2194,7 @@ fn a_recurring_row_recorded_into_the_bank_still_flags_its_bank_row() {
         period_date: day(2026, 9, 5),
         occurred_at: september(5),
         person: None,
+        amount: None,
     });
     let text = bank_csv(&[bank_row("07/09/2026", "ADDEBITO RATA MUTUO", "-850,00")]);
     let preview = preview_as_is(&fx, &text, &bank_mapping(), &options(bank));

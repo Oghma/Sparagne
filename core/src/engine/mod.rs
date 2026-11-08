@@ -4,6 +4,7 @@
 
 mod allocation;
 pub(crate) mod entities;
+mod loan;
 mod recurring;
 mod update;
 
@@ -382,13 +383,17 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
             period_date,
             occurred_at,
             person,
+            amount,
         } => recurring::execute_recurring(
             tx,
             env,
-            *recurring_id,
-            *period_date,
-            *occurred_at,
-            person.as_deref(),
+            &recurring::Execution {
+                recurring_id: *recurring_id,
+                period_date: *period_date,
+                occurred_at: *occurred_at,
+                person: person.as_deref(),
+                amount: *amount,
+            },
             now,
         )
         .map(Some),
@@ -431,6 +436,29 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
             plan_id,
             period_date,
         } => allocation::reopen_allocation(tx, env, *plan_id, *period_date, now).map(|()| None),
+        Command::CreateLoan {
+            name,
+            note,
+            terms,
+            recurring_id,
+        } => loan::create_loan(tx, env, name, note.as_deref(), terms, *recurring_id, now).map(Some),
+        Command::UpdateLoan { loan_id, patch } => {
+            loan::update_loan(tx, env, *loan_id, patch).map(|()| None)
+        }
+        Command::SetLoanRecurring {
+            loan_id,
+            recurring_id,
+        } => loan::set_loan_recurring(tx, env, *loan_id, *recurring_id).map(|()| None),
+        Command::ArchiveLoan { loan_id } => {
+            loan::archive_loan(tx, env, *loan_id, now).map(|()| None)
+        }
+        Command::RestoreLoan { loan_id } => loan::restore_loan(tx, env, *loan_id).map(|()| None),
+        Command::AddLoanEvent { loan_id, event } => {
+            loan::add_loan_event(tx, env, *loan_id, event, now).map(Some)
+        }
+        Command::RemoveLoanEvent { loan_id, event_id } => {
+            loan::remove_loan_event(tx, env, *loan_id, *event_id).map(|()| None)
+        }
     }
 }
 
