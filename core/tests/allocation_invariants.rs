@@ -1124,7 +1124,8 @@ fn an_execution_moves_exactly_the_amounts_out_of_unallocated_and_touches_no_wall
 
         let before = projection(&fx.core, fx.vault);
         let (wallets_before, flows_before) = balances(&fx.core, fx.vault);
-        fx.run(execute_cmd(plan, start(), total, &moves));
+        let receipt = fx.run(execute_cmd(plan, start(), total, &moves));
+        assert_eq!(receipt.result_id, None, "case {case}");
         let (wallets_after, flows_after) = balances(&fx.core, fx.vault);
 
         assert_eq!(wallets_after, wallets_before, "case {case}: wallets");
@@ -1181,6 +1182,9 @@ fn an_execution_moves_exactly_the_amounts_out_of_unallocated_and_touches_no_wall
             assert!(!m.voided);
             let t = new.iter().find(|t| t.id == m.transaction_id).unwrap();
             assert_eq!(t.to_id, Some(m.flow_id), "case {case}");
+            assert_eq!(t.category, "Uncategorized", "case {case}");
+            assert_eq!(t.note, None, "case {case}");
+            assert_eq!(t.person, "alice", "case {case}");
         }
         assert_eq!(pending_on(&fx, day(2026, 1, 31)), None, "case {case}");
         assert_eq!(
@@ -1205,24 +1209,27 @@ fn deciding_the_same_period_twice_is_refused_and_changes_nothing() {
     income_on(&mut fx, 20_000, day(2026, 1, 5));
     fx.run(execute_cmd(plan, start(), 20_000, &[(a, 800)]));
 
-    let err = refused(
-        &mut fx,
-        "executed twice",
-        execute_cmd(plan, start(), 20_000, &[(a, 100)]),
-    );
-    assert!(matches!(err, DomainError::AlreadyExists(_)), "{err}");
-    let err = refused(&mut fx, "skipped after executed", skip_cmd(plan, start()));
-    assert!(matches!(err, DomainError::AlreadyExists(_)), "{err}");
+    let decided = |date: &str| DomainError::AlreadyExists(format!("run for {date}"));
+    for (what, cmd) in [
+        (
+            "executed twice",
+            execute_cmd(plan, start(), 20_000, &[(a, 100)]),
+        ),
+        ("skipped after executed", skip_cmd(plan, start())),
+    ] {
+        assert_eq!(refused(&mut fx, what, cmd), decided("2026-01-01"), "{what}");
+    }
 
     fx.run(skip_cmd(plan, day(2026, 2, 1)));
-    let err = refused(&mut fx, "skipped twice", skip_cmd(plan, day(2026, 2, 1)));
-    assert!(matches!(err, DomainError::AlreadyExists(_)), "{err}");
-    let err = refused(
-        &mut fx,
-        "executed after skipped",
-        execute_cmd(plan, day(2026, 2, 1), 100, &[(a, 1)]),
-    );
-    assert!(matches!(err, DomainError::AlreadyExists(_)), "{err}");
+    for (what, cmd) in [
+        ("skipped twice", skip_cmd(plan, day(2026, 2, 1))),
+        (
+            "executed after skipped",
+            execute_cmd(plan, day(2026, 2, 1), 100, &[(a, 1)]),
+        ),
+    ] {
+        assert_eq!(refused(&mut fx, what, cmd), decided("2026-02-01"), "{what}");
+    }
     assert_eq!(runs_of(&fx).len(), 2);
 }
 
@@ -1267,6 +1274,11 @@ fn deciding_the_latest_due_period_closes_the_missed_ones_and_an_earlier_one_is_r
             missed: 0
         })
     );
+    assert_eq!(
+        pending_on(&fx, day(2026, 6, 10)).map(|p| (p.period_date, p.missed)),
+        Some((day(2026, 6, 1), 2)),
+        "the missed ones count from the decision on"
+    );
     let runs = runs_of(&fx);
     assert_eq!(runs.len(), 1, "the missed periods get no row of their own");
     assert_eq!(runs[0].period_date, day(2026, 3, 1));
@@ -1289,7 +1301,11 @@ fn deciding_the_latest_due_period_closes_the_missed_ones_and_an_earlier_one_is_r
             execute_cmd(plan, start(), 100, &[(a, 1)]),
         ),
     ] {
-        refused_as(&mut fx, what, "invalid_command", cmd);
+        assert_eq!(
+            refused(&mut fx, what, cmd),
+            DomainError::InvalidCommand("a later period is already decided".to_string()),
+            "{what}"
+        );
     }
 
     // The total is the user's number: nothing in the base is no refusal.
@@ -1316,12 +1332,22 @@ fn nothing_is_pending_before_the_start_after_the_end_or_on_a_disabled_plan() {
             missed: 1
         })
     );
-    refused_as(
-        &mut fx,
-        "a day that is no period",
-        "invalid_command",
-        execute_cmd(plan, day(2026, 1, 2), 100, &[(a, 1)]),
-    );
+    for (what, cmd) in [
+        (
+            "a day that is no period",
+            execute_cmd(plan, day(2026, 1, 2), 100, &[(a, 1)]),
+        ),
+        (
+            "a skip of a day that is no period",
+            skip_cmd(plan, day(2026, 1, 2)),
+        ),
+    ] {
+        assert_eq!(
+            refused(&mut fx, what, cmd),
+            DomainError::InvalidCommand("period_date is not a due date".to_string()),
+            "{what}"
+        );
+    }
     refused_as(
         &mut fx,
         "a period after the end",
@@ -1384,60 +1410,64 @@ fn every_refused_execution_leaves_no_transaction_no_run_and_no_balance_change() 
     assert_eq!(err, DomainError::MaxBalanceReached("Capped".to_string()));
 
     let unknown = Uuid::now_v7();
+    let invalid_command = |m: &str| DomainError::InvalidCommand(m.to_string());
+    let invalid_amount = |m: &str| DomainError::InvalidAmount(m.to_string());
+    let not_found = |m: &str| DomainError::NotFound(m.to_string());
+    let before_start = day(2025, 12, 1);
     let cases = [
         (
             "the same envelope twice",
-            "invalid_command",
+            invalid_command("an envelope appears twice in the moves"),
             execute_cmd(plan, start(), total, &[(open, 100), (open, 200)]),
         ),
         (
             "an archived envelope",
-            "invalid_command",
+            invalid_command("flow is archived"),
             execute_cmd(plan, start(), total, &[(open, 100), (gone, 100)]),
         ),
         (
             "Unallocated as a target",
-            "invalid_flow",
+            DomainError::InvalidFlow("cannot allocate to Unallocated".to_string()),
             execute_cmd(plan, start(), total, &[(fx.unallocated, 100)]),
         ),
         (
             "moves above the total",
-            "invalid_amount",
+            invalid_amount("moves add up to more than the total"),
             execute_cmd(plan, start(), 100, &[(open, 60), (capped, 50)]),
         ),
         (
             "a zero amount",
-            "invalid_amount",
+            invalid_amount("amount must be > 0"),
             execute_cmd(plan, start(), total, &[(open, 100), (capped, 0)]),
         ),
         (
             "a negative amount",
-            "invalid_amount",
+            invalid_amount("amount must be > 0"),
             execute_cmd(plan, start(), total, &[(open, -5)]),
         ),
         (
             "no moves",
-            "invalid_command",
+            invalid_command("nothing to allocate"),
             execute_cmd(plan, start(), total, &[]),
         ),
         (
             "a negative total",
-            "invalid_amount",
+            invalid_amount("total must be >= 0"),
             execute_cmd(plan, start(), -1, &[(open, 1)]),
         ),
         (
             "an unknown envelope",
-            "not_found",
+            not_found("flow"),
             execute_cmd(plan, start(), total, &[(unknown, 100)]),
         ),
         (
             "an unknown plan",
-            "not_found",
+            not_found("allocation plan"),
             execute_cmd(unknown, start(), total, &[(open, 100)]),
         ),
         (
             "moves whose sum overflows",
-            "invalid_amount",
+            invalid_amount("moves add up to more than the total"),
             execute_cmd(
                 plan,
                 start(),
@@ -1445,24 +1475,20 @@ fn every_refused_execution_leaves_no_transaction_no_run_and_no_balance_change() 
                 &[(open, i64::MAX), (other, i64::MAX)],
             ),
         ),
-    ];
-    for (what, code, cmd) in cases {
-        refused_as(&mut fx, what, code, cmd);
-    }
-    // Before its start the plan has no period to decide.
-    let before_start = day(2025, 12, 1);
-    for (what, cmd) in [
+        // Before its start the plan has no period to decide.
         (
             "an execution before the start",
+            invalid_command("period_date is not a due date"),
             execute_cmd(plan, before_start, total, &[(open, 100)]),
         ),
-        ("a skip before the start", skip_cmd(plan, before_start)),
-    ] {
-        assert_eq!(
-            refused(&mut fx, what, cmd),
-            DomainError::InvalidCommand("period_date is not a due date".to_string()),
-            "{what}"
-        );
+        (
+            "a skip before the start",
+            invalid_command("period_date is not a due date"),
+            skip_cmd(plan, before_start),
+        ),
+    ];
+    for (what, expected, cmd) in cases {
+        assert_eq!(refused(&mut fx, what, cmd), expected, "{what}");
     }
     refused_as(
         &mut fx,
@@ -1545,11 +1571,6 @@ fn a_refused_plan_leaves_the_vault_without_one_and_a_second_plan_is_refused() {
             "invalid_amount",
             plan_cmd(schedule, vec![percent(a, FULL_PERCENT_BP + 1)]),
         ),
-        (
-            "an unknown envelope",
-            "not_found",
-            plan_cmd(schedule, vec![fixed(Uuid::now_v7(), 10)]),
-        ),
     ];
     for (what, code, cmd) in cases {
         refused_as(&mut fx, what, code, cmd);
@@ -1560,33 +1581,55 @@ fn a_refused_plan_leaves_the_vault_without_one_and_a_second_plan_is_refused() {
         refused_as(&mut fx, what, "invalid_command", cmd);
         assert_eq!(fx.core.allocation_plan(fx.vault).unwrap(), None, "{what}");
     }
+    let (_, theirs) = other_vault(&mut fx.core);
+    for (what, flow) in [
+        ("an unknown envelope", Uuid::now_v7()),
+        ("an envelope of another vault", theirs),
+    ] {
+        let cmd = plan_cmd(schedule, vec![fixed(flow, 10)]);
+        assert_eq!(
+            refused(&mut fx, what, cmd),
+            DomainError::NotFound("flow".to_string()),
+            "{what}"
+        );
+        assert_eq!(fx.core.allocation_plan(fx.vault).unwrap(), None, "{what}");
+    }
 
-    let receipt = fx.run(plan_cmd(schedule, vec![fixed(a, 10), fill(b)]));
+    // The whole is a bound, not past it.
+    let accepted = vec![percent(a, FULL_PERCENT_BP), fill(b)];
+    let receipt = fx.run(plan_cmd(schedule, accepted.clone()));
     let plan = fx.core.allocation_plan(fx.vault).unwrap().unwrap();
     assert_eq!(Some(plan.id), receipt.result_id);
     assert_eq!(plan.id, receipt.command_id, "the plan id is the command id");
-    assert_eq!(plan.lines, vec![fixed(a, 10), fill(b)]);
+    assert_eq!(plan.lines, accepted);
     assert_eq!(plan.schedule, schedule);
     assert!(plan.enabled);
     assert_eq!(plan.created_by, "alice");
+    assert!(runs_of(&fx).is_empty(), "a new plan has decided nothing");
 
     let err = refused(
         &mut fx,
         "a second plan",
         plan_cmd(schedule, vec![percent(b, 100)]),
     );
-    assert!(matches!(err, DomainError::AlreadyExists(_)), "{err}");
+    assert_eq!(
+        err,
+        DomainError::AlreadyExists("allocation plan".to_string())
+    );
     assert_eq!(
         fx.core.allocation_plan(fx.vault).unwrap(),
         Some(plan.clone())
     );
 
-    for (what, code, patch) in [
-        (
+    assert_eq!(
+        refused(
+            &mut fx,
             "an empty patch",
-            "invalid_command",
-            AllocationPlanPatch::default(),
+            update_plan_cmd(plan.id, AllocationPlanPatch::default())
         ),
+        DomainError::InvalidCommand("nothing to update".to_string())
+    );
+    for (what, code, patch) in [
         (
             "lines with Unallocated",
             "invalid_flow",
@@ -1600,6 +1643,22 @@ fn a_refused_plan_leaves_the_vault_without_one_and_a_second_plan_is_refused() {
             "invalid_command",
             AllocationPlanPatch {
                 lines: Some(Vec::new()),
+                ..AllocationPlanPatch::default()
+            },
+        ),
+        (
+            "the same envelope twice",
+            "invalid_command",
+            AllocationPlanPatch {
+                lines: Some(vec![fill(b), fixed(b, 10)]),
+                ..AllocationPlanPatch::default()
+            },
+        ),
+        (
+            "more than the whole",
+            "invalid_amount",
+            AllocationPlanPatch {
+                lines: Some(vec![percent(a, FULL_PERCENT_BP + 1)]),
                 ..AllocationPlanPatch::default()
             },
         ),
@@ -1619,17 +1678,16 @@ fn a_refused_plan_leaves_the_vault_without_one_and_a_second_plan_is_refused() {
         let cmd = update_plan_cmd(plan.id, patch);
         refused_as(&mut fx, what, "invalid_command", cmd);
     }
-    refused_as(
-        &mut fx,
-        "an unknown plan",
-        "not_found",
-        update_plan_cmd(
-            Uuid::now_v7(),
-            AllocationPlanPatch {
-                enabled: Some(false),
-                ..AllocationPlanPatch::default()
-            },
-        ),
+    let unknown = update_plan_cmd(
+        Uuid::now_v7(),
+        AllocationPlanPatch {
+            enabled: Some(false),
+            ..AllocationPlanPatch::default()
+        },
+    );
+    assert_eq!(
+        refused(&mut fx, "an unknown plan", unknown),
+        DomainError::NotFound("allocation plan".to_string())
     );
 
     fx.run(update_plan_cmd(
@@ -1859,6 +1917,7 @@ fn the_base_counts_recurring_executions_batched_incomes_and_edited_amounts() {
     expected.push(moved_in);
     assert_eq!(income_ids(&base), expected);
     assert_eq!(base.total, 2_500 + 60 + 1_500 + 800);
+    assert_eq!(base.incomes[0].category, "Salary");
 }
 
 #[test]
@@ -1916,6 +1975,12 @@ fn each_income_is_counted_exactly_once_across_consecutive_decisions() {
     seen.sort();
     all_incomes.sort();
     assert_eq!(seen, all_incomes);
+
+    // With every decision reopened only the start counts again, and the
+    // backdated income takes its place by date among the older ones.
+    fx.run(reopen_cmd(plan, day(2026, 2, 1)));
+    fx.run(reopen_cmd(plan, start()));
+    assert_eq!(income_ids(&base_of(&fx)), vec![i3, i1, i2, i4, i5, i6]);
 }
 
 #[test]
@@ -2018,7 +2083,8 @@ fn reopening_the_latest_period_restores_every_balance_and_makes_it_due_again() {
         .collect();
     assert_eq!(moved.len(), 3);
 
-    fx.run(reopen_cmd(plan, start()));
+    let reopened = fx.run(reopen_cmd(plan, start()));
+    assert_eq!(reopened.result_id, None);
     let after = projection(&fx.core, fx.vault);
     assert_eq!(
         after.snapshot, before.snapshot,
@@ -2043,9 +2109,18 @@ fn reopening_the_latest_period_restores_every_balance_and_makes_it_due_again() {
     }
     assert_eq!(after.log.len(), before.log.len() + 2);
 
-    // The period can be decided again, from the same base.
+    // The period can be decided again, from the same base, with new
+    // transfers.
     fx.run(execute_cmd(plan, start(), 25_000, &moves));
-    assert_eq!(runs_of(&fx).len(), 1);
+    let runs = runs_of(&fx);
+    assert_eq!(runs.len(), 1);
+    assert!(
+        runs[0]
+            .moves
+            .iter()
+            .all(|m| !m.voided && !moved.contains(&m.transaction_id)),
+        "the new run points at its own transfers"
+    );
     assert_eq!(flow_balance(&fx.core, fx.vault, a), 800);
     assert_eq!(flow_balance(&fx.core, fx.vault, b), 1_000);
     assert_eq!(flow_balance(&fx.core, fx.vault, c), 500);
@@ -2296,11 +2371,13 @@ fn a_plan_of_another_vault_is_refused_on_every_command() {
     );
 
     // A move into their envelope from my plan is refused too.
-    refused_as(
-        &mut fx,
-        "their envelope as a target",
-        "not_found",
-        execute_cmd(plan, start(), 1_000, &[(a, 50), (theirs, 50)]),
+    assert_eq!(
+        refused(
+            &mut fx,
+            "their envelope as a target",
+            execute_cmd(plan, start(), 1_000, &[(a, 50), (theirs, 50)]),
+        ),
+        DomainError::NotFound("flow".to_string())
     );
     assert_eq!(projection(&fx.core, other), not_mine);
 
