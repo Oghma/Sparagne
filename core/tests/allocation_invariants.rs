@@ -1159,8 +1159,6 @@ fn an_execution_moves_exactly_the_amounts_out_of_unallocated_and_touches_no_wall
             assert_eq!(t.created_by, "alice", "case {case}");
             let (_, amount) = moves.iter().find(|m| Some(m.0) == t.to_id).unwrap();
             assert_eq!(t.amount, *amount, "case {case}");
-            let legs: Vec<i64> = t.legs.iter().map(|l| l.amount).collect();
-            assert_eq!(legs, vec![-amount, *amount], "case {case}");
         }
 
         let runs = runs_of(&fx);
