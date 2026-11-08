@@ -11,7 +11,8 @@ import SparagneCore
 ///
 /// Top to bottom: the things to do, the year's cards over the month's, the
 /// flows, the month table, the people beside the
-/// envelopes, the two charts, the categories beside the heaviest expenses,
+/// envelopes, the two charts, the cash flow from the income through the
+/// flows to the categories, the categories beside the heaviest expenses,
 /// and the months by categories. The month and the PERSONA filter are in
 /// the top bar (`TopBar`).
 struct SummaryView: View {

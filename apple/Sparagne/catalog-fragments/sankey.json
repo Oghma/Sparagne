@@ -1,0 +1,9 @@
+{
+  "Cash flow": {"en": "Cash flow", "it": "Flusso di cassa"},
+  "Figures can differ slightly from the cards above: refunds are netted per flow and category, not per month and person.": {"en": "Figures can differ slightly from the cards above: refunds are netted per flow and category, not per month and person.", "it": "Le cifre possono scostarsi di poco dalle card sopra: i rimborsi si sottraggono per flusso e categoria, non per mese e persona."},
+  "From the balance": {"en": "From the balance", "it": "Dal saldo"},
+  "Nothing earned or spent this month": {"en": "Nothing earned or spent this month", "it": "Niente entrate né uscite questo mese"},
+  "Nothing earned or spent this year": {"en": "Nothing earned or spent this year", "it": "Niente entrate né uscite quest'anno"},
+  "Share of income": {"en": "Share of income", "it": "Quota delle entrate"},
+  "Who spent what; transfers between flows do not show": {"en": "Who spent what; transfers between flows do not show", "it": "Chi ha speso cosa; i trasferimenti tra flussi non compaiono"}
+}

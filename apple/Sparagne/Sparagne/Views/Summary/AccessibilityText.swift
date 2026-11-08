@@ -33,4 +33,14 @@ enum AccessibilityText {
         guard let person else { return "\(label): \(amount)" }
         return "\(label), \(person): \(amount)"
     }
+
+    /// The cash-flow Sankey as one sentence, what came in and then where it
+    /// went: "Income €4,200.00: Casa €1,800.00, Cash €900.00, Savings
+    /// €600.00", the balance after the income when the period spent more
+    /// than it earned: "Income €2,520.00, From the balance €828.60: …".
+    static func sankey(sources: [(String, String)], spending: [(String, String)]) -> String {
+        let from = sources.map { "\($0.0) \($0.1)" }.joined(separator: ", ")
+        let to = spending.map { "\($0.0) \($0.1)" }.joined(separator: ", ")
+        return to.isEmpty ? from : "\(from): \(to)"
+    }
 }
