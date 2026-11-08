@@ -14,7 +14,7 @@ use chrono::{DateTime, Datelike, FixedOffset, NaiveDate, NaiveDateTime, TimeZone
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::{Command, Core, Currency, DomainError, Entry, Money, TransactionKind};
+use crate::{Command, Core, Currency, DomainError, Entry, TransactionKind, parse_major};
 
 /// Error raised while parsing or resolving a quick-add line.
 ///
@@ -436,13 +436,13 @@ fn parse_transfer(
 }
 
 fn parse_positive_amount(token: &str, currency: Currency) -> Result<i64, QuickAddError> {
-    let amount = Money::parse_major(token, currency).map_err(QuickAddError::invalid_amount)?;
-    if amount.minor() <= 0 {
+    let amount = parse_major(token, currency).map_err(QuickAddError::invalid_amount)?;
+    if amount <= 0 {
         return Err(QuickAddError::invalid_amount(
             "amount must be greater than zero",
         ));
     }
-    Ok(amount.minor())
+    Ok(amount)
 }
 
 fn join_note(tokens: &[&str]) -> Option<String> {

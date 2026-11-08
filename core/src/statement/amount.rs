@@ -1,6 +1,6 @@
 //! Exact decimal amounts, read from the text and never through a float.
 //!
-//! Unlike [`crate::Money::parse_major`], which refuses what it cannot hold,
+//! Unlike [`crate::parse_major`], which refuses what it cannot hold,
 //! a statement amount with more decimals than the currency is rounded half
 //! away from zero: card exports write top-ups with a dozen decimals.
 

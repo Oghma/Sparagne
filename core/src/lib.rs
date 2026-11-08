@@ -64,7 +64,7 @@ pub(crate) use analytics::{
 pub(crate) use category::normalize_category_key;
 pub(crate) use engine::entities::MergePreview;
 pub(crate) use flow::Flow;
-pub(crate) use money::Money;
+pub(crate) use money::parse_major;
 pub(crate) use query::Page;
 pub(crate) use recurring::{PendingRecurring, RecurringRunView};
 pub(crate) use statement::{StatementColumnValue, StatementDetection, StatementPreset};

@@ -14,12 +14,12 @@ use crate::{
     AliasView, AllocationBase, AllocationLine, AllocationPlanView, AllocationPreview,
     AllocationRunView, BalanceRange, BucketCategoryTotals, BucketPersonTotals, BucketTargetTotals,
     CategorySuggestion, CategoryTotals, CategoryView, Command, CommandEnvelope, Core, Currency,
-    DomainError, FlowPersonTotals, FlowTransferTotals, MergePreview, Money, Page,
-    PendingAllocation, PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView,
-    RecurringView, RejectedCommand, Schedule, StatementColumnValue, StatementDetection,
-    StatementFormatGuess, StatementMapping, StatementOptions, StatementPreset, StatementPreview,
-    StatementReport, StatementRowOverride, SyncReport, SyncState, TargetKind, TopExpense,
-    TransactionFilter, VaultSnapshot, VaultView,
+    DomainError, FlowPersonTotals, FlowTransferTotals, MergePreview, Page, PendingAllocation,
+    PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView, RecurringView,
+    RejectedCommand, Schedule, StatementColumnValue, StatementDetection, StatementFormatGuess,
+    StatementMapping, StatementOptions, StatementPreset, StatementPreview, StatementReport,
+    StatementRowOverride, SyncReport, SyncState, TargetKind, TopExpense, TransactionFilter,
+    VaultSnapshot, VaultView, parse_major,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
     statement,
 };
@@ -425,7 +425,7 @@ pub fn parse_quick_add(input: String, currency: Currency) -> Result<QuickAdd, Qu
 /// Parses a major-unit amount into minor units. No grouping separators.
 #[uniffi::export]
 pub fn parse_money(text: String, currency: Currency) -> Result<i64, DomainError> {
-    Money::parse_major(&text, currency).map(Money::minor)
+    parse_major(&text, currency)
 }
 
 /// Resolves a relative date token from a quick-add line against `today`.

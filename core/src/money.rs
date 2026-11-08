@@ -1,79 +1,67 @@
 //! Money parsing (integer minor units).
 
-use crate::{Currency, DomainError};
+use crate::{Currency, DomainError, Result};
 
-/// Signed amount in integer minor units. Positive = increase.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[repr(transparent)]
-pub struct Money(i64);
+/// Parses `[+|-] digits [ (.|,) up to minor_units digits ]` into signed
+/// integer minor units, positive an increase.
+///
+/// No thousands separators, no symbols, no leading separator. More
+/// fraction digits than the currency allows is an error, never rounded.
+pub(crate) fn parse_major(input: &str, currency: Currency) -> Result<i64> {
+    let empty = || DomainError::InvalidAmount("empty amount".to_string());
+    let invalid = || DomainError::InvalidAmount("invalid amount".to_string());
+    let overflow = || DomainError::InvalidAmount("amount too large".to_string());
 
-impl Money {
-    #[must_use]
-    pub const fn minor(self) -> i64 {
-        self.0
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err(empty());
     }
+    let (is_negative, rest) = if let Some(s) = trimmed.strip_prefix('-') {
+        (true, s)
+    } else if let Some(s) = trimmed.strip_prefix('+') {
+        (false, s)
+    } else {
+        (false, trimmed)
+    };
+    let rest = rest.trim();
+    if rest.is_empty() {
+        return Err(empty());
+    }
+    let rest = rest.replace(',', ".");
+    let mut parts = rest.split('.');
+    let major_str = parts.next().ok_or_else(invalid)?;
+    let frac_str = parts.next();
+    if parts.next().is_some() {
+        return Err(invalid());
+    }
+    if major_str.is_empty() || !major_str.chars().all(|c| c.is_ascii_digit()) {
+        return Err(invalid());
+    }
+    let major: i64 = major_str.parse().map_err(|_| invalid())?;
 
-    /// Parses `[+|-] digits [ (.|,) up to minor_units digits ]`.
-    ///
-    /// No thousands separators, no symbols, no leading separator. More
-    /// fraction digits than the currency allows is an error, never rounded.
-    pub fn parse_major(input: &str, currency: Currency) -> Result<Money, DomainError> {
-        let empty = || DomainError::InvalidAmount("empty amount".to_string());
-        let invalid = || DomainError::InvalidAmount("invalid amount".to_string());
-        let overflow = || DomainError::InvalidAmount("amount too large".to_string());
-
-        let trimmed = input.trim();
-        if trimmed.is_empty() {
-            return Err(empty());
-        }
-        let (is_negative, rest) = if let Some(s) = trimmed.strip_prefix('-') {
-            (true, s)
-        } else if let Some(s) = trimmed.strip_prefix('+') {
-            (false, s)
-        } else {
-            (false, trimmed)
-        };
-        let rest = rest.trim();
-        if rest.is_empty() {
-            return Err(empty());
-        }
-        let rest = rest.replace(',', ".");
-        let mut parts = rest.split('.');
-        let major_str = parts.next().ok_or_else(invalid)?;
-        let frac_str = parts.next();
-        if parts.next().is_some() {
-            return Err(invalid());
-        }
-        if major_str.is_empty() || !major_str.chars().all(|c| c.is_ascii_digit()) {
-            return Err(invalid());
-        }
-        let major: i64 = major_str.parse().map_err(|_| invalid())?;
-
-        let allowed = usize::from(currency.minor_units());
-        let frac_raw = frac_str.unwrap_or("");
-        if !frac_raw.chars().all(|c| c.is_ascii_digit()) {
-            return Err(invalid());
-        }
-        if frac_raw.len() > allowed {
-            return Err(DomainError::InvalidAmount("too many decimals".to_string()));
-        }
-        let scale: i64 = 10i64.pow(u32::from(currency.minor_units()));
-        let frac_val: i64 = if frac_raw.is_empty() {
-            0
-        } else {
-            let padded = format!("{frac_raw:0<width$}", width = allowed);
-            padded.parse().map_err(|_| invalid())?
-        };
-        let total = major
-            .checked_mul(scale)
-            .and_then(|v| v.checked_add(frac_val))
-            .ok_or_else(overflow)?;
-        let signed = if is_negative {
-            total.checked_neg().ok_or_else(overflow)?
-        } else {
-            total
-        };
-        Ok(Money(signed))
+    let allowed = usize::from(currency.minor_units());
+    let frac_raw = frac_str.unwrap_or("");
+    if !frac_raw.chars().all(|c| c.is_ascii_digit()) {
+        return Err(invalid());
+    }
+    if frac_raw.len() > allowed {
+        return Err(DomainError::InvalidAmount("too many decimals".to_string()));
+    }
+    let scale: i64 = 10i64.pow(u32::from(currency.minor_units()));
+    let frac_val: i64 = if frac_raw.is_empty() {
+        0
+    } else {
+        let padded = format!("{frac_raw:0<width$}", width = allowed);
+        padded.parse().map_err(|_| invalid())?
+    };
+    let total = major
+        .checked_mul(scale)
+        .and_then(|v| v.checked_add(frac_val))
+        .ok_or_else(overflow)?;
+    if is_negative {
+        total.checked_neg().ok_or_else(overflow)
+    } else {
+        Ok(total)
     }
 }
 
@@ -85,7 +73,7 @@ mod tests {
 
     #[test]
     fn parse_accepts_dot_or_comma_and_sign() {
-        let p = |s| Money::parse_major(s, Currency::Eur).unwrap().minor();
+        let p = |s| parse_major(s, Currency::Eur).unwrap();
         assert_eq!(p("10"), 1000);
         assert_eq!(p("10.5"), 1050);
         assert_eq!(p("10,50"), 1050);
@@ -99,7 +87,7 @@ mod tests {
         for s in [
             "12.345", "0.001", ".5", "1.000,50", "1,000.50", "abc", "", "+-5",
         ] {
-            assert!(Money::parse_major(s, Currency::Eur).is_err(), "{s}");
+            assert!(parse_major(s, Currency::Eur).is_err(), "{s}");
         }
     }
 }
