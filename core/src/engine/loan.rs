@@ -273,8 +273,9 @@ impl Core {
     /// [`Core::loan_overview`], each by due date.
     pub fn linked_installments(&self, vault_id: Uuid) -> Result<Vec<LinkedInstallment>> {
         let mut out = Vec::new();
-        for loan in read_loans(&self.conn, vault_id, None)? {
-            let Some(recurring_id) = loan.recurring_id.filter(|_| !loan.archived) else {
+        let loans = read_loans(&self.conn, vault_id, None)?;
+        for loan in loans.iter().filter(|loan| !loan.archived) {
+            let Some(recurring_id) = loan.recurring_id else {
                 continue;
             };
             let schedule = math::schedule(&loan.terms, &loan.events)?;
