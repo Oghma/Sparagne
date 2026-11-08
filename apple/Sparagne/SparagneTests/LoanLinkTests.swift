@@ -205,6 +205,45 @@ struct LoanLinkTests {
         #expect(LoanLink.linkable(templates, loans: loans, for: nil).map(\.id) == ["free"])
     }
 
+    // MARK: - What an early repayment can take
+
+    @Test("A repayment the schedule cut to the debt, or dated after the payoff, asks for too much; other warnings do not")
+    func overpays() {
+        var schedule = Self.schedule
+        schedule.warnings = [.prepaymentClipped(eventId: "new"), .balloon(amount: 5), .installmentBelowInterest(number: 2)]
+        #expect(LoanLink.overpays(schedule, eventId: "new"))
+        #expect(!LoanLink.overpays(schedule, eventId: "old"))
+        schedule.warnings = [.eventAfterEnd(eventId: "new")]
+        #expect(LoanLink.overpays(schedule, eventId: "new"))
+        schedule.warnings = [.balloon(amount: 5), .prepaymentClipped(eventId: "old")]
+        #expect(!LoanLink.overpays(schedule, eventId: "new"))
+    }
+
+    @Test("The debt on a day is the residual after the last installment due by then; before the first, the amount less earlier repayments")
+    func residual() {
+        var schedule = Self.schedule
+        schedule.rows[0].residual = 66_000
+        schedule.rows[1].residual = 33_950
+        schedule.rows[2].residual = 0
+        let none: [LoanEventView] = []
+        #expect(LoanLink.residual(on: "2026-01-05", schedule: schedule, terms: Self.terms, events: none) == 66_000)
+        #expect(LoanLink.residual(on: "2026-02-04", schedule: schedule, terms: Self.terms, events: none) == 66_000)
+        #expect(LoanLink.residual(on: "2026-02-05", schedule: schedule, terms: Self.terms, events: none) == 33_950)
+        #expect(LoanLink.residual(on: "2026-09-01", schedule: schedule, terms: Self.terms, events: none) == 0)
+        #expect(LoanLink.residual(on: "2025-12-01", schedule: schedule, terms: Self.terms, events: none) == 100_000)
+        // Two repayments before the first installment, the second cut to
+        // what the first left; a rate change listed there counts nothing.
+        let early = [
+            LoanEventView(id: "a", event: .prepayment(date: "2025-11-01", amount: 30_000, mode: .lower, fee: 0)),
+            LoanEventView(id: "b", event: .prepayment(date: "2025-11-15", amount: 90_000, mode: .lower, fee: 0)),
+            LoanEventView(id: "c", event: .rateChange(date: "2025-11-20", annualRatePpm: 1, installment: .computed)),
+        ]
+        schedule.eventIdsBeforeFirst = ["a"]
+        #expect(LoanLink.residual(on: "2025-12-01", schedule: schedule, terms: Self.terms, events: early) == 70_000)
+        schedule.eventIdsBeforeFirst = ["a", "b", "c"]
+        #expect(LoanLink.residual(on: "2025-12-01", schedule: schedule, terms: Self.terms, events: early) == 0)
+    }
+
     // MARK: - Events and installments by period
 
     @Test("Events go to the core by date, then by id")

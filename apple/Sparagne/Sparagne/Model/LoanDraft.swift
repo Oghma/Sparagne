@@ -257,11 +257,19 @@ struct LoanEventDraft: Equatable, Sendable {
     /// from the first installment to the last one the terms set, an early
     /// repayment on or before that last one (before the first is fine: it
     /// lowers the amount borrowed).
-    func event(currency: Currency = .eur, terms: LoanTerms? = nil) -> Result<LoanEvent, LoanDraftError> {
-        LoanDraftError.catching { try readEvent(currency: currency, terms: terms) }
+    ///
+    /// With `residual`, the debt left on the day (`AppStore.residualDebt`),
+    /// an early repayment above it is refused on its amount: the expense
+    /// recorded with it would be more than the loan takes.
+    func event(
+        currency: Currency = .eur,
+        terms: LoanTerms? = nil,
+        residual: Int64? = nil
+    ) -> Result<LoanEvent, LoanDraftError> {
+        LoanDraftError.catching { try readEvent(currency: currency, terms: terms, residual: residual) }
     }
 
-    private func readEvent(currency: Currency, terms: LoanTerms?) throws -> LoanEvent {
+    private func readEvent(currency: Currency, terms: LoanTerms?, residual: Int64?) throws -> LoanEvent {
         let day = CoreDate.day(date)
         if let terms, let last = LoanSchedules.lastNominalDue(terms) {
             switch kind {
@@ -300,6 +308,9 @@ struct LoanEventDraft: Equatable, Sendable {
                 blank: LoanText.prepaymentMissing,
                 rule: .positive
             )
+            if let residual, repaid > residual {
+                throw LoanDraftError(field: .amount, message: LoanText.aboveResidual(residual))
+            }
             let penalty = try LoanMoney.read(fee, field: .fee, currency: currency, blank: nil, rule: .notNegative)
             return .prepayment(date: day, amount: repaid, mode: mode, fee: penalty)
         }
@@ -421,7 +432,7 @@ enum LoanSchedules {
 }
 
 /// The forms' words, one place for the messages two forms share.
-nonisolated enum LoanText {
+enum LoanText {
     static var nameMissing: String { String(localized: "Name the loan") }
     static var principalMissing: String { String(localized: "Type the amount borrowed") }
     static var amountUnreadable: String { String(localized: "Not an amount: type it like 1.234,56") }
@@ -442,4 +453,9 @@ nonisolated enum LoanText {
     static var newRateMissing: String { String(localized: "Type the new rate") }
     static var letterInstallmentMissing: String { String(localized: "Type the installment the bank's letter states") }
     static var prepaymentMissing: String { String(localized: "Type the amount repaid") }
+
+    /// An early repayment above the debt left on its day, `residual`.
+    static func aboveResidual(_ residual: Int64) -> String {
+        String(localized: "More than the debt left on that date: \(LedgerMoney.bare(residual))")
+    }
 }

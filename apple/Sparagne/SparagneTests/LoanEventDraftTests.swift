@@ -104,6 +104,18 @@ struct LoanEventDraftTests {
         }
     }
 
+    @Test("Given the debt left on the day, a repayment above it is refused on its amount, saying how much is left")
+    func prepaymentAboveResidual() throws {
+        let draft = try Self.prepayment()
+        let refused = draft.event(residual: 150_000)
+        #expect(refused == .failure(LoanDraftError(field: .amount, message: LoanText.aboveResidual(150_000))))
+        #expect(LoanText.aboveResidual(150_000).hasSuffix("1.500,00"))
+        // The whole debt is a payoff, not too much.
+        #expect(draft.event(residual: 200_000) == .success(.prepayment(date: "2026-06-30", amount: 200_000, mode: .shorten, fee: 2_000)))
+        // A rate change has no amount to hold to it.
+        #expect(throws: Never.self) { try Self.rateChange().event(residual: 0).get() }
+    }
+
     // MARK: - The dates the terms allow
 
     @Test("The last installment the terms set is the core's: monthly on the first one's day, clamped to short months")

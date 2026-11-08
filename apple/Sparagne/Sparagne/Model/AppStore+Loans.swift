@@ -82,9 +82,32 @@ extension AppStore {
     /// repayment and its penalty are recorded as one expense in the same
     /// batch, before the event, dated on its day: `[Expense, AddLoanEvent,
     /// UpdateRecurring?]`. A rate change records nothing.
+    ///
+    /// An early repayment the schedule would cut to the debt left, or that
+    /// comes after the loan is paid off, writes nothing: the alert gives the
+    /// debt on that day, and the expense could never say more than the loan
+    /// takes. The form checks the same live (`residualDebt`).
     @discardableResult
     func addLoanEvent(_ event: LoanEvent, to loan: LoanView, expense: LoanLedgerTarget?) async -> Bool {
         guard let vault = currentVault, !refusedAsReadOnly() else { return false }
+        // Minted before the preview: the event's id is the command's, and
+        // the schedule orders events of one stretch by it.
+        let add = await core.envelope(vaultId: vault.id, .addLoanEvent(loanId: loan.id, event: event))
+        let events = loan.events + [LoanEventView(id: add.id, event: event)]
+        var schedule: LoanSchedule?
+        if case .prepayment(let date, _, _, _) = event {
+            guard let preview = await loanPlan(terms: loan.terms, events: events) else { return false }
+            if LoanLink.overpays(preview, eventId: add.id) {
+                guard let residual = await residualDebt(of: loan, on: date, reporting: true) else { return false }
+                presentedError = AppError(
+                    code: "invalid_command",
+                    message: LoanText.aboveResidual(residual),
+                    headline: String(localized: "The early repayment was not recorded")
+                )
+                return false
+            }
+            schedule = preview
+        }
         var envelopes: [CommandEnvelope] = []
         if let expense, case .prepayment(let date, let amount, _, let fee) = event {
             let now = Date()
@@ -99,12 +122,24 @@ extension AppStore {
             )
             envelopes.append(await core.envelope(vaultId: vault.id, .expense(entry)))
         }
-        // Minted before the preview: the event's id is the command's, and
-        // the schedule orders events of one day by it.
-        let add = await core.envelope(vaultId: vault.id, .addLoanEvent(loanId: loan.id, event: event))
         envelopes.append(add)
-        let events = loan.events + [LoanEventView(id: add.id, event: event)]
-        return await applyLoanWrite(envelopes, terms: loan.terms, events: events, linkedTo: loan.recurringId, in: vault.id)
+        return await applyLoanWrite(
+            envelopes,
+            terms: loan.terms,
+            events: events,
+            schedule: schedule,
+            linkedTo: loan.recurringId,
+            in: vault.id
+        )
+    }
+
+    /// The debt left on `date` for an early repayment of `loan` made now:
+    /// the most an «Estinzione parziale» on that day can repay, for the form
+    /// to show and to check the amount against
+    /// (`LoanEventDraft.event(residual:)`). `nil` when the core cannot work
+    /// the schedule out.
+    func residualDebt(of loan: LoanView, on date: NaiveDate) async -> Int64? {
+        await residualDebt(of: loan, on: date, reporting: false)
     }
 
     /// Takes an event away; the linked template goes back to the installment
@@ -189,18 +224,20 @@ extension AppStore {
     /// `envelopes` with, when the loan is linked to a template still active,
     /// the `UpdateRecurring` that brings it in line with the schedule of
     /// `terms` and `events` (the loan as the batch leaves it), then applied
-    /// as one batch. A schedule the core cannot work out is its refusal, on
-    /// the alert, and nothing is written.
+    /// as one batch. `known` is that schedule when the caller already has
+    /// it. A schedule the core cannot work out is its refusal, on the alert,
+    /// and nothing is written.
     private func applyLoanWrite(
         _ envelopes: [CommandEnvelope],
         terms: LoanTerms,
         events: [LoanEventView],
+        schedule known: LoanSchedule? = nil,
         linkedTo recurringId: Uuid?,
         in vaultId: Uuid
     ) async -> Bool {
         var envelopes = envelopes
         if let recurringId, let template = recurringTemplates.first(where: { $0.id == recurringId && !$0.archived }) {
-            guard let schedule = await loanPlan(terms: terms, events: events) else { return false }
+            guard let schedule = await loanPlan(terms: terms, events: events, known: known) else { return false }
             let patch = LoanLink.alignment(of: template, to: schedule, today: CoreDate.day(Date()))
             if !patch.isEmpty {
                 envelopes.append(await core.envelope(
@@ -239,9 +276,20 @@ extension AppStore {
         return command
     }
 
-    /// The schedule of `terms` and `events`, or `nil` with the core's
-    /// refusal on the alert.
-    private func loanPlan(terms: LoanTerms, events: [LoanEventView]) async -> LoanSchedule? {
+    /// The debt left on `date` for a new early repayment, from the schedule
+    /// of the loan as saved (`LoanLink.residual`); with `reporting`, the
+    /// core's refusal goes on the alert.
+    private func residualDebt(of loan: LoanView, on date: NaiveDate, reporting: Bool) async -> Int64? {
+        let schedule = reporting
+            ? await loanPlan(terms: loan.terms, events: loan.events)
+            : await previewLoan(terms: loan.terms, events: loan.events)
+        return schedule.map { LoanLink.residual(on: date, schedule: $0, terms: loan.terms, events: loan.events) }
+    }
+
+    /// The schedule of `terms` and `events`, `known` when given, or `nil`
+    /// with the core's refusal on the alert.
+    private func loanPlan(terms: LoanTerms, events: [LoanEventView], known: LoanSchedule? = nil) async -> LoanSchedule? {
+        if let known { return known }
         let events = LoanLink.ordered(events)
         do {
             return try await core.read { try $0.previewLoan(terms: terms, events: events) }
@@ -344,6 +392,34 @@ enum LoanLink {
     static func linkable(_ templates: [RecurringView], loans: [LoanView], for loan: LoanView?) -> [RecurringView] {
         let taken = Set(loans.filter { $0.id != loan?.id }.compactMap(\.recurringId))
         return templates.filter { !$0.archived && $0.kind == .expense && !taken.contains($0.id) }
+    }
+
+    /// Whether the early repayment `eventId` asks for more than the loan
+    /// takes: the schedule cut it to the debt left, or it comes after the
+    /// loan is paid off.
+    static func overpays(_ schedule: LoanSchedule, eventId: Uuid) -> Bool {
+        schedule.warnings.contains { warning in
+            switch warning {
+            case .prepaymentClipped(let id), .eventAfterEnd(let id): id == eventId
+            case .installmentBelowInterest, .balloon: false
+            }
+        }
+    }
+
+    /// The debt a new early repayment dated `date` can take, read from the
+    /// loan's schedule without it: the residual after the last installment
+    /// due on or before that day and the events of its stretch, which a new
+    /// event follows, its id being the latest. Before the first installment,
+    /// the amount borrowed less the repayments already made before it, each
+    /// cut to what was left, in the order the schedule applied them.
+    static func residual(on date: NaiveDate, schedule: LoanSchedule, terms: LoanTerms, events: [LoanEventView]) -> Int64 {
+        if let row = schedule.rows.last(where: { $0.dueDate <= date }) { return row.residual }
+        var left = terms.principal
+        for id in schedule.eventIdsBeforeFirst {
+            guard case .prepayment(_, let amount, _, _)? = events.first(where: { $0.id == id })?.event else { continue }
+            left -= min(amount, left)
+        }
+        return left
     }
 
     /// Events by date, then by id, as `LoanView.events` lists them.

@@ -304,6 +304,40 @@ struct LoanStoreTests {
         #expect(try await Self.outbox(store) == before)
     }
 
+    @Test("A repayment above the debt left writes nothing and says the debt; the whole debt repays the loan with its expense")
+    func repaymentAboveTheDebt() async throws {
+        let store = try await Self.vault()
+        #expect(await store.createLoan(name: "Cucina", note: nil, terms: Self.kitchen(firstDue: try Self.day(10)), payment: .none))
+        // Before the first installment the debt is the amount borrowed, less
+        // what was repaid before it.
+        #expect(await store.residualDebt(of: try Self.loan(store, "Cucina"), on: Self.today) == 1_000_000)
+        let first = LoanEvent.prepayment(date: Self.today, amount: 200_000, mode: .lower, fee: 0)
+        #expect(await store.addLoanEvent(first, to: try Self.loan(store, "Cucina"), expense: nil))
+        #expect(await store.residualDebt(of: try Self.loan(store, "Cucina"), on: Self.today) == 800_000)
+        let before = try await Self.outbox(store)
+        let rowsBefore = try await Self.everyRow(store).count
+
+        let tooMuch = LoanEvent.prepayment(date: Self.today, amount: 900_000, mode: .shorten, fee: 5_000)
+        #expect(!(await store.addLoanEvent(tooMuch, to: try Self.loan(store, "Cucina"), expense: try Self.target(store))))
+
+        #expect(store.presentedError?.message == LoanText.aboveResidual(800_000))
+        store.presentedError = nil
+        #expect(try Self.loan(store, "Cucina").events.count == 1)
+        #expect(try await Self.everyRow(store).count == rowsBefore)
+        #expect(try await Self.outbox(store) == before)
+
+        // The whole debt and its penalty: one expense, the loan paid off.
+        let payoff = LoanEvent.prepayment(date: Self.today, amount: 800_000, mode: .shorten, fee: 5_000)
+        #expect(await store.addLoanEvent(payoff, to: try Self.loan(store, "Cucina"), expense: try Self.target(store)))
+        #expect(store.presentedError == nil)
+        #expect(try await Self.everyRow(store).contains { $0.amount == 805_000 && $0.kind == .expense })
+        #expect(await store.residualDebt(of: try Self.loan(store, "Cucina"), on: Self.today) == 0)
+        // Once paid off, any repayment is too much.
+        let after = LoanEvent.prepayment(date: try Self.day(40), amount: 100, mode: .shorten, fee: 0)
+        #expect(!(await store.addLoanEvent(after, to: try Self.loan(store, "Cucina"), expense: nil)))
+        #expect(store.presentedError?.message == LoanText.aboveResidual(0))
+    }
+
     // MARK: - Recording the installments
 
     @Test("Registra and Registra tutte record each due period with the schedule's installment for that date, not the template's amount")
