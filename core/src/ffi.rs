@@ -137,404 +137,6 @@ impl CoreHandle {
         self.lock()?.execute_batch(envelopes)
     }
 
-    /// Every vault in the database, ordered by name.
-    pub fn vaults(&self) -> Result<Vec<VaultView>, DomainError> {
-        self.lock()?.vaults()
-    }
-
-    /// One vault by id, `nil` when the database does not hold it.
-    pub fn vault(&self, vault_id: Uuid) -> Result<Option<VaultView>, DomainError> {
-        self.lock()?.vault(vault_id)
-    }
-
-    /// Vaults a `DeleteVault` removed whose log is still here: their outbox
-    /// has to be pushed like any other, the deletion first of all.
-    pub fn deleted_vaults(&self) -> Result<Vec<Uuid>, DomainError> {
-        self.lock()?.deleted_vaults()
-    }
-
-    /// Wallets and flows of a vault with their balances.
-    pub fn snapshot(&self, vault_id: Uuid) -> Result<VaultSnapshot, DomainError> {
-        self.lock()?.snapshot(vault_id)
-    }
-
-    /// Each flow's balance at `from`, or each wallet's by `target`, and the
-    /// lowest and highest it reaches afterwards: what a transfer dated `from`
-    /// can move without a flow crossing zero or its cap later on.
-    pub fn balance_ranges(
-        &self,
-        vault_id: Uuid,
-        from: UtcDateTime,
-        target: TargetKind,
-    ) -> Result<Vec<BalanceRange>, DomainError> {
-        self.lock()?.balance_ranges(vault_id, from, target)
-    }
-
-    pub fn categories(
-        &self,
-        vault_id: Uuid,
-        include_archived: bool,
-    ) -> Result<Vec<CategoryView>, DomainError> {
-        self.lock()?.categories(vault_id, include_archived)
-    }
-
-    pub fn aliases(&self, vault_id: Uuid) -> Result<Vec<AliasView>, DomainError> {
-        self.lock()?.aliases(vault_id)
-    }
-
-    /// What `MergeCategory` would refuse, without changing anything.
-    pub fn preview_merge(
-        &self,
-        vault_id: Uuid,
-        source_id: Uuid,
-        target_id: Uuid,
-    ) -> Result<MergePreview, DomainError> {
-        self.lock()?.preview_merge(vault_id, source_id, target_id)
-    }
-
-    /// Active categories whose name is close to `name`, nearest first.
-    pub fn similar_categories(
-        &self,
-        vault_id: Uuid,
-        name: String,
-    ) -> Result<Vec<CategoryView>, DomainError> {
-        self.lock()?.similar_categories(vault_id, &name)
-    }
-
-    /// One page of transactions, newest first. Pass `next_cursor` back for the
-    /// next (older) page.
-    pub fn list_transactions(
-        &self,
-        vault_id: Uuid,
-        filter: TransactionFilter,
-        limit: u32,
-        cursor: Option<String>,
-    ) -> Result<Page, DomainError> {
-        self.lock()?
-            .list_transactions(vault_id, &filter, to_usize(limit), cursor.as_deref())
-    }
-
-    /// Ids of the entities used most recently, for picker ordering.
-    pub fn recent_usage(
-        &self,
-        vault_id: Uuid,
-        since: UtcDateTime,
-        limit: u32,
-    ) -> Result<RecentUsage, DomainError> {
-        self.lock()?.recent_usage(vault_id, since, to_usize(limit))
-    }
-
-    /// The category each note was filed under before, one entry per note
-    /// (`nil` when the history says nothing), looking back to `since`.
-    pub fn suggest_categories(
-        &self,
-        vault_id: Uuid,
-        notes: Vec<String>,
-        since: UtcDateTime,
-    ) -> Result<Vec<Option<CategorySuggestion>>, DomainError> {
-        self.lock()?.suggest_categories(vault_id, &notes, since)
-    }
-
-    // -- analytics -------------------------------------------------------
-
-    /// Distinct persons of live transactions: the PERSONA segmented control.
-    pub fn people(&self, vault_id: Uuid) -> Result<Vec<String>, DomainError> {
-        self.lock()?.people(vault_id)
-    }
-
-    /// Envelope x person matrix over `[from, to)`.
-    pub fn flow_person_totals(
-        &self,
-        vault_id: Uuid,
-        from: UtcDateTime,
-        to: UtcDateTime,
-    ) -> Result<Vec<FlowPersonTotals>, DomainError> {
-        self.lock()?.flow_person_totals(vault_id, from, to)
-    }
-
-    /// Envelope x person moves between envelopes over `[from, to)`.
-    pub fn flow_transfer_totals(
-        &self,
-        vault_id: Uuid,
-        from: UtcDateTime,
-        to: UtcDateTime,
-    ) -> Result<Vec<FlowTransferTotals>, DomainError> {
-        self.lock()?.flow_transfer_totals(vault_id, from, to)
-    }
-
-    /// Category breakdown over `[from, to)`, heaviest net expense first.
-    #[uniffi::method(default(person = None))]
-    pub fn category_totals(
-        &self,
-        vault_id: Uuid,
-        from: UtcDateTime,
-        to: UtcDateTime,
-        person: Option<String>,
-    ) -> Result<Vec<CategoryTotals>, DomainError> {
-        self.lock()?.category_totals(vault_id, from, to, person)
-    }
-
-    /// Totals of the ranges between consecutive `bounds`: 13 month starts give
-    /// the twelve bars of a year.
-    #[uniffi::method(default(person = None))]
-    pub fn bucket_totals(
-        &self,
-        vault_id: Uuid,
-        bounds: Vec<UtcDateTime>,
-        person: Option<String>,
-    ) -> Result<Vec<PeriodTotals>, DomainError> {
-        self.lock()?.bucket_totals(vault_id, bounds, person)
-    }
-
-    /// Bucket x person breakdown behind the RIEPILOGO: the app passes the
-    /// epoch plus thirteen month starts and reads thirteen buckets.
-    pub fn year_breakdown(
-        &self,
-        vault_id: Uuid,
-        bounds: Vec<UtcDateTime>,
-    ) -> Result<Vec<BucketPersonTotals>, DomainError> {
-        self.lock()?.year_breakdown(vault_id, bounds)
-    }
-
-    /// Bucket x category net expense over the ranges between consecutive
-    /// `bounds`: the RIEPILOGO's months x categories grid.
-    #[uniffi::method(default(person = None))]
-    pub fn category_bucket_totals(
-        &self,
-        vault_id: Uuid,
-        bounds: Vec<UtcDateTime>,
-        person: Option<String>,
-    ) -> Result<Vec<BucketCategoryTotals>, DomainError> {
-        self.lock()?
-            .category_bucket_totals(vault_id, bounds, person)
-    }
-
-    /// Bucket x wallet, or x envelope, signed movement over the ranges
-    /// between consecutive `bounds`, transfers included: the balance of each
-    /// at the end of every month, once the buckets are summed up.
-    pub fn balance_breakdown(
-        &self,
-        vault_id: Uuid,
-        bounds: Vec<UtcDateTime>,
-        target: TargetKind,
-    ) -> Result<Vec<BucketTargetTotals>, DomainError> {
-        self.lock()?.balance_breakdown(vault_id, bounds, target)
-    }
-
-    /// The heaviest expenses of `[from, to)`, largest first.
-    #[uniffi::method(default(person = None))]
-    pub fn top_expenses(
-        &self,
-        vault_id: Uuid,
-        from: UtcDateTime,
-        to: UtcDateTime,
-        person: Option<String>,
-        limit: u32,
-    ) -> Result<Vec<TopExpense>, DomainError> {
-        self.lock()?.top_expenses(vault_id, from, to, person, limit)
-    }
-
-    // -- Recurring and allocation -----------------------------------------
-
-    pub fn list_recurring(
-        &self,
-        vault_id: Uuid,
-        include_archived: bool,
-    ) -> Result<Vec<RecurringView>, DomainError> {
-        self.lock()?.list_recurring(vault_id, include_archived)
-    }
-
-    /// Templates with periods still waiting for a decision. `today` comes from
-    /// the app, in the system timezone: the core never guesses one.
-    pub fn pending_recurring(
-        &self,
-        vault_id: Uuid,
-        today: NaiveDate,
-    ) -> Result<Vec<PendingRecurring>, DomainError> {
-        self.lock()?.pending_recurring(vault_id, today)
-    }
-
-    pub fn recurring_runs(
-        &self,
-        vault_id: Uuid,
-        recurring_id: Uuid,
-    ) -> Result<Vec<RecurringRunView>, DomainError> {
-        self.lock()?.recurring_runs(vault_id, recurring_id)
-    }
-
-    /// The vault's allocation plan, if it has one.
-    pub fn allocation_plan(
-        &self,
-        vault_id: Uuid,
-    ) -> Result<Option<AllocationPlanView>, DomainError> {
-        self.lock()?.allocation_plan(vault_id)
-    }
-
-    /// The period of the allocation plan waiting for a decision on `today`,
-    /// if any. `today` comes from the app, in the system timezone.
-    pub fn pending_allocation(
-        &self,
-        vault_id: Uuid,
-        today: NaiveDate,
-    ) -> Result<Option<PendingAllocation>, DomainError> {
-        self.lock()?.pending_allocation(vault_id, today)
-    }
-
-    /// The incomes the next allocation shares out, and their total.
-    pub fn allocation_base(&self, vault_id: Uuid) -> Result<AllocationBase, DomainError> {
-        self.lock()?.allocation_base(vault_id)
-    }
-
-    /// `lines` worked out on `total` against the vault's envelopes as they
-    /// are now; the lines may be an unsaved draft.
-    pub fn preview_allocation(
-        &self,
-        vault_id: Uuid,
-        lines: Vec<AllocationLine>,
-        total: i64,
-    ) -> Result<AllocationPreview, DomainError> {
-        self.lock()?.preview_allocation(vault_id, &lines, total)
-    }
-
-    /// The allocation plan's decided periods, the most recent first.
-    pub fn allocation_runs(
-        &self,
-        vault_id: Uuid,
-        limit: u32,
-    ) -> Result<Vec<AllocationRunView>, DomainError> {
-        self.lock()?.allocation_runs(vault_id, limit)
-    }
-
-    // -- Sync ---------------------------------------------------------------
-
-    /// Where the vault stands with the server: last known server seq, outbox
-    /// size, pending rejections.
-    pub fn sync_state(&self, vault_id: Uuid) -> Result<SyncState, DomainError> {
-        self.lock()?.sync_state(vault_id)
-    }
-
-    /// Highest applied seq in the vault's local log; 0 for an unknown vault.
-    pub fn last_seq(&self, vault_id: Uuid) -> Result<i64, DomainError> {
-        self.lock()?.last_seq(vault_id)
-    }
-
-    /// JSON body for `POST /vaults/{id}/push`: at most `limit` commands of
-    /// the outbox, oldest first. Swift only does the HTTP, and pushes again
-    /// while `sync_state` still reports an outbox.
-    pub fn push_request_json(&self, vault_id: Uuid, limit: u32) -> Result<String, DomainError> {
-        self.lock()?.push_request_json(vault_id, to_usize(limit))
-    }
-
-    /// Folds the server's push response back into the log.
-    pub fn apply_push_response_json(
-        &self,
-        vault_id: Uuid,
-        json: String,
-    ) -> Result<SyncReport, DomainError> {
-        self.lock()?.apply_push_response_json(vault_id, &json)
-    }
-
-    /// Folds a pull response into the log, rebasing when it has to.
-    pub fn integrate_pull_json(
-        &self,
-        vault_id: Uuid,
-        json: String,
-    ) -> Result<SyncReport, DomainError> {
-        self.lock()?.integrate_pull_json(vault_id, &json)
-    }
-
-    /// Server side of a push, for a core acting as the server (tests, local
-    /// fake server).
-    pub fn serve_push_json(&self, vault_id: Uuid, json: String) -> Result<String, DomainError> {
-        self.lock()?.serve_push_json(vault_id, &json)
-    }
-
-    /// Server side of a pull.
-    pub fn serve_pull_json(
-        &self,
-        vault_id: Uuid,
-        since: i64,
-        limit: u32,
-    ) -> Result<String, DomainError> {
-        self.lock()?
-            .serve_pull_json(vault_id, since, to_usize(limit))
-    }
-
-    /// Rewrites the author of the outbox after a login, and every person or
-    /// owner it names by an old author name, then rebuilds the projection: so
-    /// `created_by`, the persons and the vault owner follow the account.
-    pub fn relabel_outbox(&self, vault_id: Uuid, author: String) -> Result<(), DomainError> {
-        self.lock()?.relabel_outbox(vault_id, &author)
-    }
-
-    /// Commands the server (or a rebase) refused, oldest first.
-    pub fn rejected_commands(&self, vault_id: Uuid) -> Result<Vec<RejectedCommand>, DomainError> {
-        self.lock()?.rejected_commands(vault_id)
-    }
-
-    /// Forgets one rejected command.
-    pub fn dismiss_rejected(&self, vault_id: Uuid, command_id: Uuid) -> Result<(), DomainError> {
-        self.lock()?.dismiss_rejected(vault_id, command_id)
-    }
-
-    /// Refuses the whole outbox locally, as if the server had: used when a
-    /// push comes back `403`, so the vault keeps pulling.
-    pub fn reject_outbox(
-        &self,
-        vault_id: Uuid,
-        code: String,
-        message: String,
-    ) -> Result<SyncReport, DomainError> {
-        self.lock()?.reject_outbox(vault_id, &code, &message)
-    }
-
-    // -- Maintenance ----------------------------------------------------------
-
-    /// Writes a consistent copy of the database to `path`, which must not
-    /// exist yet.
-    pub fn backup_to(&self, path: String) -> Result<(), DomainError> {
-        self.lock()?.backup_to(std::path::Path::new(&path))
-    }
-
-    /// Drops a vault from this device without telling the server. Returns
-    /// how many outbox commands were thrown away.
-    pub fn forget_vault(&self, vault_id: Uuid) -> Result<u32, DomainError> {
-        self.lock()?.forget_vault(vault_id)
-    }
-
-    // -- Statement import -------------------------------------------------
-
-    /// What importing a statement would do, row by row, with the user's
-    /// overrides. Writes nothing.
-    #[uniffi::method(default(overrides = []))]
-    pub fn preview_statement(
-        &self,
-        vault_id: Uuid,
-        text: String,
-        mapping: StatementMapping,
-        options: StatementOptions,
-        overrides: Vec<StatementRowOverride>,
-    ) -> Result<StatementPreview, DomainError> {
-        self.lock()?
-            .preview_statement(vault_id, &text, &mapping, &options, &overrides)
-    }
-
-    /// Imports a statement, one command per row, with the user's overrides.
-    pub fn import_statement(
-        &self,
-        vault_id: Uuid,
-        author: String,
-        text: String,
-        mapping: StatementMapping,
-        options: StatementOptions,
-        overrides: Vec<StatementRowOverride>,
-    ) -> Result<StatementReport, DomainError> {
-        self.lock()?
-            .import_statement(vault_id, &author, &text, &mapping, &options, &overrides)
-    }
-
-    // -- Quick add ----------------------------------------------------------
-
     /// Resolves the wallet, flow and person names of a parsed quick-add line
     /// against the vault and `people` (who the app lets a row be for), and
     /// returns the command to execute plus the ids the names resolved to.
@@ -549,6 +151,248 @@ impl CoreHandle {
         self.lock()?
             .resolve_quick_add(vault_id, &parsed, now, &defaults, &people)
     }
+}
+
+/// The methods that only lock the core and call its method of the same name,
+/// as one more `#[uniffi::export] impl CoreHandle` block. Each is written
+/// `fn name(args) -> T;` and returns `Result<T, DomainError>`; the arguments
+/// are passed on as they are, unless `=> (...)` spells out the call's, for a
+/// `String` the core borrows as `&str` or a `u32` limit it takes as `usize`.
+/// Attributes pass through, among them the doc comments UniFFI copies into
+/// the Swift bindings.
+macro_rules! forward {
+    (@call $core:expr, $name:ident, $args:tt) => {
+        $core.$name $args
+    };
+    (@call $core:expr, $name:ident, $args:tt, $call:tt) => {
+        $core.$name $call
+    };
+    ($(
+        $(#[$meta:meta])*
+        fn $name:ident($($arg:ident: $ty:ty),* $(,)?) -> $ret:ty
+            $(=> ($($call:expr),* $(,)?))?;
+    )*) => {
+        #[uniffi::export]
+        impl CoreHandle {
+            $(
+                $(#[$meta])*
+                pub fn $name(&self, $($arg: $ty),*) -> Result<$ret, DomainError> {
+                    forward!(@call self.lock()?, $name, ($($arg),*) $(, ($($call),*))?)
+                }
+            )*
+        }
+    };
+}
+
+forward! {
+    /// Every vault in the database, ordered by name.
+    fn vaults() -> Vec<VaultView>;
+
+    /// One vault by id, `nil` when the database does not hold it.
+    fn vault(vault_id: Uuid) -> Option<VaultView>;
+
+    /// Vaults a `DeleteVault` removed whose log is still here: their outbox
+    /// has to be pushed like any other, the deletion first of all.
+    fn deleted_vaults() -> Vec<Uuid>;
+
+    /// Wallets and flows of a vault with their balances.
+    fn snapshot(vault_id: Uuid) -> VaultSnapshot;
+
+    /// Each flow's balance at `from`, or each wallet's by `target`, and the
+    /// lowest and highest it reaches afterwards: what a transfer dated `from`
+    /// can move without a flow crossing zero or its cap later on.
+    fn balance_ranges(vault_id: Uuid, from: UtcDateTime, target: TargetKind) -> Vec<BalanceRange>;
+
+    fn categories(vault_id: Uuid, include_archived: bool) -> Vec<CategoryView>;
+
+    fn aliases(vault_id: Uuid) -> Vec<AliasView>;
+
+    /// What `MergeCategory` would refuse, without changing anything.
+    fn preview_merge(vault_id: Uuid, source_id: Uuid, target_id: Uuid) -> MergePreview;
+
+    /// Active categories whose name is close to `name`, nearest first.
+    fn similar_categories(vault_id: Uuid, name: String) -> Vec<CategoryView>
+        => (vault_id, &name);
+
+    /// One page of transactions, newest first. Pass `next_cursor` back for the
+    /// next (older) page.
+    fn list_transactions(
+        vault_id: Uuid,
+        filter: TransactionFilter,
+        limit: u32,
+        cursor: Option<String>,
+    ) -> Page => (vault_id, &filter, to_usize(limit), cursor.as_deref());
+
+    /// Ids of the entities used most recently, for picker ordering.
+    fn recent_usage(vault_id: Uuid, since: UtcDateTime, limit: u32) -> RecentUsage
+        => (vault_id, since, to_usize(limit));
+
+    /// The category each note was filed under before, one entry per note
+    /// (`nil` when the history says nothing), looking back to `since`.
+    fn suggest_categories(
+        vault_id: Uuid,
+        notes: Vec<String>,
+        since: UtcDateTime,
+    ) -> Vec<Option<CategorySuggestion>> => (vault_id, &notes, since);
+
+    // -- analytics -------------------------------------------------------
+
+    /// Distinct persons of live transactions: the PERSONA segmented control.
+    fn people(vault_id: Uuid) -> Vec<String>;
+
+    /// Envelope x person matrix over `[from, to)`.
+    fn flow_person_totals(vault_id: Uuid, from: UtcDateTime, to: UtcDateTime)
+        -> Vec<FlowPersonTotals>;
+
+    /// Envelope x person moves between envelopes over `[from, to)`.
+    fn flow_transfer_totals(vault_id: Uuid, from: UtcDateTime, to: UtcDateTime)
+        -> Vec<FlowTransferTotals>;
+
+    /// Category breakdown over `[from, to)`, heaviest net expense first.
+    #[uniffi::method(default(person = None))]
+    fn category_totals(
+        vault_id: Uuid,
+        from: UtcDateTime,
+        to: UtcDateTime,
+        person: Option<String>,
+    ) -> Vec<CategoryTotals>;
+
+    /// Totals of the ranges between consecutive `bounds`: 13 month starts give
+    /// the twelve bars of a year.
+    #[uniffi::method(default(person = None))]
+    fn bucket_totals(vault_id: Uuid, bounds: Vec<UtcDateTime>, person: Option<String>)
+        -> Vec<PeriodTotals>;
+
+    /// Bucket x person breakdown behind the RIEPILOGO: the app passes the
+    /// epoch plus thirteen month starts and reads thirteen buckets.
+    fn year_breakdown(vault_id: Uuid, bounds: Vec<UtcDateTime>) -> Vec<BucketPersonTotals>;
+
+    /// Bucket x category net expense over the ranges between consecutive
+    /// `bounds`: the RIEPILOGO's months x categories grid.
+    #[uniffi::method(default(person = None))]
+    fn category_bucket_totals(vault_id: Uuid, bounds: Vec<UtcDateTime>, person: Option<String>)
+        -> Vec<BucketCategoryTotals>;
+
+    /// Bucket x wallet, or x envelope, signed movement over the ranges
+    /// between consecutive `bounds`, transfers included: the balance of each
+    /// at the end of every month, once the buckets are summed up.
+    fn balance_breakdown(vault_id: Uuid, bounds: Vec<UtcDateTime>, target: TargetKind)
+        -> Vec<BucketTargetTotals>;
+
+    /// The heaviest expenses of `[from, to)`, largest first.
+    #[uniffi::method(default(person = None))]
+    fn top_expenses(
+        vault_id: Uuid,
+        from: UtcDateTime,
+        to: UtcDateTime,
+        person: Option<String>,
+        limit: u32,
+    ) -> Vec<TopExpense>;
+
+    // -- Recurring and allocation -----------------------------------------
+
+    fn list_recurring(vault_id: Uuid, include_archived: bool) -> Vec<RecurringView>;
+
+    /// Templates with periods still waiting for a decision. `today` comes from
+    /// the app, in the system timezone: the core never guesses one.
+    fn pending_recurring(vault_id: Uuid, today: NaiveDate) -> Vec<PendingRecurring>;
+
+    fn recurring_runs(vault_id: Uuid, recurring_id: Uuid) -> Vec<RecurringRunView>;
+
+    /// The vault's allocation plan, if it has one.
+    fn allocation_plan(vault_id: Uuid) -> Option<AllocationPlanView>;
+
+    /// The period of the allocation plan waiting for a decision on `today`,
+    /// if any. `today` comes from the app, in the system timezone.
+    fn pending_allocation(vault_id: Uuid, today: NaiveDate) -> Option<PendingAllocation>;
+
+    /// The incomes the next allocation shares out, and their total.
+    fn allocation_base(vault_id: Uuid) -> AllocationBase;
+
+    /// `lines` worked out on `total` against the vault's envelopes as they
+    /// are now; the lines may be an unsaved draft.
+    fn preview_allocation(vault_id: Uuid, lines: Vec<AllocationLine>, total: i64)
+        -> AllocationPreview => (vault_id, &lines, total);
+
+    /// The allocation plan's decided periods, the most recent first.
+    fn allocation_runs(vault_id: Uuid, limit: u32) -> Vec<AllocationRunView>;
+
+    // -- Sync ---------------------------------------------------------------
+
+    /// Where the vault stands with the server: last known server seq, outbox
+    /// size, pending rejections.
+    fn sync_state(vault_id: Uuid) -> SyncState;
+
+    /// Highest applied seq in the vault's local log; 0 for an unknown vault.
+    fn last_seq(vault_id: Uuid) -> i64;
+
+    /// JSON body for `POST /vaults/{id}/push`: at most `limit` commands of
+    /// the outbox, oldest first. Swift only does the HTTP, and pushes again
+    /// while `sync_state` still reports an outbox.
+    fn push_request_json(vault_id: Uuid, limit: u32) -> String => (vault_id, to_usize(limit));
+
+    /// Folds the server's push response back into the log.
+    fn apply_push_response_json(vault_id: Uuid, json: String) -> SyncReport => (vault_id, &json);
+
+    /// Folds a pull response into the log, rebasing when it has to.
+    fn integrate_pull_json(vault_id: Uuid, json: String) -> SyncReport => (vault_id, &json);
+
+    /// Server side of a push, for a core acting as the server (tests, local
+    /// fake server).
+    fn serve_push_json(vault_id: Uuid, json: String) -> String => (vault_id, &json);
+
+    /// Server side of a pull.
+    fn serve_pull_json(vault_id: Uuid, since: i64, limit: u32) -> String
+        => (vault_id, since, to_usize(limit));
+
+    /// Rewrites the author of the outbox after a login, and every person or
+    /// owner it names by an old author name, then rebuilds the projection: so
+    /// `created_by`, the persons and the vault owner follow the account.
+    fn relabel_outbox(vault_id: Uuid, author: String) -> () => (vault_id, &author);
+
+    /// Commands the server (or a rebase) refused, oldest first.
+    fn rejected_commands(vault_id: Uuid) -> Vec<RejectedCommand>;
+
+    /// Forgets one rejected command.
+    fn dismiss_rejected(vault_id: Uuid, command_id: Uuid) -> ();
+
+    /// Refuses the whole outbox locally, as if the server had: used when a
+    /// push comes back `403`, so the vault keeps pulling.
+    fn reject_outbox(vault_id: Uuid, code: String, message: String) -> SyncReport
+        => (vault_id, &code, &message);
+
+    // -- Maintenance ----------------------------------------------------------
+
+    /// Writes a consistent copy of the database to `path`, which must not
+    /// exist yet.
+    fn backup_to(path: String) -> () => (std::path::Path::new(&path));
+
+    /// Drops a vault from this device without telling the server. Returns
+    /// how many outbox commands were thrown away.
+    fn forget_vault(vault_id: Uuid) -> u32;
+
+    // -- Statement import -------------------------------------------------
+
+    /// What importing a statement would do, row by row, with the user's
+    /// overrides. Writes nothing.
+    #[uniffi::method(default(overrides = []))]
+    fn preview_statement(
+        vault_id: Uuid,
+        text: String,
+        mapping: StatementMapping,
+        options: StatementOptions,
+        overrides: Vec<StatementRowOverride>,
+    ) -> StatementPreview => (vault_id, &text, &mapping, &options, &overrides);
+
+    /// Imports a statement, one command per row, with the user's overrides.
+    fn import_statement(
+        vault_id: Uuid,
+        author: String,
+        text: String,
+        mapping: StatementMapping,
+        options: StatementOptions,
+        overrides: Vec<StatementRowOverride>,
+    ) -> StatementReport => (vault_id, &author, &text, &mapping, &options, &overrides);
 }
 
 // ---------------------------------------------------------------------------
