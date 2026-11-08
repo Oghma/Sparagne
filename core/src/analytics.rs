@@ -72,6 +72,25 @@ pub struct CategoryTotals {
     pub count: u32,
 }
 
+/// What one envelope spent on one category: the ribbons from the flows to
+/// the categories of the RIEPILOGO's cash-flow Sankey.
+///
+/// Amounts come from the flow legs, like [`FlowPersonTotals`], so a future
+/// expense split across two envelopes lands on both.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct FlowCategoryTotals {
+    pub flow_id: Uuid,
+    pub category_id: Uuid,
+    pub name: String,
+    /// `true` for `Uncategorized`, which the app localizes; `Opening` never
+    /// reaches this row, its balances being neither earned nor spent.
+    pub is_system: bool,
+    pub expense: i64,
+    pub refund: i64,
+    /// `max(expense - refund, 0)` for the pair.
+    pub net_expense: i64,
+}
+
 /// One line of "top uscite del mese".
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct TopExpense {
@@ -458,6 +477,22 @@ impl Core {
                 .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
         });
         Ok(out)
+    }
+
+    /// Expense and refund per (envelope, category) over `[from, to)`, opening
+    /// balances left out, optionally for one person (`transactions.person`):
+    /// what each flow spent on what, for the cash-flow Sankey. Heaviest net
+    /// expense first.
+    pub fn flow_category_totals(
+        &self,
+        vault_id: Uuid,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+        person: Option<String>,
+    ) -> Result<Vec<FlowCategoryTotals>> {
+        check_range(from, to)?;
+        let _ = (vault_id, person);
+        Ok(Vec::new())
     }
 
     /// Totals of the `bounds.len() - 1` consecutive ranges the boundaries

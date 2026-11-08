@@ -43,6 +43,9 @@ struct SummaryView: View {
                 YearTable(year: year)
                 peopleAndEnvelopes
                 SummaryCharts(year: year)
+                if store.sankeyMonth != nil || store.sankeyYear != nil {
+                    CashFlowSankeyCard(month: store.sankeyMonth, year: store.sankeyYear, upTo: year.upTo)
+                }
                 SideBySide {
                     CategoryYearCard(categories: store.yearCategories)
                 } trailing: {
