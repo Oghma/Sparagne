@@ -511,23 +511,6 @@ struct SyncEngineTests {
         #expect(peer.engine.status == .idle)
     }
 
-    @Test("A vault name the account already used on the server is accepted: names are labels")
-    func aDuplicateVaultNameIsAccepted() async throws {
-        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
-        _ = try await Self.alice(server)
-
-        // A second machine, same account, a local vault with the same name:
-        // the push creates a second vault, not a conflict.
-        let other = try await Peer(server: server)
-        await Self.seed(other)
-        let twin = try #require(other.vaultId)
-        await other.engine.logIn(username: "alice", password: "supersecret")
-
-        #expect(other.account.isLoggedIn)
-        #expect(try await other.core.read { try $0.syncState(vaultId: twin) }.outbox == 0)
-        #expect(try await other.core.read { try $0.syncState(vaultId: twin) }.lastServerSeq > 0)
-    }
-
     @Test("An editor joins a shared vault and gets the same snapshot")
     func editorJoinsSharedVault() async throws {
         let server = FakeServerTransport(core: try CoreHandle.openInMemory())

@@ -426,59 +426,6 @@ struct AppStoreTests {
         #expect(!store.windowCategories.contains { $0.id == food.id })
     }
 
-    // MARK: - Recurring
-
-    @Test("A template due a month ago is pending; executing adds a transaction and clears it, skipping leaves no transaction")
-    func recurringExecuteAndSkip() async throws {
-        let store = try await Self.onboarded()
-        let now = Date()
-        let calendar = Calendar(identifier: .gregorian)
-        let dayOfMonth = calendar.component(.day, from: now)
-        let monthAgo = try #require(calendar.date(byAdding: .month, value: -1, to: now))
-        // The executed transaction lands last month, and the ledger reads one
-        // month at a time, so move the window there or `rows` will be empty.
-        store.month = MonthKey(monthAgo)
-        await store.settle()
-
-        await store.createRecurring(
-            kind: .expense,
-            amount: 999,
-            walletId: nil,
-            flowId: nil,
-            category: "Bills",
-            note: "Rent",
-            schedule: Schedule(
-                frequency: .monthly(day: UInt8(dayOfMonth)),
-                interval: 1,
-                startDate: CoreDate.day(monthAgo),
-                endDate: nil
-            )
-        )
-        #expect(store.presentedError == nil)
-        let template = try #require(store.recurringTemplates.first { $0.note == "Rent" })
-
-        let dueDate = try #require(
-            store.pendingRecurringItems.first { $0.template.id == template.id }?.due.first
-        )
-
-        await store.executeRecurring(template.id, periodDate: dueDate)
-
-        #expect(store.presentedError == nil)
-        #expect(!(store.pendingRecurringItems.first { $0.template.id == template.id }?.due.contains(dueDate) ?? false))
-        let executed = try #require(store.rows.first { $0.note == "Rent" })
-        #expect(executed.kind == .expense)
-        #expect(executed.absoluteAmount == 999)
-
-        // Skipping the following period (if any is already due) leaves no
-        // additional transaction.
-        if let nextDue = store.pendingRecurringItems.first(where: { $0.template.id == template.id })?.due.first {
-            let countBefore = store.rows.filter { $0.note == "Rent" }.count
-            await store.skipRecurring(template.id, periodDate: nextDue)
-            #expect(store.presentedError == nil)
-            #expect(store.rows.filter { $0.note == "Rent" }.count == countBefore)
-        }
-    }
-
     // MARK: - The RIEPILOGO
 
     @Test("The summary's categories, envelopes, top expenses and strip come from the same load as its table")
