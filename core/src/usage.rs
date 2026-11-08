@@ -79,7 +79,7 @@ impl Core {
             .collect()
     }
 
-    /// One transaction with its legs, voided included.
+    /// One transaction, voided included.
     pub fn transaction(&self, vault_id: Uuid, transaction_id: Uuid) -> Result<TransactionView> {
         let mut view = self
             .conn

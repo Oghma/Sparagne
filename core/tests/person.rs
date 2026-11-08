@@ -170,9 +170,10 @@ fn a_patch_may_change_only_the_person_and_a_blank_one_gives_it_back() {
     let after = fx.core.transaction(fx.vault, id).unwrap();
     assert_eq!(after.person, "elisa");
     assert_eq!(after.created_by, "matteo");
+    assert_eq!((after.kind, after.amount), (before.kind, before.amount));
     assert_eq!(
-        (after.amount, after.note, after.legs),
-        (before.amount, before.note, before.legs)
+        (after.note, after.wallet_id, after.flow_id),
+        (before.note, before.wallet_id, before.flow_id)
     );
 
     // Blank gives the row back to whoever recorded it, not to whoever

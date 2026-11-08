@@ -304,8 +304,9 @@ fn execute_posts_the_transaction_and_records_the_run() {
     assert_eq!(posted.amount, 2500);
     assert_eq!(posted.category, "Rent");
     assert!(!posted.voided);
-    let legs: Vec<i64> = posted.legs.iter().map(|l| l.amount).collect();
-    assert_eq!(legs, vec![-2500, -2500]);
+    assert_eq!(posted.wallet_id, Some(fx.wallet));
+    assert_eq!(posted.flow_id, Some(fx.unallocated));
+    assert_eq!((posted.from_id, posted.to_id), (None, None));
 
     let runs = fx.core.recurring_runs(fx.vault, id).unwrap();
     assert_eq!(runs.len(), 1);
@@ -406,14 +407,13 @@ fn wallet_none_resolves_to_the_only_active_wallet() {
     fx.run(Command::Income(entry(10_000, None, None, None, T0)));
     let id = fx.id(rent_cmd());
     let tx_id = fx.id(execute(id, day(2026, 1, 1), T0 + 100));
+    let posted = list(&fx.core, fx.vault, &all())
+        .into_iter()
+        .find(|t| t.id == tx_id)
+        .unwrap();
     assert_eq!(
-        list(&fx.core, fx.vault, &all())
-            .into_iter()
-            .find(|t| t.id == tx_id)
-            .unwrap()
-            .legs
-            .len(),
-        2
+        (posted.wallet_id, posted.flow_id),
+        (Some(fx.wallet), Some(fx.unallocated))
     );
     assert_eq!(wallet_balance(&fx.core, fx.vault, fx.wallet), 7500);
 

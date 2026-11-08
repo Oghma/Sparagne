@@ -42,8 +42,8 @@ pub use engine::entities::{AliasView, MergeConflictKind};
 pub use error::DomainError;
 pub use flow::{FlowMode, headroom};
 pub use query::{
-    BalanceRange, CategoryView, FlowView, LegTarget, LegView, TransactionFilter, TransactionView,
-    VaultSnapshot, WalletView, replay,
+    BalanceRange, CategoryView, FlowView, TransactionFilter, TransactionView, VaultSnapshot,
+    WalletView, replay,
 };
 pub use recurring::{Frequency, RecurringView, RunOutcome, Schedule};
 pub use statement::{

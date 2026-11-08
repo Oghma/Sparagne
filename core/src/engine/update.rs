@@ -195,7 +195,7 @@ impl TargetKind {
         }
     }
 
-    fn parse(value: &str) -> Result<Self> {
+    pub(crate) fn parse(value: &str) -> Result<Self> {
         match value {
             "wallet" => Ok(Self::Wallet),
             "flow" => Ok(Self::Flow),

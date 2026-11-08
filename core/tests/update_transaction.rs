@@ -6,8 +6,8 @@ mod common;
 
 use common::*;
 use sparagne_core::{
-    Command, DomainError, Entry, FlowMode, LegTarget, LegView, TransactionFilter, TransactionKind,
-    TransactionPatch, TransactionView,
+    Command, DomainError, Entry, FlowMode, TransactionFilter, TransactionKind, TransactionPatch,
+    TransactionView,
 };
 use uuid::Uuid;
 
@@ -79,18 +79,30 @@ fn view(fx: &Fx, id: Uuid) -> TransactionView {
     rows.into_iter().find(|t| t.id == id).unwrap()
 }
 
-fn wallet_leg(id: Uuid, amount: i64) -> LegView {
-    LegView {
-        target: LegTarget::Wallet { wallet_id: id },
-        amount,
-    }
+/// What the view sorts a transaction's legs into: `(kind, wallet_id,
+/// flow_id, from_id, to_id, amount)`. The kind gives an entry's sign; a
+/// transfer takes the amount out of `from_id` and puts it into `to_id`.
+type Shape = (
+    TransactionKind,
+    Option<Uuid>,
+    Option<Uuid>,
+    Option<Uuid>,
+    Option<Uuid>,
+    i64,
+);
+
+fn shape(t: &TransactionView) -> Shape {
+    (t.kind, t.wallet_id, t.flow_id, t.from_id, t.to_id, t.amount)
 }
 
-fn flow_leg(id: Uuid, amount: i64) -> LegView {
-    LegView {
-        target: LegTarget::Flow { flow_id: id },
-        amount,
-    }
+/// An entry of `kind` for `amount` on `wallet` and `flow`.
+fn entry_shape(kind: TransactionKind, wallet: Uuid, flow: Uuid, amount: i64) -> Shape {
+    (kind, Some(wallet), Some(flow), None, None, amount)
+}
+
+/// A transfer of `kind` moving `amount` out of `from` into `to`.
+fn transfer_shape(kind: TransactionKind, from: Uuid, to: Uuid, amount: i64) -> Shape {
+    (kind, None, None, Some(from), Some(to), amount)
 }
 
 fn income_total(fx: &Fx, flow: Uuid) -> Option<i64> {
@@ -140,8 +152,8 @@ fn update_transaction_updates_balances() {
     assert_eq!(updated.amount, 150);
     assert_eq!(updated.note.as_deref(), Some("bigger lunch"));
     assert_eq!(
-        updated.legs,
-        vec![wallet_leg(fx.wallet, -150), flow_leg(vacanze, -150)]
+        shape(&updated),
+        entry_shape(TransactionKind::Expense, fx.wallet, vacanze, 150)
     );
     assert_balanced(&fx);
 }
@@ -168,7 +180,10 @@ fn update_income_can_retarget_wallet_and_flow_and_keeps_metadata_when_omitted() 
     assert_eq!(updated.category, "salary");
     assert_eq!(updated.note.as_deref(), Some("hi"));
     assert_eq!(updated.occurred_at, at(T0 + 1));
-    assert_eq!(updated.legs, vec![wallet_leg(bank, 100), flow_leg(f2, 100)]);
+    assert_eq!(
+        shape(&updated),
+        entry_shape(TransactionKind::Income, bank, f2, 100)
+    );
     assert_balanced(&fx);
 }
 
@@ -189,8 +204,8 @@ fn update_expense_retarget_flow_fails_if_insufficient_and_is_atomic() {
     assert_eq!(flow_balance(&fx.core, fx.vault, f1), 20);
     assert_eq!(flow_balance(&fx.core, fx.vault, f2), 0);
     assert_eq!(
-        view(&fx, expense).legs,
-        vec![wallet_leg(fx.wallet, -80), flow_leg(f1, -80)]
+        shape(&view(&fx, expense)),
+        entry_shape(TransactionKind::Expense, fx.wallet, f1, 80)
     );
     assert_eq!(
         fx.core.commands_since(fx.vault, 0).unwrap().len(),
@@ -234,8 +249,8 @@ fn update_transfer_wallet_can_change_endpoints_and_amount() {
     assert_eq!(updated.kind, TransactionKind::TransferWallet);
     assert_eq!(updated.amount, 30);
     assert_eq!(
-        updated.legs,
-        vec![wallet_leg(bank, -30), wallet_leg(card, 30)]
+        shape(&updated),
+        transfer_shape(TransactionKind::TransferWallet, bank, card, 30)
     );
     assert_balanced(&fx);
 }
@@ -270,8 +285,8 @@ fn update_transfer_flow_can_change_endpoints_and_amount() {
     assert_eq!(flow_balance(&fx.core, fx.vault, f3), 10);
     assert_eq!(flow_balance(&fx.core, fx.vault, fx.unallocated), 40);
     assert_eq!(
-        view(&fx, tx).legs,
-        vec![flow_leg(f1, -10), flow_leg(f3, 10)]
+        shape(&view(&fx, tx)),
+        transfer_shape(TransactionKind::TransferFlow, f1, f3, 10)
     );
     assert_balanced(&fx);
 }
@@ -485,8 +500,8 @@ fn transfer_flow_endpoints_can_be_swapped() {
     assert_eq!(flow_balance(&fx.core, fx.vault, f2), 30);
     assert_eq!(flow_balance(&fx.core, fx.vault, fx.unallocated), 70);
     assert_eq!(
-        view(&fx, tx).legs,
-        vec![flow_leg(f2, -50), flow_leg(f1, 50)]
+        shape(&view(&fx, tx)),
+        transfer_shape(TransactionKind::TransferFlow, f2, f1, 50)
     );
     assert_balanced(&fx);
 }
@@ -528,7 +543,10 @@ fn list_transactions_shows_the_updated_row() {
     assert_eq!(updated.occurred_at, at(T0 + 500));
     assert_eq!(updated.category, "gift");
     assert_eq!(updated.note.as_deref(), Some("present"));
-    assert_eq!(updated.legs, vec![wallet_leg(bank, 250), flow_leg(f1, 250)]);
+    assert_eq!(
+        shape(&updated),
+        entry_shape(TransactionKind::Income, bank, f1, 250)
+    );
     assert!(!updated.voided);
 
     // The updated row is the newest one, since it moved forward in time.

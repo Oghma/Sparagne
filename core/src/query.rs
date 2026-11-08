@@ -2,7 +2,6 @@
 
 use chrono::{DateTime, FixedOffset, Offset, Utc};
 use rusqlite::{params, params_from_iter, types::Value};
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
@@ -71,32 +70,19 @@ pub struct VaultSnapshot {
     pub unallocated_flow_id: Uuid,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
-#[serde(tag = "target", rename_all = "snake_case")]
-pub enum LegTarget {
-    Wallet { wallet_id: Uuid },
-    Flow { flow_id: Uuid },
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
-pub struct LegView {
-    pub target: LegTarget,
-    /// Signed.
-    pub amount: i64,
-}
-
 /// One transaction as the table shows it.
 ///
-/// `legs` is the raw shape; `wallet_id`, `flow_id`, `from_id` and `to_id` are
-/// the same information already sorted out by kind, so the app never has to
-/// bucket the legs itself. Entries fill `wallet_id` and `flow_id`; transfers
-/// fill `from_id` with the negative leg and `to_id` with the positive one.
+/// Its legs come already sorted out by kind into `wallet_id`, `flow_id`,
+/// `from_id` and `to_id`, so the app never has to bucket them itself. Entries
+/// fill `wallet_id` and `flow_id`; transfers fill `from_id` with the negative
+/// leg and `to_id` with the positive one.
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct TransactionView {
     pub id: Uuid,
     pub kind: TransactionKind,
     pub occurred_at: DateTime<FixedOffset>,
-    /// Absolute value; see `legs` for signs.
+    /// Absolute value: an entry's sign is its kind, a transfer takes it out
+    /// of `from_id` and puts it into `to_id`.
     pub amount: i64,
     pub category_id: Uuid,
     pub category: String,
@@ -120,48 +106,34 @@ pub struct TransactionView {
     pub from_id: Option<Uuid>,
     /// Transfers only: the destination.
     pub to_id: Option<Uuid>,
-    pub legs: Vec<LegView>,
 }
+
+/// One row of [`LEGS_SQL`]: the side, the wallet or flow, the signed amount.
+type LegRow = (TargetKind, Uuid, i64);
 
 /// Splits the legs of a transaction into the ids [`TransactionView`] exposes:
 /// `(wallet_id, flow_id, from_id, to_id)`.
-pub(crate) fn leg_shape(
+fn leg_shape(
     kind: TransactionKind,
-    legs: &[LegView],
+    legs: &[LegRow],
 ) -> (Option<Uuid>, Option<Uuid>, Option<Uuid>, Option<Uuid>) {
-    let wallet = |leg: &LegView| match leg.target {
-        LegTarget::Wallet { wallet_id } => Some(wallet_id),
-        LegTarget::Flow { .. } => None,
-    };
-    let flow = |leg: &LegView| match leg.target {
-        LegTarget::Flow { flow_id } => Some(flow_id),
-        LegTarget::Wallet { .. } => None,
-    };
     if kind.is_transfer() {
         // Source = the negative leg, destination = the positive one; ordinal
         // order is the fallback for the degenerate zero-amount case.
-        let ids: Vec<Uuid> = legs
-            .iter()
-            .filter_map(|leg| wallet(leg).or_else(|| flow(leg)))
-            .collect();
-        let from = legs
-            .iter()
-            .position(|leg| leg.amount < 0)
-            .or(Some(0))
-            .and_then(|i| ids.get(i).copied());
-        let to = legs
-            .iter()
-            .position(|leg| leg.amount > 0)
-            .or(Some(1))
-            .and_then(|i| ids.get(i).copied());
-        (None, None, from, to)
+        let pick = |sign: i64, fallback: usize| {
+            let i = legs
+                .iter()
+                .position(|&(_, _, amount)| amount.signum() == sign)
+                .unwrap_or(fallback);
+            legs.get(i).map(|&(_, id, _)| id)
+        };
+        (None, None, pick(-1, 0), pick(1, 1))
     } else {
-        (
-            legs.iter().find_map(wallet),
-            legs.iter().find_map(flow),
-            None,
-            None,
-        )
+        let on = |side: TargetKind| {
+            legs.iter()
+                .find_map(|&(target, id, _)| (target == side).then_some(id))
+        };
+        (on(TargetKind::Wallet), on(TargetKind::Flow), None, None)
     }
 }
 
@@ -170,7 +142,8 @@ pub(crate) fn leg_shape(
 pub(crate) const TRANSACTION_VIEW_COLUMNS: &str = "t.id, t.kind, t.occurred_at, t.occurred_offset, t.amount, t.category_id, c.name, c.is_system, t.note, t.voided_at, t.created_by, t.person";
 
 /// A [`TransactionView`] from a row that starts with
-/// [`TRANSACTION_VIEW_COLUMNS`]; the legs are left to [`load_legs`].
+/// [`TRANSACTION_VIEW_COLUMNS`]; the ids its legs give are left to
+/// [`load_legs`].
 pub(crate) fn transaction_view(r: &rusqlite::Row<'_>) -> rusqlite::Result<TransactionView> {
     let kind: String = r.get(1)?;
     let at: i64 = r.get(2)?;
@@ -192,7 +165,6 @@ pub(crate) fn transaction_view(r: &rusqlite::Row<'_>) -> rusqlite::Result<Transa
         flow_id: None,
         from_id: None,
         to_id: None,
-        legs: Vec::new(),
     })
 }
 
@@ -200,27 +172,19 @@ pub(crate) fn transaction_view(r: &rusqlite::Row<'_>) -> rusqlite::Result<Transa
 pub(crate) const LEGS_SQL: &str =
     "SELECT target_kind, target_id, amount FROM legs WHERE transaction_id = ?1 ORDER BY ordinal";
 
-/// Fills in the legs of `views` and the ids [`leg_shape`] sorts out of them,
-/// with one prepared statement for the whole list.
+/// Fills in the ids [`leg_shape`] sorts out of the legs of `views`, with one
+/// prepared statement for the whole list.
 pub(crate) fn load_legs(conn: &rusqlite::Connection, views: &mut [TransactionView]) -> Result<()> {
     let mut stmt = conn.prepare(LEGS_SQL)?;
     for view in views {
-        view.legs = stmt
-            .query_map(params![view.id], |r| {
-                let kind: String = r.get(0)?;
-                let id: Uuid = r.get(1)?;
-                let target = if kind == "wallet" {
-                    LegTarget::Wallet { wallet_id: id }
-                } else {
-                    LegTarget::Flow { flow_id: id }
-                };
-                Ok(LegView {
-                    target,
-                    amount: r.get(2)?,
-                })
-            })?
+        let rows: Vec<(String, Uuid, i64)> = stmt
+            .query_map(params![view.id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
             .collect::<std::result::Result<_, _>>()?;
-        let (wallet_id, flow_id, from_id, to_id) = leg_shape(view.kind, &view.legs);
+        let legs: Vec<LegRow> = rows
+            .into_iter()
+            .map(|(target, id, amount)| Ok((TargetKind::parse(&target)?, id, amount)))
+            .collect::<Result<_>>()?;
+        let (wallet_id, flow_id, from_id, to_id) = leg_shape(view.kind, &legs);
         view.wallet_id = wallet_id;
         view.flow_id = flow_id;
         view.from_id = from_id;

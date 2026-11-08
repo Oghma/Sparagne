@@ -25,15 +25,14 @@ fn vaults_lists_two_vaults_sorted_by_name_with_currency_and_owner() {
 }
 
 #[test]
-fn transaction_returns_legs_and_voided_flag_and_notfound_on_missing_or_wrong_vault() {
+fn transaction_returns_ids_and_voided_flag_and_notfound_on_missing_or_wrong_vault() {
     let mut fx = setup();
     let income = fx.id(Command::Income(entry(500, None, None, Some("Salary"), T0)));
 
     let view = fx.core.transaction(fx.vault, income).unwrap();
     assert_eq!(view.amount, 500);
     assert!(!view.voided);
-    assert_eq!(view.legs.len(), 2);
-    // The legs are also reported already sorted out by kind.
+    // The legs come sorted out by kind.
     assert_eq!(view.wallet_id, Some(fx.wallet));
     assert_eq!(view.flow_id, Some(fx.unallocated));
     assert_eq!(view.from_id, None);
@@ -45,7 +44,11 @@ fn transaction_returns_legs_and_voided_flag_and_notfound_on_missing_or_wrong_vau
     });
     let voided = fx.core.transaction(fx.vault, income).unwrap();
     assert!(voided.voided);
-    assert_eq!(voided.legs.len(), 2);
+    // A voided row keeps its legs.
+    assert_eq!(
+        (voided.wallet_id, voided.flow_id),
+        (Some(fx.wallet), Some(fx.unallocated))
+    );
 
     let missing = fx.core.transaction(fx.vault, Uuid::now_v7());
     assert_eq!(
