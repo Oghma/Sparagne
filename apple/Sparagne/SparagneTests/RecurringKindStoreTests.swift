@@ -8,39 +8,10 @@ import Testing
 /// a vault of several, against the real core. Every assertion reads what
 /// the core holds after the command.
 struct RecurringKindStoreTests {
-    /// Vault `Main`, wallet `Cash` holding 100.00.
-    private static func onboarded() async throws -> AppStore {
-        try await TestStore.make(vault: "Main", wallet: "Cash", opening: 10_000, author: "tester")
-    }
-
     private static var today: NaiveDate { CoreDate.day(Date()) }
 
     private static func day(_ offset: Int) throws -> NaiveDate {
         try #require(NaiveDay.adding(offset, to: today))
-    }
-
-    /// A daily expense that started two days ago: the day before yesterday,
-    /// yesterday and today are due. `until` ends it early.
-    private static func dailyExpense(
-        _ store: AppStore,
-        note: String = "Gym",
-        walletId: Uuid? = nil,
-        flowId: Uuid? = nil,
-        until end: NaiveDate? = nil,
-        owner: String? = nil
-    ) async throws -> RecurringView {
-        let created = await store.createRecurring(
-            kind: .expense,
-            amount: 50,
-            walletId: walletId,
-            flowId: flowId,
-            category: "Bills",
-            note: note,
-            schedule: Schedule(frequency: .daily, interval: 1, startDate: try day(-2), endDate: end),
-            owner: owner
-        )
-        #expect(store.presentedError == nil)
-        return try template(store, try #require(created))
     }
 
     private static func template(_ store: AppStore, _ id: Uuid) throws -> RecurringView {
@@ -68,8 +39,8 @@ struct RecurringKindStoreTests {
 
     @Test("The template is archived and its copy of the other kind, for the same owner, starts after the last period decided")
     func expenseBecomesIncome() async throws {
-        let store = try await Self.onboarded()
-        let gym = try await Self.dailyExpense(store, until: try Self.day(30), owner: "elisa")
+        let store = try await RecurringFixture.store()
+        let gym = try await RecurringFixture.dailyExpense(store, until: try Self.day(30), owner: "elisa")
         await Self.decideAll(store, gym)
         #expect(await store.recurringKindStart(gym.id) == .success(try Self.day(1)))
         #expect(await store.recurringKindRefusal(gym.id) == nil)
@@ -93,7 +64,7 @@ struct RecurringKindStoreTests {
 
     @Test("An income with nothing decided becomes an expense from the schedule's first period")
     func incomeBecomesExpense() async throws {
-        let store = try await Self.onboarded()
+        let store = try await RecurringFixture.store()
         let start = try Self.day(10)
         let salary = try #require(await store.createRecurring(
             kind: .income,
@@ -117,8 +88,8 @@ struct RecurringKindStoreTests {
 
     @Test("A paused template's copy is paused too, and takes over the periods it never decided")
     func pausedStaysPaused() async throws {
-        let store = try await Self.onboarded()
-        let gym = try await Self.dailyExpense(store)
+        let store = try await RecurringFixture.store()
+        let gym = try await RecurringFixture.dailyExpense(store)
         await store.executeRecurring(gym.id, periodDate: try Self.day(-2))
         await store.setRecurringEnabled(gym.id, false)
         // Paused, nothing is due: yesterday and today wait for it to run.
@@ -141,8 +112,8 @@ struct RecurringKindStoreTests {
 
     @Test("A paused template with a period never decided before its last one decided keeps the kind until it is resumed and decided")
     func pausedWithAnEarlierPeriodLeft() async throws {
-        let store = try await Self.onboarded()
-        let gym = try await Self.dailyExpense(store)
+        let store = try await RecurringFixture.store()
+        let gym = try await RecurringFixture.dailyExpense(store)
         // Today recorded from the due sheet, the two days before left, then
         // paused: a copy from tomorrow would never bring those two back.
         await store.executeRecurring(gym.id, periodDate: Self.today)
@@ -170,8 +141,8 @@ struct RecurringKindStoreTests {
 
     @Test("Periods waiting keep the kind, and nothing is written")
     func refusedWhilePending() async throws {
-        let store = try await Self.onboarded()
-        let gym = try await Self.dailyExpense(store)
+        let store = try await RecurringFixture.store()
+        let gym = try await RecurringFixture.dailyExpense(store)
         #expect(await store.recurringKindRefusal(gym.id) == .pendingPeriods)
         let before = try await Self.outbox(store)
 
@@ -190,8 +161,8 @@ struct RecurringKindStoreTests {
 
     @Test("An owner who left the vault keeps the kind")
     func refusedForAnOwnerWhoLeft() async throws {
-        let store = try await Self.onboarded()
-        let gym = try await Self.dailyExpense(store, owner: "elisa")
+        let store = try await RecurringFixture.store()
+        let gym = try await RecurringFixture.dailyExpense(store, owner: "elisa")
         await Self.decideAll(store, gym)
         store.setVaultMembers([try #require(store.currentVault).id: ["tester", "bob"]])
 
@@ -202,12 +173,12 @@ struct RecurringKindStoreTests {
 
     @Test("A vault only read, an archived template and a schedule with no period left keep the kind")
     func otherRefusals() async throws {
-        let store = try await Self.onboarded()
-        let gym = try await Self.dailyExpense(store, until: try Self.day(-1))
+        let store = try await RecurringFixture.store()
+        let gym = try await RecurringFixture.dailyExpense(store, until: try Self.day(-1))
         await Self.decideAll(store, gym)
         #expect(await store.recurringKindRefusal(gym.id) == .noPeriodsLeft)
 
-        let rent = try await Self.dailyExpense(store, note: "Rent")
+        let rent = try await RecurringFixture.dailyExpense(store, note: "Rent")
         await store.archiveRecurring(rent.id)
         #expect(await store.recurringKindRefusal(rent.id) == .archived)
 
@@ -221,8 +192,8 @@ struct RecurringKindStoreTests {
 
     @Test("A template without a wallet warns once the vault has a second one, where the core refuses to record it")
     func lacksWalletWithSeveral() async throws {
-        let store = try await Self.onboarded()
-        let gym = try await Self.dailyExpense(store)
+        let store = try await RecurringFixture.store()
+        let gym = try await RecurringFixture.dailyExpense(store)
         #expect(!store.lacksWallet(gym))
         #expect(store.defaultWalletId == nil)
 
@@ -249,8 +220,8 @@ struct RecurringKindStoreTests {
 
     @Test("An archived template without a wallet does not warn")
     func archivedDoesNotWarn() async throws {
-        let store = try await Self.onboarded()
-        let gym = try await Self.dailyExpense(store)
+        let store = try await RecurringFixture.store()
+        let gym = try await RecurringFixture.dailyExpense(store)
         await store.createWallet(name: "Contanti", openingBalance: 0)
         await store.archiveRecurring(gym.id)
         #expect(!store.lacksWallet(try Self.template(store, gym.id)))

@@ -195,10 +195,10 @@ struct AllocationDraftTests {
     @Test("The Busta menu offers the active envelopes but Unallocated, less those another line has")
     func offeredEnvelopes() {
         let flows = [
-            EnvelopeYearTests.flow("unallocated", unallocated: true),
-            EnvelopeYearTests.flow(Self.rent),
-            EnvelopeYearTests.flow(Self.savings),
-            EnvelopeYearTests.flow("flow-vacanze"),
+            TestFlow.make("unallocated", unallocated: true),
+            TestFlow.make(Self.rent),
+            TestFlow.make(Self.savings),
+            TestFlow.make("flow-vacanze"),
         ]
         let lines = Array(Self.lines.prefix(2))
         #expect(AllocationLineDraft.offered(flows, lines: lines, keeping: nil).map(\.id) == ["flow-vacanze"])
@@ -208,7 +208,7 @@ struct AllocationDraftTests {
 
     @Test("Al tetto stands for the cap of the envelope picked, and for nothing without one")
     func capOfTheEnvelope() {
-        let flows = [EnvelopeYearTests.flow(Self.food, mode: .netCapped(cap: 30_000)), EnvelopeYearTests.flow(Self.rent)]
+        let flows = [TestFlow.make(Self.food, mode: .netCapped(cap: 30_000)), TestFlow.make(Self.rent)]
         var draft = AllocationLineDraft()
         #expect(draft.cap(in: flows) == nil)
         draft.flowId = Self.food

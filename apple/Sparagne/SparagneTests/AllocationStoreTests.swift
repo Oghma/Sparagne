@@ -24,13 +24,9 @@ struct AllocationStoreTests {
 
     private static var today: NaiveDate { CoreDate.day(Date()) }
 
-    private static func flow(_ store: AppStore, _ name: String) throws -> FlowView {
-        try #require(store.flows.first { $0.name == name })
-    }
-
     /// An income into Unallocated, today.
     private static func income(_ store: AppStore, _ amount: Int64, note: String = "stipendio") async throws {
-        let unallocated = try #require(store.flows.first { $0.isUnallocated })
+        let unallocated = try TestStore.unallocated(in: store)
         await store.addRow(
             day: Date(),
             flowId: unallocated.id,
@@ -46,8 +42,8 @@ struct AllocationStoreTests {
     /// today is the first period and is due.
     private static func plan(_ store: AppStore) async throws -> [AllocationLine] {
         let lines = [
-            AllocationLine(flowId: try flow(store, "Affitto").id, rule: .fixed(amount: 80_000)),
-            AllocationLine(flowId: try flow(store, "Vacanze").id, rule: .fillToCap),
+            AllocationLine(flowId: try TestStore.flow("Affitto", in: store).id, rule: .fixed(amount: 80_000)),
+            AllocationLine(flowId: try TestStore.flow("Vacanze", in: store).id, rule: .fillToCap),
         ]
         let saved = await store.saveAllocationLines(lines, schedule: AllocationScheduleDraft(today: today).schedule)
         #expect(saved)

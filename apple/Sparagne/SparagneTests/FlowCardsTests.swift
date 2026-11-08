@@ -10,25 +10,6 @@ import Testing
 struct FlowCardsTests {
     private static let june = MonthKey(year: 2026, month: 6)
 
-    private static func flow(
-        _ name: String,
-        balance: Int64 = 0,
-        mode: FlowMode = .unlimited,
-        incomeTotal: Int64? = nil,
-        unallocated: Bool = false
-    ) -> FlowView {
-        FlowView(
-            id: name,
-            name: name,
-            balance: balance,
-            mode: mode,
-            incomeTotal: incomeTotal,
-            allowNegative: true,
-            archived: false,
-            isUnallocated: unallocated
-        )
-    }
-
     private static func cards(
         _ flows: [FlowView],
         flowPerson: [FlowPersonTotals] = [],
@@ -52,12 +33,12 @@ struct FlowCardsTests {
     func order() {
         let cards = Self.cards(
             [
-                Self.flow("Non allocato", unallocated: true),
-                Self.flow("Cash"),
-                Self.flow("Emergenza", mode: .netCapped(cap: 100)),
-                Self.flow("Casa"),
-                Self.flow("Vacanze", mode: .netCapped(cap: 100)),
-                Self.flow("Auto", mode: .incomeCapped(cap: 100), incomeTotal: 40),
+                TestFlow.make("Non allocato", unallocated: true),
+                TestFlow.make("Cash"),
+                TestFlow.make("Emergenza", mode: .netCapped(cap: 100)),
+                TestFlow.make("Casa"),
+                TestFlow.make("Vacanze", mode: .netCapped(cap: 100)),
+                TestFlow.make("Auto", mode: .incomeCapped(cap: 100), incomeTotal: 40),
             ],
             balances: [
                 BucketTargetTotals(bucket: 1, targetId: "Emergenza", delta: 100),
@@ -71,7 +52,7 @@ struct FlowCardsTests {
     @Test("A cap on the balance fills with the balance at the month's end, not today's")
     func balanceAtTheMonthsEnd() throws {
         let cards = Self.cards(
-            [Self.flow("Vacanze", balance: 90_000, mode: .netCapped(cap: 100_000))],
+            [TestFlow.make("Vacanze", balance: 90_000, mode: .netCapped(cap: 100_000))],
             balances: [
                 BucketTargetTotals(bucket: 0, targetId: "Vacanze", delta: 20_000),
                 BucketTargetTotals(bucket: 6, targetId: "Vacanze", delta: 30_000),
@@ -89,8 +70,8 @@ struct FlowCardsTests {
     func incomeCap() {
         let cards = Self.cards(
             [
-                Self.flow("Casa", mode: .incomeCapped(cap: 15_000_000), incomeTotal: 3_193_500),
-                Self.flow("Varie", mode: .incomeCapped(cap: 500_000)),
+                TestFlow.make("Casa", mode: .incomeCapped(cap: 15_000_000), incomeTotal: 3_193_500),
+                TestFlow.make("Varie", mode: .incomeCapped(cap: 500_000)),
             ],
             balances: [
                 BucketTargetTotals(bucket: 2, targetId: "Casa", delta: 500),
@@ -105,7 +86,7 @@ struct FlowCardsTests {
     @Test("An open flow has no bar and is never full, whatever it holds")
     func openFlow() throws {
         let cards = Self.cards(
-            [Self.flow("Cash")],
+            [TestFlow.make("Cash")],
             balances: [BucketTargetTotals(bucket: 3, targetId: "Cash", delta: -12_000)]
         )
         let card = try #require(cards.first)
@@ -117,7 +98,7 @@ struct FlowCardsTests {
     @Test("The month's income and expense count the moves between flows")
     func monthMoves() {
         let cards = Self.cards(
-            [Self.flow("Casa"), Self.flow("Vacanze", mode: .netCapped(cap: 300_000))],
+            [TestFlow.make("Casa"), TestFlow.make("Vacanze", mode: .netCapped(cap: 300_000))],
             flowPerson: [
                 FlowPersonTotals(flowId: "Casa", person: "elisa", income: 200_000, expense: 31_000, refund: 1_000, netExpense: 30_000),
                 FlowPersonTotals(flowId: "Casa", person: "matteo", income: 0, expense: 12_000, refund: 0, netExpense: 12_000),

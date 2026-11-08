@@ -8,25 +8,15 @@ import Testing
 /// (`AppStore+KindChange.swift`): the balances it moves, the batch it is,
 /// its undo step, and what the Mastro's cursor and toast do after it.
 struct KindChangeStoreTests {
-    /// Vault `Casa` with wallet `Conto` at 1,000.00 in Unallocated, envelope
-    /// `Spesa`, which may go below zero, and `Fondo`, which may not. On Spesa
-    /// two expenses of today, `mutuo` 950.00 and `coop` 50.00. The Mastro on
-    /// USCITE, and an undo manager attached once all that is written.
+    /// `TestStore.household` with its flow named `Spesa`, which may go below
+    /// zero, and `Fondo`, which may not. The Mastro on USCITE, and an undo
+    /// manager attached once all that is written.
     private static func household() async throws -> (store: AppStore, manager: UndoManager) {
-        let store = try await TestStore.make()
-        await store.createEnvelope(name: "Spesa", mode: .unlimited, allowNegative: true, openingAllocation: 0)
+        let store = try await TestStore.household(flow: "Spesa").store
         await store.createEnvelope(name: "Fondo", mode: .unlimited, allowNegative: false, openingAllocation: 0)
-        let spesa = try Self.flow("Spesa", in: store)
-        await store.addRow(day: Date(), flowId: spesa.id, category: "Casa", note: "mutuo", amount: 95_000)
-        await store.addRow(day: Date(), flowId: spesa.id, category: "Spesa", note: "coop", amount: 5_000)
         store.tab = .ledger
         #expect(store.presentedError == nil)
-        #expect(store.rows.map(\.note) == ["Mutuo", "Coop"])
         return (store, try LedgerHistoryTests.attachManager(to: store))
-    }
-
-    private static func flow(_ name: String, in store: AppStore) throws -> FlowView {
-        try #require(store.flows.first { $0.name == name })
     }
 
     private static func row(_ note: String, in store: AppStore) throws -> TransactionRow {
@@ -54,7 +44,7 @@ struct KindChangeStoreTests {
         #expect(created != coop.id)
         // 1,000.00 - 950.00 + 50.00, and Spesa -950.00 + 50.00.
         #expect(store.wallets.first?.balance == 10_000)
-        #expect(try Self.flow("Spesa", in: store).balance == -90_000)
+        #expect(try TestStore.flow("Spesa", in: store).balance == -90_000)
 
         store.direction = .income
         await store.settle()
@@ -72,7 +62,7 @@ struct KindChangeStoreTests {
         let (store, manager) = try await Self.household()
         store.direction = .income
         await store.settle()
-        await store.addRow(day: Date(), flowId: try Self.flow("Fondo", in: store).id, category: "Regali", note: "regalo", amount: 5_000)
+        await store.addRow(day: Date(), flowId: try TestStore.flow("Fondo", in: store).id, category: "Regali", note: "regalo", amount: 5_000)
         let gift = try Self.row("Regalo", in: store)
         #expect(gift.kind == .income)
 
@@ -80,7 +70,7 @@ struct KindChangeStoreTests {
         // would take it below.
         #expect(await store.changeKind(of: gift.id, to: .expense) == nil)
         #expect(store.presentedError?.code == "insufficient_funds")
-        #expect(try Self.flow("Fondo", in: store).balance == 5_000)
+        #expect(try TestStore.flow("Fondo", in: store).balance == 5_000)
         let stored = try Self.view(gift.id, in: store)
         #expect(stored.kind == .income)
         #expect(!stored.voided)

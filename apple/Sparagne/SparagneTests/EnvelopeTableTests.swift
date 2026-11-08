@@ -9,29 +9,11 @@ import Testing
 /// a refused amount points at. The draft is a plain struct, so none of this
 /// needs a view.
 struct EnvelopeTableTests {
-    /// An envelope as the store would hand it to the table.
-    private static func flow(
-        name: String = "Casa",
-        mode: FlowMode = .unlimited,
-        allowNegative: Bool = false
-    ) -> FlowView {
-        FlowView(
-            id: UUID().uuidString,
-            name: name,
-            balance: 0,
-            mode: mode,
-            incomeTotal: nil,
-            allowNegative: allowNegative,
-            archived: false,
-            isUnallocated: false
-        )
-    }
-
     // MARK: - The diff of an edited row
 
     @Test("A row nobody touched sends nothing")
     func unchangedDraftIsEmpty() throws {
-        let flow = Self.flow(mode: .netCapped(cap: 150_000_00), allowNegative: true)
+        let flow = TestFlow.make("Casa", mode: .netCapped(cap: 150_000_00), allowNegative: true)
         let patch = try EnvelopeDraft(flow: flow).patch(against: flow, currency: .eur)
         #expect(patch.isEmpty)
         #expect(patch == EnvelopePatch())
@@ -39,7 +21,7 @@ struct EnvelopeTableTests {
 
     @Test("A renamed row sends the name and only the name")
     func nameOnly() throws {
-        let flow = Self.flow(name: "Casa")
+        let flow = TestFlow.make("Casa")
         var draft = EnvelopeDraft(flow: flow)
         draft.name = "  Casa nuova  "
         let patch = try draft.patch(against: flow, currency: .eur)
@@ -50,7 +32,7 @@ struct EnvelopeTableTests {
 
     @Test("Changing the kind of cap keeps the amount and sends only the mode")
     func capKind() throws {
-        let flow = Self.flow(mode: .netCapped(cap: 30_000_00))
+        let flow = TestFlow.make("Casa", mode: .netCapped(cap: 30_000_00))
         var draft = EnvelopeDraft(flow: flow)
         #expect(draft.kind == .net)
         #expect(draft.cap == "30000.00")
@@ -64,7 +46,7 @@ struct EnvelopeTableTests {
 
     @Test("A new cap amount travels as the mode, since the cap lives inside it")
     func capAmount() throws {
-        let flow = Self.flow(mode: .netCapped(cap: 30_000_00))
+        let flow = TestFlow.make("Casa", mode: .netCapped(cap: 30_000_00))
         var draft = EnvelopeDraft(flow: flow)
         draft.cap = "35000,50"
         let patch = try draft.patch(against: flow, currency: .eur)
@@ -74,7 +56,7 @@ struct EnvelopeTableTests {
 
     @Test("Toggling NEG sends allowNegative and nothing else")
     func negative() throws {
-        let flow = Self.flow(allowNegative: false)
+        let flow = TestFlow.make("Casa", allowNegative: false)
         var draft = EnvelopeDraft(flow: flow)
         draft.allowNegative = true
         let patch = try draft.patch(against: flow, currency: .eur)
@@ -85,7 +67,7 @@ struct EnvelopeTableTests {
 
     @Test("An emptied name leaves the name alone, as an emptied amount does in the ledger")
     func emptyNameIsNotAChange() throws {
-        let flow = Self.flow(name: "Casa")
+        let flow = TestFlow.make("Casa")
         var draft = EnvelopeDraft(flow: flow)
         draft.name = "   "
         #expect(try draft.patch(against: flow, currency: .eur).isEmpty)
@@ -95,7 +77,7 @@ struct EnvelopeTableTests {
 
     @Test("A cap that does not parse is reported on the CAP cell")
     func badCapAmount() throws {
-        let flow = Self.flow(mode: .netCapped(cap: 30_000_00))
+        let flow = TestFlow.make("Casa", mode: .netCapped(cap: 30_000_00))
         var draft = EnvelopeDraft(flow: flow)
         draft.cap = "abc"
         do {
@@ -108,7 +90,7 @@ struct EnvelopeTableTests {
 
     @Test("A capped kind with no amount is reported on the CAP cell too")
     func missingCapAmount() throws {
-        let flow = Self.flow(mode: .netCapped(cap: 30_000_00))
+        let flow = TestFlow.make("Casa", mode: .netCapped(cap: 30_000_00))
         var draft = EnvelopeDraft(flow: flow)
         draft.cap = ""
         do {
@@ -167,12 +149,12 @@ struct EnvelopeTableTests {
         )
         #expect(store.presentedError == nil)
 
-        let created = try #require(store.flows.first { $0.name == "Emergenza" })
+        let created = try TestStore.flow("Emergenza", in: store)
         #expect(created.mode == .incomeCapped(cap: 30_000_00))
         #expect(created.allowNegative)
         #expect(created.balance == 25_000)
         // The allocation came out of Unallocated, not out of thin air.
-        let unallocated = try #require(store.flows.first { $0.isUnallocated })
+        let unallocated = try TestStore.unallocated(in: store)
         #expect(unallocated.balance == 100_000 - 25_000)
     }
 
@@ -182,7 +164,7 @@ struct EnvelopeTableTests {
     func patchReachesTheStore() async throws {
         let store = try await TestStore.make()
         await store.createEnvelope(name: "Casa", mode: .netCapped(cap: 150_000_00), allowNegative: false, openingAllocation: 0)
-        let flow = try #require(store.flows.first { $0.name == "Casa" })
+        let flow = try TestStore.flow("Casa", in: store)
 
         var draft = EnvelopeDraft(flow: flow)
         draft.name = "Casa nuova"

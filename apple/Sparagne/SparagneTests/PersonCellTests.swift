@@ -157,8 +157,8 @@ struct PersonCellTests {
         let (store, _) = try await Self.ledger()
         await store.createWallet(name: "Carta", openingBalance: 0)
         let vault = try #require(store.currentVault)
-        let from = try #require(store.wallets.first { $0.name == "Conto" })
-        let to = try #require(store.wallets.first { $0.name == "Carta" })
+        let from = try TestStore.wallet("Conto", in: store)
+        let to = try TestStore.wallet("Carta", in: store)
         try await store.core.execute(
             vaultId: vault.id,
             .transferWallet(amount: 1_000, fromWalletId: from.id, toWalletId: to.id, note: "giroconto", occurredAt: CoreDate.offset(Date()))

@@ -13,8 +13,8 @@ struct BulkEnvelopeTests {
         let store = try await TestStore.make()
         await store.createEnvelope(name: "Spesa", mode: .unlimited, allowNegative: true, openingAllocation: 0)
         await store.createEnvelope(name: "Risparmi", mode: .unlimited, allowNegative: false, openingAllocation: 0)
-        let spesa = try #require(store.flows.first { $0.name == "Spesa" }).id
-        let risparmi = try #require(store.flows.first { $0.name == "Risparmi" }).id
+        let spesa = try TestStore.flow("Spesa", in: store).id
+        let risparmi = try TestStore.flow("Risparmi", in: store).id
         for note in ["pane", "latte", "caffè"] {
             await store.addRow(day: Date(), flowId: spesa, category: "Spesa", note: note, amount: 1_000)
         }
@@ -29,7 +29,7 @@ struct BulkEnvelopeTests {
     @Test("The selected rows move to the envelope picked, and one undo puts them all back")
     func movesAndUndoes() async throws {
         let (store, manager, spesa, _) = try await Self.ledger()
-        let unallocated = try #require(store.flows.first { $0.isUnallocated }).id
+        let unallocated = try TestStore.unallocated(in: store).id
         store.selectAllRows()
         #expect(store.bulkEnvelope == spesa)
 
@@ -48,7 +48,7 @@ struct BulkEnvelopeTests {
     @Test("Rows already on the envelope are left out, and rows spread over several share none")
     func skipsRowsAlreadyThere() async throws {
         let (store, manager, spesa, _) = try await Self.ledger()
-        let unallocated = try #require(store.flows.first { $0.isUnallocated }).id
+        let unallocated = try TestStore.unallocated(in: store).id
         let pane = try #require(store.rows.first { $0.note == "Pane" })
         store.toggleSelection(pane.id)
         await store.setSelectionEnvelope(unallocated)

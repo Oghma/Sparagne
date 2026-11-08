@@ -9,20 +9,6 @@ import Testing
 struct EnvelopeYearTests {
     private static let june = MonthKey(year: 2026, month: 6)
 
-    /// An envelope whose id is its name, empty.
-    static func flow(_ name: String, mode: FlowMode = .unlimited, unallocated: Bool = false) -> FlowView {
-        FlowView(
-            id: name,
-            name: name,
-            balance: 0,
-            mode: mode,
-            incomeTotal: nil,
-            allowNegative: false,
-            archived: false,
-            isUnallocated: unallocated
-        )
-    }
-
     private static func line(_ flow: String, _ person: String, income: Int64 = 0, netExpense: Int64 = 0) -> FlowPersonTotals {
         FlowPersonTotals(
             flowId: flow, person: person, income: income, expense: netExpense, refund: 0, netExpense: netExpense
@@ -33,10 +19,10 @@ struct EnvelopeYearTests {
     /// rely on it.
     private static var flows: [FlowView] {
         [
-            flow("Spesa"),
-            flow("Vacanze", mode: .netCapped(cap: 300_000)),
-            flow("Non allocato", unallocated: true),
-            flow("Casa", mode: .incomeCapped(cap: 1_500_000)),
+            TestFlow.make("Spesa"),
+            TestFlow.make("Vacanze", mode: .netCapped(cap: 300_000)),
+            TestFlow.make("Non allocato", unallocated: true),
+            TestFlow.make("Casa", mode: .incomeCapped(cap: 1_500_000)),
         ]
     }
 

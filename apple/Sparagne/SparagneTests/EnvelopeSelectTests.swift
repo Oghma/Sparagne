@@ -77,12 +77,10 @@ struct EnvelopeSelectTests {
 
     // MARK: - Over a store
 
+    /// `TestStore.household`, its flow `Cash`, and `Viaggi` beside it.
     private static func household() async throws -> (store: AppStore, cash: FlowView) {
-        let store = try await TestStore.make()
-        await store.createEnvelope(name: "Cash", mode: .unlimited, allowNegative: true, openingAllocation: 0)
+        let (store, cash) = try await TestStore.household()
         await store.createEnvelope(name: "Viaggi", mode: .unlimited, allowNegative: true, openingAllocation: 0)
-        let cash = try #require(store.flows.first { $0.name == "Cash" })
-        await store.addRow(day: Date(), flowId: cash.id, category: "Spesa", note: "coop", amount: 5_000)
         #expect(store.presentedError == nil)
         return (store, cash)
     }
@@ -90,7 +88,7 @@ struct EnvelopeSelectTests {
     @Test("The list names Unallocated in the app's language and leaves archived envelopes out")
     func envelopesFromTheStore() async throws {
         let (store, _) = try await Self.household()
-        let viaggi = try #require(store.flows.first { $0.name == "Viaggi" })
+        let viaggi = try TestStore.flow("Viaggi", in: store)
         await store.archiveEnvelope(viaggi.id)
 
         let names = EnvelopeChoiceModel.envelopes(in: store).map(\.name)
@@ -102,7 +100,7 @@ struct EnvelopeSelectTests {
     @Test("The empty line starts on the sticky envelope and saves the one picked")
     func newLineCarriesThePick() async throws {
         let (store, cash) = try await Self.household()
-        let viaggi = try #require(store.flows.first { $0.name == "Viaggi" })
+        let viaggi = try TestStore.flow("Viaggi", in: store)
 
         var draft = RowDraft.blank(in: store)
         #expect(draft.flowId == cash.id)
@@ -121,7 +119,7 @@ struct EnvelopeSelectTests {
     func archivedEnvelopeStays() async throws {
         let (store, _) = try await Self.household()
         // Only an envelope back to zero can be archived: a gift in, a gift out.
-        let viaggi = try #require(store.flows.first { $0.name == "Viaggi" })
+        let viaggi = try TestStore.flow("Viaggi", in: store)
         await store.addRow(day: Date(), flowId: viaggi.id, category: "Regali", note: "busta", amount: 2_000, kind: .income)
         await store.addRow(day: Date(), flowId: viaggi.id, category: "Regali", note: "regalo", amount: 2_000)
         await store.archiveEnvelope(viaggi.id)

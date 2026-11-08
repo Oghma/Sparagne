@@ -128,20 +128,22 @@ enum StatementFixture {
         return store
     }
 
+    /// The id of the wallet named `name`.
     static func wallet(
         _ name: String,
         in store: AppStore,
         sourceLocation: SourceLocation = #_sourceLocation
     ) throws -> Uuid {
-        try #require(store.wallets.first { $0.name == name }, sourceLocation: sourceLocation).id
+        try TestStore.wallet(name, in: store, sourceLocation: sourceLocation).id
     }
 
+    /// The id of the flow named `name`.
     static func envelope(
         _ name: String,
         in store: AppStore,
         sourceLocation: SourceLocation = #_sourceLocation
     ) throws -> Uuid {
-        try #require(store.flows.first { $0.name == name }, sourceLocation: sourceLocation).id
+        try TestStore.flow(name, in: store, sourceLocation: sourceLocation).id
     }
 
     /// Every transaction of the vault, oldest first, transfers included and

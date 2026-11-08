@@ -88,7 +88,7 @@ struct StatementAccountsTests {
     func accountChoicesRemembered() async throws {
         let (store, cash, revolut, bbva) = try await Self.vault()
         await store.createWallet(name: "Old", openingBalance: 0)
-        let old = try #require(store.wallets.first { $0.name == "Old" }).id
+        let old = try StatementFixture.wallet("Old", in: store)
         let mappings = try StatementFixture.mappings()
         let vaultId = try #require(store.currentVault?.id)
 

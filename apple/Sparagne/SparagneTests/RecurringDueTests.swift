@@ -9,36 +9,6 @@ import Testing
 /// leave behind. Every assertion reads the core's own answer after the
 /// command, not the card.
 struct RecurringDueTests {
-    /// Vault `Main`, wallet `Cash` holding 100.00.
-    private static func onboarded() async throws -> AppStore {
-        try await TestStore.make(vault: "Main", wallet: "Cash", opening: 10_000, author: "tester")
-    }
-
-    /// A daily expense that started two days ago: three periods due, the day
-    /// before yesterday, yesterday and today.
-    @discardableResult
-    private static func dailyExpense(
-        _ store: AppStore,
-        note: String,
-        amount: Int64,
-        flowId: Uuid? = nil,
-        owner: String? = nil
-    ) async throws -> RecurringView {
-        let start = try #require(Calendar.current.date(byAdding: .day, value: -2, to: Date()))
-        await store.createRecurring(
-            kind: .expense,
-            amount: amount,
-            walletId: nil,
-            flowId: flowId,
-            category: "Bills",
-            note: note,
-            schedule: Schedule(frequency: .daily, interval: 1, startDate: CoreDate.day(start), endDate: nil),
-            owner: owner
-        )
-        #expect(store.presentedError == nil)
-        return try #require(store.recurringTemplates.first { $0.note == note })
-    }
-
     private static func due(_ store: AppStore, _ template: RecurringView) -> [NaiveDate] {
         store.pendingRecurringItems.first { $0.template.id == template.id }?.due ?? []
     }
@@ -50,9 +20,9 @@ struct RecurringDueTests {
 
     @Test("The due list is every period of every template, oldest first")
     func duePeriodsAreOldestFirst() async throws {
-        let store = try await Self.onboarded()
-        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 100)
-        let gym = try await Self.dailyExpense(store, note: "Gym", amount: 50)
+        let store = try await RecurringFixture.store()
+        let rent = try await RecurringFixture.dailyExpense(store, note: "Rent", amount: 100)
+        let gym = try await RecurringFixture.dailyExpense(store, note: "Gym", amount: 50)
 
         let periods = store.duePeriods
         #expect(periods.count == 6)
@@ -63,8 +33,8 @@ struct RecurringDueTests {
 
     @Test("Executing one period writes its transaction and leaves the other periods due")
     func executeOnePeriod() async throws {
-        let store = try await Self.onboarded()
-        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 999)
+        let store = try await RecurringFixture.store()
+        let rent = try await RecurringFixture.dailyExpense(store, note: "Rent", amount: 999)
         let first = try #require(Self.due(store, rent).first)
 
         await store.executeRecurring(rent.id, periodDate: first)
@@ -80,9 +50,9 @@ struct RecurringDueTests {
 
     @Test("A template is its creator's unless another owner was picked, and an edit moves it")
     func ownerOnCreateAndEdit() async throws {
-        let store = try await Self.onboarded()
-        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 999)
-        let gym = try await Self.dailyExpense(store, note: "Gym", amount: 50, owner: "elisa")
+        let store = try await RecurringFixture.store()
+        let rent = try await RecurringFixture.dailyExpense(store, note: "Rent", amount: 999)
+        let gym = try await RecurringFixture.dailyExpense(store, note: "Gym", amount: 50, owner: "elisa")
         #expect(rent.owner == "tester")
         #expect(gym.owner == "elisa")
 
@@ -93,8 +63,8 @@ struct RecurringDueTests {
 
     @Test("Registra records the period for the template's owner, by whoever pressed it")
     func executeForTheOwner() async throws {
-        let store = try await Self.onboarded()
-        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 999, owner: "elisa")
+        let store = try await RecurringFixture.store()
+        let rent = try await RecurringFixture.dailyExpense(store, note: "Rent", amount: 999, owner: "elisa")
         let first = try #require(Self.due(store, rent).first)
 
         await store.executeRecurring(rent.id, periodDate: first)
@@ -113,9 +83,9 @@ struct RecurringDueTests {
 
     @Test("Registra tutte records each period for its own template's owner")
     func executeAllForEachOwner() async throws {
-        let store = try await Self.onboarded()
-        try await Self.dailyExpense(store, note: "Rent", amount: 100, owner: "elisa")
-        try await Self.dailyExpense(store, note: "Gym", amount: 50)
+        let store = try await RecurringFixture.store()
+        try await RecurringFixture.dailyExpense(store, note: "Rent", amount: 100, owner: "elisa")
+        try await RecurringFixture.dailyExpense(store, note: "Gym", amount: 50)
 
         await store.executeAllDueRecurring()
 
@@ -129,9 +99,9 @@ struct RecurringDueTests {
 
     @Test("Under the PERSONA filter the Mastro shows the due periods of that person's templates only")
     func pendingRowsFollowThePersonFilter() async throws {
-        let store = try await Self.onboarded()
-        try await Self.dailyExpense(store, note: "Rent", amount: 100, owner: "elisa")
-        try await Self.dailyExpense(store, note: "Gym", amount: 50)
+        let store = try await RecurringFixture.store()
+        try await RecurringFixture.dailyExpense(store, note: "Rent", amount: 100, owner: "elisa")
+        try await RecurringFixture.dailyExpense(store, note: "Gym", amount: 50)
         // A row for elisa, so the filter has her to show.
         await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "coop", amount: 10, person: "elisa")
 
@@ -176,9 +146,9 @@ struct RecurringDueTests {
 
     @Test("A template whose owner left can only skip its periods; Registra tutte records the others and counts what it left")
     func ownerWhoLeft() async throws {
-        let store = try await Self.onboarded()
-        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 100, owner: "elisa")
-        let gym = try await Self.dailyExpense(store, note: "Gym", amount: 50)
+        let store = try await RecurringFixture.store()
+        let rent = try await RecurringFixture.dailyExpense(store, note: "Rent", amount: 100, owner: "elisa")
+        let gym = try await RecurringFixture.dailyExpense(store, note: "Gym", amount: 50)
         let vault = try #require(store.currentVault)
         // Logged in, and elisa is not among the members any more.
         store.setVaultMembers([vault.id: ["tester", "bob"]])
@@ -220,8 +190,8 @@ struct RecurringDueTests {
 
     @Test("Logged out, an owner nobody checks records as before")
     func ownerUncheckedWhileLoggedOut() async throws {
-        let store = try await Self.onboarded()
-        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 100, owner: "elisa")
+        let store = try await RecurringFixture.store()
+        let rent = try await RecurringFixture.dailyExpense(store, note: "Rent", amount: 100, owner: "elisa")
         store.setVaultMembers(nil)
         #expect(!store.ownerHasLeft(rent))
         await store.executeAllDueRecurring()
@@ -231,8 +201,8 @@ struct RecurringDueTests {
 
     @Test("Skipping a period takes it off the list and writes nothing")
     func skipOnePeriod() async throws {
-        let store = try await Self.onboarded()
-        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 999)
+        let store = try await RecurringFixture.store()
+        let rent = try await RecurringFixture.dailyExpense(store, note: "Rent", amount: 999)
         let first = try #require(Self.due(store, rent).first)
 
         await store.skipRecurring(rent.id, periodDate: first)
@@ -245,9 +215,9 @@ struct RecurringDueTests {
 
     @Test("Execute All writes every due period of every template, one command each")
     func executeAll() async throws {
-        let store = try await Self.onboarded()
-        try await Self.dailyExpense(store, note: "Rent", amount: 100)
-        try await Self.dailyExpense(store, note: "Gym", amount: 50)
+        let store = try await RecurringFixture.store()
+        try await RecurringFixture.dailyExpense(store, note: "Rent", amount: 100)
+        try await RecurringFixture.dailyExpense(store, note: "Gym", amount: 50)
         let vault = try #require(store.currentVault)
         let outbox = try await store.core.read { try $0.syncState(vaultId: vault.id) }.outbox
 
@@ -264,13 +234,13 @@ struct RecurringDueTests {
 
     @Test("Execute All is all or nothing: one period refused leaves every period due")
     func executeAllIsAtomic() async throws {
-        let store = try await Self.onboarded()
+        let store = try await RecurringFixture.store()
         // An envelope with nothing in it that may not go below zero: its
         // template is refused, the one on Unallocated would not be.
         await store.createEnvelope(name: "Vacanze", mode: .unlimited, allowNegative: false, openingAllocation: 0)
-        let vacanze = try #require(store.flows.first { $0.name == "Vacanze" })
-        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 100)
-        let hotel = try await Self.dailyExpense(store, note: "Hotel", amount: 500, flowId: vacanze.id)
+        let vacanze = try TestStore.flow("Vacanze", in: store)
+        let rent = try await RecurringFixture.dailyExpense(store, note: "Rent", amount: 100)
+        let hotel = try await RecurringFixture.dailyExpense(store, note: "Hotel", amount: 500, flowId: vacanze.id)
 
         await store.executeAllDueRecurring()
 
@@ -282,8 +252,8 @@ struct RecurringDueTests {
 
     @Test("An archived template stays in the panel's list and can be restored")
     func restoreAnArchivedTemplate() async throws {
-        let store = try await Self.onboarded()
-        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 100)
+        let store = try await RecurringFixture.store()
+        let rent = try await RecurringFixture.dailyExpense(store, note: "Rent", amount: 100)
 
         await store.archiveRecurring(rent.id)
         #expect(store.presentedError == nil)
@@ -300,8 +270,8 @@ struct RecurringDueTests {
 
     @Test("Creating a template answers with its id, whatever else the list holds")
     func createAnswersWithTheNewId() async throws {
-        let store = try await Self.onboarded()
-        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 100)
+        let store = try await RecurringFixture.store()
+        let rent = try await RecurringFixture.dailyExpense(store, note: "Rent", amount: 100)
         let today = CoreDate.day(Date())
 
         let created = await store.createRecurring(
@@ -322,7 +292,7 @@ struct RecurringDueTests {
 
     @Test("A refused template answers with no id")
     func refusedCreateAnswersNil() async throws {
-        let store = try await Self.onboarded()
+        let store = try await RecurringFixture.store()
         let vault = try #require(store.currentVault)
         store.setReadOnlyVaults([vault.id])
 
@@ -343,8 +313,8 @@ struct RecurringDueTests {
 
     @Test("A read-only vault refuses Execute All before it reaches the core")
     func readOnlyRefusesExecuteAll() async throws {
-        let store = try await Self.onboarded()
-        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 100)
+        let store = try await RecurringFixture.store()
+        let rent = try await RecurringFixture.dailyExpense(store, note: "Rent", amount: 100)
         let vault = try #require(store.currentVault)
         store.setReadOnlyVaults([vault.id])
 

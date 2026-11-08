@@ -9,20 +9,13 @@ import Testing
 /// is written the moment it is left, alone, and the new line when the cursor
 /// leaves it with an amount.
 struct LedgerEditorTests {
-    /// Vault `Casa` with wallet `Conto` and envelope `Cash` beside
-    /// Unallocated, and two expenses of today on Cash: `mutuo` 950.00, then
-    /// `coop` 50.00, filed under Spesa. The Mastro is the tab on screen.
+    /// `TestStore.household`, its flow `Cash`, with the Mastro the tab on
+    /// screen.
     private static func household(
         probe: (@Sendable () async -> Void)? = nil
     ) async throws -> (store: AppStore, editor: LedgerEditor) {
-        let store = try await TestStore.make(probe: probe)
-        await store.createEnvelope(name: "Cash", mode: .unlimited, allowNegative: true, openingAllocation: 0)
-        let envelope = try #require(store.flows.first { $0.name == "Cash" })
-        await store.addRow(day: Date(), flowId: envelope.id, category: "Casa", note: "mutuo", amount: 95_000)
-        await store.addRow(day: Date(), flowId: envelope.id, category: "Spesa", note: "coop", amount: 5_000)
+        let store = try await TestStore.household(probe: probe).store
         store.tab = .ledger
-        #expect(store.presentedError == nil)
-        #expect(store.rows.map(\.note) == ["Mutuo", "Coop"])
         return (store, store.ledgerEditor)
     }
 
@@ -166,7 +159,7 @@ struct LedgerEditorTests {
     func envelopeCell() async throws {
         let (store, editor) = try await Self.household()
         let coop = try Self.row("Coop", in: store)
-        let unallocated = try #require(store.flows.first { $0.isUnallocated })
+        let unallocated = try TestStore.unallocated(in: store)
 
         editor.select(Self.cell(coop, .flow))
         #expect(editor.edit())
@@ -205,7 +198,7 @@ struct LedgerEditorTests {
         let (store, editor) = try await Self.household()
         let vault = try #require(store.currentVault)
         let coop = try Self.row("Coop", in: store)
-        let unallocated = try #require(store.flows.first { $0.isUnallocated })
+        let unallocated = try TestStore.unallocated(in: store)
         #expect(editor.shown(coop) == coop)
 
         editor.select(Self.cell(coop, .note))
@@ -347,7 +340,7 @@ struct LedgerEditorTests {
     @Test("The new line is registered when ↑ leaves it with an amount, and starts over blank on the envelope just used")
     func newLineRegistersOnUp() async throws {
         let (store, editor) = try await Self.household()
-        let unallocated = try #require(store.flows.first { $0.isUnallocated })
+        let unallocated = try TestStore.unallocated(in: store)
         editor.select(Self.newLine(.flow))
         editor.edit()
         editor.flowId = unallocated.id
@@ -929,10 +922,6 @@ struct LedgerEditorTests {
         return (store, editor, try #require(store.rows.first { $0.isTransfer }))
     }
 
-    private static func flow(_ name: String, in store: AppStore) throws -> FlowView {
-        try #require(store.flows.first { $0.name == name })
-    }
-
     @Test("The patch of a transfer's ends always names both, and none for equal ends, the ends it has, or an entry")
     func endsPatch() {
         let transfer = TestRow.make(kind: .transferFlow)
@@ -976,8 +965,8 @@ struct LedgerEditorTests {
     func swappedEnds() async throws {
         let (store, editor, transfer) = try await Self.withTransfer()
         let manager = try LedgerHistoryTests.attachManager(to: store)
-        let cash = try Self.flow("Cash", in: store)
-        let viaggi = try Self.flow("Viaggi", in: store)
+        let cash = try TestStore.flow("Cash", in: store)
+        let viaggi = try TestStore.flow("Viaggi", in: store)
         #expect(transfer.fromId == cash.id && transfer.toId == viaggi.id)
 
         editor.openEnds(of: transfer.id)
@@ -1007,8 +996,8 @@ struct LedgerEditorTests {
     @Test("Equal ends keep the popover open, the ends it has close it, and neither writes anything")
     func endsWithNothingToWrite() async throws {
         let (store, editor, transfer) = try await Self.withTransfer()
-        let cash = try Self.flow("Cash", in: store)
-        let viaggi = try Self.flow("Viaggi", in: store)
+        let cash = try TestStore.flow("Cash", in: store)
+        let viaggi = try TestStore.flow("Viaggi", in: store)
         let gate = ExecutedCount()
         await store.core.setOnExecuted { gate.record() }
 
@@ -1024,9 +1013,9 @@ struct LedgerEditorTests {
     @Test("Ends the core refuses leave the row on the ends it had, the refusal on the alert")
     func refusedEnds() async throws {
         let (store, editor, transfer) = try await Self.withTransfer()
-        let cash = try Self.flow("Cash", in: store)
-        let fondo = try Self.flow("Fondo", in: store)
-        let viaggi = try Self.flow("Viaggi", in: store)
+        let cash = try TestStore.flow("Cash", in: store)
+        let fondo = try TestStore.flow("Fondo", in: store)
+        let viaggi = try TestStore.flow("Viaggi", in: store)
 
         // Fondo holds nothing and may not go below zero.
         #expect(editor.saveEnds(of: transfer.id, from: fondo.id, to: viaggi.id))
@@ -1081,8 +1070,8 @@ struct LedgerEditorTests {
         #expect(editor.edit(Self.cell(transfer, .wallet)))
         #expect(editor.endsRowId == transfer.id)
 
-        let conto = try #require(store.wallets.first { $0.name == "Conto" })
-        let contanti = try #require(store.wallets.first { $0.name == "Contanti" })
+        let conto = try TestStore.wallet("Conto", in: store)
+        let contanti = try TestStore.wallet("Contanti", in: store)
         #expect(editor.saveEnds(of: transfer.id, from: contanti.id, to: conto.id))
         #expect(editor.shown(transfer).walletDisplay == "Contanti → Conto")
         await store.settle()

@@ -8,20 +8,15 @@ import Testing
 /// person filters, the aggregates behind the summary panel, and the writes the
 /// grid makes.
 struct LedgerStoreTests {
-    /// Vault `Casa` with wallet `Conto` and envelope `Cash` beside
-    /// Unallocated, and matteo's salary, `mutuo` and `coop` of today on Cash.
+    /// `TestStore.household`, its flow `Cash`, and matteo's salary of
+    /// 3,000.00 today on Cash too.
     private static func household() async throws -> (store: AppStore, envelope: FlowView) {
-        let store = try await TestStore.make()
-        await store.createEnvelope(name: "Cash", mode: .unlimited, allowNegative: true, openingAllocation: 0)
-        let envelope = try #require(store.flows.first { $0.name == "Cash" })
-
+        let (store, envelope) = try await TestStore.household()
         store.direction = .income
         await store.settle()
         await store.addRow(day: Date(), flowId: envelope.id, category: "Stipendio", note: "stipendio", amount: 300_000)
         store.direction = .expenses
         await store.settle()
-        await store.addRow(day: Date(), flowId: envelope.id, category: "Casa", note: "mutuo", amount: 95_000)
-        await store.addRow(day: Date(), flowId: envelope.id, category: "Spesa", note: "coop", amount: 5_000)
         #expect(store.presentedError == nil)
         return (store, envelope)
     }
@@ -251,7 +246,7 @@ struct LedgerStoreTests {
         let (store, envelope) = try await Self.household()
         let manager = try LedgerHistoryTests.attachManager(to: store)
         let vault = try #require(store.currentVault)
-        let unallocated = try #require(store.flows.first { $0.isUnallocated })
+        let unallocated = try TestStore.unallocated(in: store)
         // Another day of the month on screen, at half past nine.
         let calendar = Calendar.current
         let today = calendar.dateComponents([.year, .month, .day], from: Date())
@@ -460,7 +455,7 @@ struct LedgerStoreTests {
     func rowShowsItsWallet() async throws {
         let (store, envelope) = try await Self.household()
         await store.createWallet(name: "Contanti", openingBalance: 0)
-        let cash = try #require(store.wallets.first { $0.name == "Contanti" })
+        let cash = try TestStore.wallet("Contanti", in: store)
 
         let row = try #require(store.rows.first)
         #expect(row.walletDisplay == "Conto")
@@ -490,7 +485,7 @@ struct LedgerStoreTests {
         let (store, _) = try await Self.household()
         store.showWalletColumn = true
         await store.createWallet(name: "Contanti", openingBalance: 0)
-        let cash = try #require(store.wallets.first { $0.name == "Contanti" })
+        let cash = try TestStore.wallet("Contanti", in: store)
 
         let row = try #require(store.rows.first { $0.note == "Mutuo" })
         var draft = RowDraft(row: row, store: store)

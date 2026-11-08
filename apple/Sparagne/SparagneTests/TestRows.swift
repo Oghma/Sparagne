@@ -56,3 +56,31 @@ enum TestRow {
         return TransactionRow(view: view, names: NameBook(snapshot: snapshot))
     }
 }
+
+/// A `FlowView` made by hand, for the pure models over flows (the tables, the
+/// cards, the plan, a move) that need no vault.
+enum TestFlow {
+    /// The flow `name`, its id the name unless `id` says otherwise: empty,
+    /// with no cap, not allowed below zero and live, unless told otherwise.
+    static func make(
+        _ name: String,
+        id: Uuid? = nil,
+        balance: Int64 = 0,
+        mode: FlowMode = .unlimited,
+        incomeTotal: Int64? = nil,
+        allowNegative: Bool = false,
+        archived: Bool = false,
+        unallocated: Bool = false
+    ) -> FlowView {
+        FlowView(
+            id: id ?? name,
+            name: name,
+            balance: balance,
+            mode: mode,
+            incomeTotal: incomeTotal,
+            allowNegative: allowNegative,
+            archived: archived,
+            isUnallocated: unallocated
+        )
+    }
+}

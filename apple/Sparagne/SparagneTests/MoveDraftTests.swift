@@ -15,37 +15,16 @@ struct MoveDraftTests {
     private static let carId: Uuid = "flow-auto"
     private static let giftsId: Uuid = "flow-regali"
 
-    private static func envelope(
-        _ id: Uuid,
-        _ name: String,
-        balance: Int64,
-        mode: FlowMode = .unlimited,
-        incomeTotal: Int64? = nil,
-        allowNegative: Bool = false,
-        unallocated: Bool = false
-    ) -> FlowView {
-        FlowView(
-            id: id,
-            name: name,
-            balance: balance,
-            mode: mode,
-            incomeTotal: incomeTotal,
-            allowNegative: allowNegative,
-            archived: false,
-            isUnallocated: unallocated
-        )
-    }
-
     /// Unallocated 5.000,00; Affitto 200,00 with no cap; Vacanze 2.672,50
     /// under a cap of 3.000,00 on its balance; Auto 100,00 under a cap of
     /// 1.000,00 on its income, 900,00 of it already in; Regali 50,00, which
     /// may go below zero.
     private static let flows = [
-        envelope(unallocatedId, "unallocated", balance: 500_000, unallocated: true),
-        envelope(rentId, "Affitto", balance: 20_000),
-        envelope(holidayId, "Vacanze", balance: 267_250, mode: .netCapped(cap: 300_000)),
-        envelope(carId, "Auto", balance: 10_000, mode: .incomeCapped(cap: 100_000), incomeTotal: 90_000),
-        envelope(giftsId, "Regali", balance: 5_000, allowNegative: true),
+        TestFlow.make("unallocated", id: unallocatedId, balance: 500_000, unallocated: true),
+        TestFlow.make("Affitto", id: rentId, balance: 20_000),
+        TestFlow.make("Vacanze", id: holidayId, balance: 267_250, mode: .netCapped(cap: 300_000)),
+        TestFlow.make("Auto", id: carId, balance: 10_000, mode: .incomeCapped(cap: 100_000), incomeTotal: 90_000),
+        TestFlow.make("Regali", id: giftsId, balance: 5_000, allowNegative: true),
     ]
 
     private static func draft(from source: Uuid = unallocatedId, _ lines: [(Uuid, String)]) -> MoveDraft {
@@ -209,7 +188,7 @@ struct MoveDraftTests {
 
     @Test("A line that would take its envelope's balance past an Int64 is too large")
     func tooLargeBalance() {
-        let full = Self.envelope(Self.rentId, "Affitto", balance: .max - 10)
+        let full = TestFlow.make("Affitto", id: Self.rentId, balance: .max - 10)
         let flows = Self.flows.map { $0.id == Self.rentId ? full : $0 }
         let check = Self.draft([(Self.rentId, "1")]).check(targets: flows.map(MoveTarget.init), currency: .eur)
         #expect(check.rows[0].issue == .tooLarge)
@@ -218,7 +197,7 @@ struct MoveDraftTests {
 
     @Test("A total the source cannot give without passing the bottom of an Int64 is too large")
     func tooLargeForTheSource() {
-        let deep = Self.envelope(Self.unallocatedId, "unallocated", balance: .min + 10, unallocated: true)
+        let deep = TestFlow.make("unallocated", id: Self.unallocatedId, balance: .min + 10, unallocated: true)
         let flows = Self.flows.map { $0.id == Self.unallocatedId ? deep : $0 }
         let check = Self.draft([(Self.rentId, "1")]).check(targets: flows.map(MoveTarget.init), currency: .eur)
         #expect(check.rows[0].issue == .tooLarge)

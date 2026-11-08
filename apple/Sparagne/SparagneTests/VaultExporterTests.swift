@@ -60,8 +60,8 @@ struct VaultExporterTests {
         await store.createWallet(name: "Bank", openingBalance: 0)
         await store.createEnvelope(name: "Holidays", mode: .unlimited, allowNegative: false, openingAllocation: 0)
         let vault = try #require(store.currentVault?.id)
-        let cash = try #require(store.wallets.first { $0.name == "Cash" }).id
-        let bank = try #require(store.wallets.first { $0.name == "Bank" }).id
+        let cash = try TestStore.wallet("Cash", in: store).id
+        let bank = try TestStore.wallet("Bank", in: store).id
         let snapshot = try #require(store.snapshot)
         let holidays = try #require(snapshot.flows.first { $0.name == "Holidays" }).id
 

@@ -73,7 +73,7 @@ struct StatementReviewTests {
         ])
 
         // Put back as the row was, each edit sends nothing.
-        let unallocated = try #require(store.flows.first { $0.isUnallocated }).id
+        let unallocated = try TestStore.unallocated(in: store).id
         model.setAction(.expense, for: metro)
         model.setNote("METRO TICKET", for: 3)
         model.setAction(.transferIn(fromWalletId: nil), for: topup)
@@ -110,7 +110,7 @@ struct StatementReviewTests {
 
         // Unallocated, for one row of a file that goes to Casa, is the
         // vault's real Unallocated id.
-        let unallocated = try #require(store.flows.first { $0.isUnallocated }).id
+        let unallocated = try TestStore.unallocated(in: store).id
         model.setFlow(unallocated, for: grocer)
         #expect(model.previewInput?.rowChoices == [
             StatementRowOverride(line: 5, category: nil, note: nil, skip: false, flowId: unallocated),
@@ -236,7 +236,7 @@ struct StatementReviewTests {
     func targetRoundTrip() async throws {
         let (store, card, bank, casa) = try await Self.vault()
         await store.createWallet(name: "Old", openingBalance: 0)
-        let old = try #require(store.wallets.first { $0.name == "Old" }).id
+        let old = try StatementFixture.wallet("Old", in: store)
         let mappings = try StatementFixture.mappings()
         let vaultId = try #require(store.currentVault?.id)
 

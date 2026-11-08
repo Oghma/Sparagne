@@ -285,7 +285,7 @@ struct AppStoreTests {
     func rowExposesItsIds() async throws {
         let store = try await Self.onboarded()
         await store.createEnvelope(name: "Spesa", mode: .unlimited, allowNegative: true, openingAllocation: 0)
-        let envelope = try #require(store.flows.first { $0.name == "Spesa" })
+        let envelope = try TestStore.flow("Spesa", in: store)
 
         await store.submit(quickAdd: "-12.50 pizza #food >Spesa")
 
@@ -314,8 +314,8 @@ struct AppStoreTests {
         store.showTransfers = true
         await store.settle()
         let row = try #require(store.rows.first { $0.kind == .transferWallet })
-        let cash = try #require(store.wallets.first { $0.name == "Cash" })
-        let bank = try #require(store.wallets.first { $0.name == "Bank" })
+        let cash = try TestStore.wallet("Cash", in: store)
+        let bank = try TestStore.wallet("Bank", in: store)
         #expect(row.walletDisplay == "Cash → Bank")
         #expect(row.envelopeDisplay == TransactionRow.placeholder)
         #expect(row.isTransfer)
@@ -334,7 +334,7 @@ struct AppStoreTests {
     @Test("A setup command that goes through moves the status line's saved-at; one refused, a wallet with a balance archived, does not")
     func setupCommandMovesSavedAt() async throws {
         let store = try await Self.onboarded()
-        let cash = try #require(store.wallets.first { $0.name == "Cash" })
+        let cash = try TestStore.wallet("Cash", in: store)
         #expect(store.savedAt == nil)
 
         await store.archiveWallet(cash.id)
@@ -749,14 +749,14 @@ struct AppStoreTests {
         let store = try await Self.onboarded()
         try await Self.rentSinceAMonthAgo(store)
         await store.createEnvelope(name: "Affitto", mode: .unlimited, allowNegative: false, openingAllocation: 0)
-        let affitto = try #require(store.flows.first { $0.name == "Affitto" })
+        let affitto = try TestStore.flow("Affitto", in: store)
         let saved = await store.saveAllocationLines(
             [AllocationLine(flowId: affitto.id, rule: .fixed(amount: 1_000))],
             schedule: AllocationScheduleDraft(today: CoreDate.day(Date())).schedule
         )
         #expect(saved)
         // From Unallocated: Affitto holds nothing yet.
-        let unallocated = try #require(store.flows.first { $0.isUnallocated })
+        let unallocated = try TestStore.unallocated(in: store)
         await store.addRow(day: Date(), flowId: unallocated.id, category: nil, note: "boh", amount: 500)
         #expect(store.presentedError == nil)
         #expect(store.summaryTodo.map(\.tab) == [.recurring, .allocation, .ledger])

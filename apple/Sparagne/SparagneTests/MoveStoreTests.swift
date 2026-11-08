@@ -22,18 +22,10 @@ struct MoveStoreTests {
         return store
     }
 
-    private static func flow(_ store: AppStore, _ name: String) throws -> FlowView {
-        try #require(store.flows.first { $0.name == name })
-    }
-
-    private static func unallocated(_ store: AppStore) throws -> FlowView {
-        try #require(store.flows.first { $0.isUnallocated })
-    }
-
     private static func draft(_ store: AppStore, _ lines: [(String, String)]) throws -> MoveDraft {
-        var draft = MoveDraft(sourceId: try unallocated(store).id, day: CoreDate.day(Date()))
+        var draft = MoveDraft(sourceId: try TestStore.unallocated(in: store).id, day: CoreDate.day(Date()))
         for (name, amount) in lines {
-            let id = try flow(store, name).id
+            let id = try TestStore.flow(name, in: store).id
             draft.add(id)
             draft.setAmount(amount, for: id)
         }
@@ -49,15 +41,15 @@ struct MoveStoreTests {
         let store = try await Self.vault()
         var draft = try Self.draft(store, [("Affitto", "300"), ("Vacanze", "200,50")])
         draft.note = "riparto straordinario"
-        let rent = try Self.flow(store, "Affitto").id
-        let holiday = try Self.flow(store, "Vacanze").id
-        let source = try Self.unallocated(store).id
+        let rent = try TestStore.flow("Affitto", in: store).id
+        let holiday = try TestStore.flow("Vacanze", in: store).id
+        let source = try TestStore.unallocated(in: store).id
 
         #expect(await store.move(draft))
         #expect(store.presentedError == nil)
-        #expect(try Self.flow(store, "Affitto").balance == 30_000)
-        #expect(try Self.flow(store, "Vacanze").balance == 20_050)
-        #expect(try Self.unallocated(store).balance == 100_000 - 50_050)
+        #expect(try TestStore.flow("Affitto", in: store).balance == 30_000)
+        #expect(try TestStore.flow("Vacanze", in: store).balance == 20_050)
+        #expect(try TestStore.unallocated(in: store).balance == 100_000 - 50_050)
 
         let transfers = Self.transfers(store)
         #expect(transfers.count == 2)
@@ -76,9 +68,9 @@ struct MoveStoreTests {
         #expect(!(await store.move(draft)))
         // Stopped by the check: the core never saw it, so no alert.
         #expect(store.presentedError == nil)
-        #expect(try Self.flow(store, "Affitto").balance == 0)
-        #expect(try Self.flow(store, "Vacanze").balance == 0)
-        #expect(try Self.unallocated(store).balance == 100_000)
+        #expect(try TestStore.flow("Affitto", in: store).balance == 0)
+        #expect(try TestStore.flow("Vacanze", in: store).balance == 0)
+        #expect(try TestStore.unallocated(in: store).balance == 100_000)
         #expect(Self.transfers(store).isEmpty)
     }
 
@@ -95,7 +87,7 @@ struct MoveStoreTests {
 
         #expect(!(await store.move(draft)))
         #expect(store.presentedError == nil)
-        #expect(try Self.flow(store, "Vacanze").balance == 20_000)
+        #expect(try TestStore.flow("Vacanze", in: store).balance == 20_000)
         #expect(Self.transfers(store).count == 1)
     }
 
@@ -105,7 +97,7 @@ struct MoveStoreTests {
         await store.createEnvelope(name: "Auto", mode: .incomeCapped(cap: 30_000), allowNegative: false, openingAllocation: 0)
         #expect(await store.move(try Self.draft(store, [("Auto", "200")])))
 
-        let auto = try Self.flow(store, "Auto")
+        let auto = try TestStore.flow("Auto", in: store)
         #expect(auto.incomeTotal == 20_000)
         #expect(MoveCheck.headroom(MoveTarget(auto)) == 10_000)
 
@@ -116,15 +108,15 @@ struct MoveStoreTests {
         #expect(!(await store.move(over)))
         #expect(await store.move(try Self.draft(store, [("Auto", "100")])))
         #expect(store.presentedError == nil)
-        #expect(try Self.flow(store, "Auto").incomeTotal == 30_000)
+        #expect(try TestStore.flow("Auto", in: store).incomeTotal == 30_000)
     }
 
     @Test("A past day reads what the envelopes held then: money that came in later is not there to move")
     func pastDay() async throws {
         let store = try await Self.vault()
         #expect(await store.move(try Self.draft(store, [("Affitto", "300")])))
-        let rent = try Self.flow(store, "Affitto").id
-        let unallocated = try Self.unallocated(store).id
+        let rent = try TestStore.flow("Affitto", in: store).id
+        let unallocated = try TestStore.unallocated(in: store).id
         let today = CoreDate.day(Date())
         let tenDaysAgo = CoreDate.day(Date().addingTimeInterval(-10 * 86_400))
 
@@ -145,7 +137,7 @@ struct MoveStoreTests {
         #expect(back.check(targets: store.moveTargets(.flow), currency: store.currency, balances: then).blocker == .sourceShort(shortfall: 10_000))
         #expect(!(await store.move(back)))
         #expect(store.presentedError == nil)
-        #expect(try Self.flow(store, "Affitto").balance == 30_000)
+        #expect(try TestStore.flow("Affitto", in: store).balance == 30_000)
 
         // Unallocated may: dated ten days ago it is only pointed out, and goes.
         var early = MoveDraft(sourceId: unallocated, day: tenDaysAgo)
@@ -153,7 +145,7 @@ struct MoveStoreTests {
         early.setAmount("50", for: rent)
         #expect(early.check(targets: store.moveTargets(.flow), currency: store.currency, balances: then).sourceState == .belowZero(shortfall: 5_000))
         #expect(await store.move(early))
-        #expect(try Self.flow(store, "Affitto").balance == 35_000)
+        #expect(try TestStore.flow("Affitto", in: store).balance == 35_000)
     }
 
     @Test("Money moves back into Unallocated from another envelope too")
@@ -161,21 +153,21 @@ struct MoveStoreTests {
         let store = try await Self.vault()
         #expect(await store.move(try Self.draft(store, [("Affitto", "300")])))
 
-        var back = MoveDraft(sourceId: try Self.flow(store, "Affitto").id, day: CoreDate.day(Date()))
-        let unallocated = try Self.unallocated(store).id
+        var back = MoveDraft(sourceId: try TestStore.flow("Affitto", in: store).id, day: CoreDate.day(Date()))
+        let unallocated = try TestStore.unallocated(in: store).id
         back.add(unallocated)
         back.setAmount("100", for: unallocated)
         #expect(await store.move(back))
-        #expect(try Self.flow(store, "Affitto").balance == 20_000)
-        #expect(try Self.unallocated(store).balance == 80_000)
+        #expect(try TestStore.flow("Affitto", in: store).balance == 20_000)
+        #expect(try TestStore.unallocated(in: store).balance == 80_000)
     }
 
     @Test("Between wallets the lines go as wallet transfers and the flows stay as they are")
     func betweenWallets() async throws {
         let store = try await Self.vault()
         await store.createWallet(name: "Contanti", openingBalance: 0)
-        let conto = try #require(store.wallets.first { $0.name == "Conto" }).id
-        let cash = try #require(store.wallets.first { $0.name == "Contanti" }).id
+        let conto = try TestStore.wallet("Conto", in: store).id
+        let cash = try TestStore.wallet("Contanti", in: store).id
         let today = CoreDate.day(Date())
         var draft = MoveDraft(side: .wallet, sourceId: conto, day: today)
         draft.add(cash)
@@ -188,7 +180,7 @@ struct MoveStoreTests {
         #expect(store.presentedError == nil)
         #expect(store.wallets.first { $0.id == conto }?.balance == 75_000)
         #expect(store.wallets.first { $0.id == cash }?.balance == 25_000)
-        #expect(try Self.unallocated(store).balance == 100_000)
+        #expect(try TestStore.unallocated(in: store).balance == 100_000)
         #expect(Self.transfers(store).isEmpty)
         #expect(store.transactions.filter { $0.kind == .transferWallet && !$0.voided }.map(\.toId) == [cash])
     }

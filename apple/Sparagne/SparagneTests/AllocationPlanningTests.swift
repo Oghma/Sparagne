@@ -21,23 +21,6 @@ struct AllocationPlanningTests {
         AllocationLine(flowId: holiday, rule: .percent(basisPoints: 500)),
     ]
 
-    private static func flow(
-        _ id: Uuid,
-        mode: FlowMode = .unlimited,
-        archived: Bool = false
-    ) -> FlowView {
-        FlowView(
-            id: id,
-            name: id,
-            balance: 0,
-            mode: mode,
-            incomeTotal: nil,
-            allowNegative: false,
-            archived: archived,
-            isUnallocated: false
-        )
-    }
-
     private static func previewLine(
         _ flowId: Uuid,
         rule: AllocationRule = .fixed(amount: 10_000),
@@ -137,11 +120,11 @@ struct AllocationPlanningTests {
             AllocationLine(flowId: "flow-big", rule: .percent(basisPoints: 9_000)),
         ]
         let flows = [
-            Self.flow(Self.rent),
-            Self.flow(Self.savings, mode: .netCapped(cap: 500_000)),
-            Self.flow(Self.food),
-            Self.flow(Self.holiday, archived: true),
-            Self.flow("flow-big"),
+            TestFlow.make(Self.rent),
+            TestFlow.make(Self.savings, mode: .netCapped(cap: 500_000)),
+            TestFlow.make(Self.food),
+            TestFlow.make(Self.holiday, archived: true),
+            TestFlow.make("flow-big"),
         ]
         let warnings = AllocationWarning.of(lines: lines, flows: flows, preview: nil, due: true)
         #expect(warnings == [
@@ -152,7 +135,7 @@ struct AllocationPlanningTests {
         ])
 
         // Up to the cap on a capped envelope, 100% exactly: nothing to say.
-        let capped = [Self.flow(Self.food, mode: .incomeCapped(cap: 100_000)), Self.flow(Self.savings)]
+        let capped = [TestFlow.make(Self.food, mode: .incomeCapped(cap: 100_000)), TestFlow.make(Self.savings)]
         let fine = [
             AllocationLine(flowId: Self.food, rule: .fillToCap),
             AllocationLine(flowId: Self.savings, rule: .percent(basisPoints: 10_000)),
@@ -162,7 +145,7 @@ struct AllocationPlanningTests {
 
     @Test("A shortfall and an overdrawn Unallocated warn only for the period due")
     func previewWarnings() {
-        let flows = Self.lines.map { Self.flow($0.flowId) }
+        let flows = Self.lines.map { TestFlow.make($0.flowId) }
         let preview = Self.preview(
             [
                 Self.previewLine(Self.rent, amount: 80_000),

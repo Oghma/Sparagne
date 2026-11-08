@@ -359,9 +359,10 @@ actor FakeServerTransport: SyncTransport {
     }
 }
 
-/// One app: its own in-memory core, store, account and engine, all pointed at
-/// the same fake server.
-private struct Peer {
+/// One app: its own core, store, preferences, account and engine. Here all
+/// of them talk to the same fake server; `ServerE2ETests` points them at a
+/// live one through the app's own transport.
+struct Peer {
     let core: CoreActor
     let store: AppStore
     let account: AccountStore
@@ -369,19 +370,29 @@ private struct Peer {
     /// The peer's own preferences, where the account keeps the roles.
     let defaults: UserDefaults
 
+    /// A peer on an in-memory core, talking to the fake `server`.
     init(server: FakeServerTransport) async throws {
+        try await self.init(
+            core: try CoreActor.inMemory(author: "local"),
+            url: try #require(URL(string: "http://fake.test")),
+            transport: { _ in server }
+        )
+    }
+
+    /// A peer on `core` whose account names the server at `url` and whose
+    /// engine reaches it through `transport`, the app's own unless given.
+    init(
+        core: CoreActor,
+        url: URL,
+        transport: @escaping @Sendable (URL) -> SyncTransport = { URLSessionTransport(baseURL: $0) }
+    ) async throws {
         defaults = try TestStore.defaults()
-        core = try CoreActor.inMemory(author: "local")
+        self.core = core
         store = try TestStore.fresh(on: core, defaults: defaults, undoWindow: .seconds(60))
         account = AccountStore(defaults: defaults, tokens: MemoryTokenStore())
-        account.serverURLText = "http://fake.test"
-        engine = SyncEngine(
-            core: core,
-            store: store,
-            account: account,
-            makeTransport: { _ in server }
-        )
-        // No timer and no debounce: every sync in these tests is explicit.
+        account.serverURLText = url.absoluteString
+        engine = SyncEngine(core: core, store: store, account: account, makeTransport: transport)
+        // No timer and no debounce: every sync is explicit.
         engine.automaticSync = false
         await engine.prepare()
         await store.bootstrap()

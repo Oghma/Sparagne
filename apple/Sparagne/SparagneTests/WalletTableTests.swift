@@ -74,10 +74,10 @@ struct WalletTableTests {
         await store.createWallet(name: entry.name, openingBalance: entry.opening)
         #expect(store.presentedError == nil)
 
-        let created = try #require(store.wallets.first { $0.name == "Carta" })
+        let created = try TestStore.wallet("Carta", in: store)
         #expect(created.balance == -25_000)
         // A card that starts in debt takes it out of Unallocated.
-        let unallocated = try #require(store.flows.first { $0.isUnallocated })
+        let unallocated = try TestStore.unallocated(in: store)
         #expect(unallocated.balance == 100_000 - 25_000)
     }
 
@@ -94,7 +94,7 @@ struct WalletTableTests {
     @Test("The rename reaches the core")
     func renameReachesTheStore() async throws {
         let store = try await TestStore.make()
-        let wallet = try #require(store.wallets.first { $0.name == "Conto" })
+        let wallet = try TestStore.wallet("Conto", in: store)
         var draft = WalletDraft(wallet: wallet)
         draft.name = "Conto BPER"
 

@@ -76,7 +76,7 @@ struct TransferEndsTests {
         let (store, _) = try await Self.envelopeTransfer()
         // Only an envelope back to zero can be archived: the 10,00 that went
         // out of Cash comes back in.
-        let cash = try #require(store.flows.first { $0.name == "Cash" })
+        let cash = try TestStore.flow("Cash", in: store)
         await store.addRow(day: Date(), flowId: cash.id, category: "Regali", note: "busta", amount: 1_000, kind: .income)
         await store.archiveEnvelope(cash.id)
         #expect(store.presentedError == nil)

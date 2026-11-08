@@ -92,7 +92,7 @@ struct CoreActorTests {
         #expect(store.rows.contains { $0.note == "Pizza" })
         #expect(store.rows.filter { $0.note == "Bus" || $0.note == "Pizza" }.count == 2)
         let wallet = try #require(store.wallets.first)
-        let food = try #require(store.flows.first { $0.name == "Food" })
+        let food = try TestStore.flow("Food", in: store)
         #expect(wallet.balance == 7_000)
         #expect(food.balance == 2_000)
     }
