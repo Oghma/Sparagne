@@ -160,7 +160,8 @@ extension AppStore {
 
     /// The schedule of a form not saved yet, `nil` when the terms are refused.
     func previewLoan(terms: LoanTerms, events: [LoanEventView]) async -> LoanSchedule? {
-        try? await core.read { try $0.previewLoan(terms: terms, events: events) }
+        let events = LoanLink.ordered(events)
+        return try? await core.read { try $0.previewLoan(terms: terms, events: events) }
     }
 
     /// The active expense templates a loan may link: none linked by another
