@@ -85,6 +85,24 @@ struct SankeyLayoutTests {
         }
     }
 
+    @Test("On each bar the ribbons stack in the order of the bars at their other ends, so two of them never cross where they meet it")
+    func ribbonsFollowTheirFarEnds() throws {
+        let sankey = try #require(F.month)
+        let layout = SankeyLayout.make(sankey, in: Self.size)
+        var checked = 0
+        for node in sankey.nodes {
+            let leaving = layout.ribbons.filter { $0.from == node.id }.sorted { $0.source.minY < $1.source.minY }
+            let farLeaving = leaving.compactMap { layout.nodes[$0.to]?.midY }
+            #expect(farLeaving == farLeaving.sorted(), "\(node.id)'s outgoing ribbons")
+            let arriving = layout.ribbons.filter { $0.to == node.id }.sorted { $0.target.minY < $1.target.minY }
+            let farArriving = arriving.compactMap { layout.nodes[$0.from]?.midY }
+            #expect(farArriving == farArriving.sorted(), "\(node.id)'s incoming ribbons")
+            checked += max(leaving.count - 1, 0) + max(arriving.count - 1, 0)
+        }
+        // Entrate alone has five ribbons out and three in: the check bites.
+        #expect(checked >= 6)
+    }
+
     @Test("Without a bar raised to the minimum, a ribbon is as thick where it leaves as where it arrives, its share of the scale")
     func ribbonsKeepTheirThickness() throws {
         let sankey = try #require(F.month)
