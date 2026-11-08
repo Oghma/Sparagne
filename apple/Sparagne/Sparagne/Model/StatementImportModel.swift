@@ -1108,13 +1108,14 @@ final class StatementImportModel {
         row.status == .new || isFlagged(row)
     }
 
-    /// The match is an entry typed into another wallet than the
-    /// statement's, standing for the same spend: it can be moved here
-    /// rather than left where it is. An entry standing for a transfer is
-    /// replaced, never moved.
+    /// The match is an entry typed into another wallet than the row's (its
+    /// account's, else the statement's, the wallet the core compared it
+    /// with), standing for the same spend: it can be moved here rather than
+    /// left where it is. An entry standing for a transfer is replaced, never
+    /// moved.
     func canMove(_ row: StatementRow) -> Bool {
         guard !Self.isReplace(row), let wallet = row.existing?.walletId else { return false }
-        return wallet != walletId
+        return wallet != (row.walletId ?? walletId)
     }
 
     /// What becomes of a match nobody chose for, as the core says it

@@ -208,6 +208,43 @@ struct StatementAccountsTests {
         #expect(StatementFixture.balance(store, cash) == 0)
     }
 
+    @Test("A match is movable when it sits in another wallet than the row's own, the account's, not the file's: Revolut's spend typed into Revolut is kept, BBVA's typed into a wallet also checked is moved")
+    func matchChoicesFollowTheRowsWallet() async throws {
+        let (store, cash, revolut, bbva) = try await Self.vault()
+        await store.createWallet(name: "Contanti", openingBalance: 0)
+        let contanti = try StatementFixture.wallet("Contanti", in: store)
+        for line in ["-23.40 esselunga #Spesa @revolut 2026-10-14", "-35.00 pizzeria #Ristorante @contanti 2026-10-10"] {
+            await store.submit(quickAdd: line)
+            #expect(store.presentedError == nil, "the quick-add refused \(line)")
+        }
+        let model = try await Self.model(store, cash: cash, mappings: try StatementFixture.mappings())
+        model.setDestination(.wallet(revolut), ofAccount: "Revolut")
+        model.setDestination(.wallet(bbva), ofAccount: "BBVA")
+        model.setAlsoChecked(true, wallet: contanti)
+        await model.refreshPreview()
+        #expect(model.previewProblem == nil)
+
+        // Typed into the row's own wallet: nothing to move, whatever the file's wallet.
+        let groceries = try StatementFixture.row(model, line: 2)
+        #expect(groceries.status == .possibleDuplicate)
+        #expect(groceries.walletId == revolut)
+        #expect(groceries.existing?.walletId == revolut)
+        #expect(groceries.matchChoice == .skip)
+        #expect(!model.canMove(groceries))
+        #expect(model.availableChoices(for: groceries) == [.skip, .importAnyway])
+        #expect(model.matchChoice(for: groceries) == .skip)
+
+        // Typed into a wallet also checked, not the row's own: moved into BBVA.
+        let pizza = try StatementFixture.row(model, line: 5)
+        #expect(pizza.status == .possibleDuplicate)
+        #expect(pizza.walletId == bbva)
+        #expect(pizza.existing?.walletId == contanti)
+        #expect(pizza.matchChoice == .moveExisting)
+        #expect(model.canMove(pizza))
+        #expect(model.availableChoices(for: pizza) == [.moveExisting, .importAnyway])
+        #expect(model.matchChoice(for: pizza) == .moveExisting)
+    }
+
     @Test("The new skipped codes have words of their own")
     func words() {
         let codes = ["skipped_account", "internal_transfer", "transfer_pair", "needs_wallet", "skipped_by_you"]

@@ -401,6 +401,7 @@ struct StatementReviewTests {
 
         // The same match seen from the bank's statement sits in another wallet.
         model.walletId = bank
+        duplicate.walletId = bank
         duplicate.matchChoice = .moveExisting
         #expect(model.canMove(duplicate))
         #expect(model.defaultChoice(for: duplicate) == .moveExisting)
