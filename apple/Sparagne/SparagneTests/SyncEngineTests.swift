@@ -206,7 +206,7 @@ actor FakeServerTransport: SyncTransport {
                 VaultSummary(
                     id: vault.id,
                     name: vault.name,
-                    currency: vault.currency.code,
+                    currency: "EUR",
                     owner: vault.owner,
                     role: role,
                     lastSeq: try core.lastSeq(vaultId: vault.id)

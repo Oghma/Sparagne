@@ -1,26 +1,6 @@
 import Foundation
 import SparagneCore
 
-/// Minor units in the user's locale, kept for more currencies (screens use `LedgerMoney`); 2 decimals.
-enum MoneyFormatter {
-    private static let minorUnitsPerMajor: Int64 = 100
-
-    /// `"1 234,56 €"` (locale-formatted, unsigned display of the sign already in the number).
-    static func format(minorUnits: Int64, currencyCode: String, locale: Locale = .autoupdatingCurrent) -> String {
-        decimalValue(minorUnits).formatted(.currency(code: currencyCode).locale(locale))
-    }
-
-    /// `1250` -> `"12.50"`: the plain major-unit text `parseMoney` accepts,
-    /// with no sign, grouping separator or currency code.
-    static func editable(minorUnits: Int64) -> String {
-        LedgerMoney.editable(minorUnits)
-    }
-
-    private static func decimalValue(_ minorUnits: Int64) -> Decimal {
-        Decimal(minorUnits) / Decimal(minorUnitsPerMajor)
-    }
-}
-
 /// "Today", "Yesterday" or a locale-formatted date.
 enum DateFormatting {
     /// `"Today"`, `"Yesterday"`, or a locale-formatted date (e.g. `"Sep 9, 2026"`).
@@ -39,16 +19,6 @@ enum DateFormatting {
         let day = relativeDay(date, now: now, calendar: calendar, locale: locale)
         let time = date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, locale: locale))
         return "\(day), \(time)"
-    }
-}
-
-nonisolated extension Currency {
-    /// ISO 4217 code, for `MoneyFormatter`. One currency per vault;
-    /// this switch grows with the enum.
-    var code: String {
-        switch self {
-        case .eur: "EUR"
-        }
     }
 }
 

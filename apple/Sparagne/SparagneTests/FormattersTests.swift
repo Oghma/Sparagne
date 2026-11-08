@@ -3,35 +3,6 @@ import Foundation
 import SparagneCore
 @testable import Sparagne
 
-struct MoneyFormatterTests {
-    @Test func positiveAmountItalianLocale() {
-        let formatted = MoneyFormatter.format(minorUnits: 1050, currencyCode: "EUR", locale: Locale(identifier: "it_IT"))
-        #expect(formatted.contains("10,50"))
-    }
-
-    @Test func positiveAmountUSLocale() {
-        let formatted = MoneyFormatter.format(minorUnits: 1050, currencyCode: "EUR", locale: Locale(identifier: "en_US"))
-        #expect(formatted.contains("10.50"))
-    }
-
-    @Test func negativeAmountKeepsMinusSign() {
-        let formatted = MoneyFormatter.format(minorUnits: -1050, currencyCode: "EUR", locale: Locale(identifier: "en_US"))
-        #expect(formatted.contains("-"))
-        #expect(formatted.contains("10.50"))
-    }
-
-    @Test func zeroAmount() {
-        let formatted = MoneyFormatter.format(minorUnits: 0, currencyCode: "EUR", locale: Locale(identifier: "en_US"))
-        #expect(formatted.contains("0.00"))
-    }
-
-    @Test func zeroAmountItalianLocale() {
-        let formatted = MoneyFormatter.format(minorUnits: 0, currencyCode: "EUR", locale: Locale(identifier: "it_IT"))
-        #expect(formatted.contains("0,00"))
-    }
-
-}
-
 struct DateFormattingTests {
     @Test func today() {
         let label = DateFormatting.relativeDay(Date(), locale: Locale(identifier: "en_US"))

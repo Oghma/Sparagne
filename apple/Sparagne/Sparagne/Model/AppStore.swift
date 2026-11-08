@@ -514,7 +514,6 @@ final class AppStore {
     /// Stored rather than read off the actor, so the empty line redraws when
     /// the engine or Settings change the name (`setAuthor`).
     private(set) var currentAuthor: String
-    var currencyCode: String { currency.code }
 
     /// Active wallets, for the pickers.
     var wallets: [WalletView] { snapshot?.wallets.filter { !$0.archived } ?? [] }
