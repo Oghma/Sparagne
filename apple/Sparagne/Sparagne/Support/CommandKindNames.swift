@@ -40,6 +40,13 @@ enum CommandKindNames {
         case "execute_allocation": String(localized: "Share out to flows")
         case "skip_allocation": String(localized: "Skip allocation")
         case "reopen_allocation": String(localized: "Undo allocation")
+        case "create_loan": String(localized: "Create loan")
+        case "update_loan": String(localized: "Edit loan")
+        case "set_loan_recurring": String(localized: "Link loan to recurring")
+        case "archive_loan": String(localized: "Archive loan")
+        case "restore_loan": String(localized: "Restore loan")
+        case "add_loan_event": String(localized: "Add loan event")
+        case "remove_loan_event": String(localized: "Remove loan event")
         default: kind
         }
     }
