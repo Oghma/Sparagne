@@ -34,9 +34,10 @@ enum LaunchOptions {
 
     /// The sheet to open once the vault is on screen, `nil` for none:
     /// `vault`, `renameVault`, `deleteVault`, `leaveVault`, `share`, `manage`,
-    /// `importStatement`, `move`, `rejected` or `settings`,
-    /// matched without regard to case. The ones about sharing need an
-    /// account, so a demo database opens nothing for them.
+    /// `importStatement`, `move`, `moveWallets`, `newLoan`, `rejected` or
+    /// `settings`, matched without regard to case. The ones about sharing
+    /// need an account, so a demo database opens nothing for them; the ones
+    /// that write, a vault only read.
     static var sheet: String? { sheet(in: arguments) }
 
     static func sheet(in arguments: [String: Any]) -> String? {

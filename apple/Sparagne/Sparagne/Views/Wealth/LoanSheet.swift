@@ -23,7 +23,7 @@ struct LoanSheet: View {
         self.store = store
         self.loan = loan
         if let loan {
-            _draft = State(initialValue: Self.editDraft(loan))
+            _draft = State(initialValue: LoanDraft(loan: loan))
         } else {
             var draft = LoanDraft(firstDue: Self.firstOfNextMonth())
             draft.payment = .create
@@ -33,7 +33,7 @@ struct LoanSheet: View {
     }
 
     private var isNew: Bool { loan == nil }
-    private var terms: LoanTerms? { try? draft.terms().get() }
+    private var terms: LoanTerms? { try? draft.terms(currency: store.currency).get() }
 
     var body: some View {
         FormSheet(
@@ -53,7 +53,7 @@ struct LoanSheet: View {
                     UnitField(label: String(localized: "Amount"), text: $draft.principal, unit: "\u{20AC}").frame(width: 160)
                 }
                 rateRow
-                if draft.rateKind == .taeg {
+                if draft.rateIsEstimate {
                     FormNote(String(localized: "Estimate: the nominal rate is worked out without fees. If the bank states it, choose Nominal for the exact installment."))
                 }
                 durationRow
@@ -131,7 +131,7 @@ struct LoanSheet: View {
                 )
                 UnitField(label: draft.rateKind == .tan ? Self.tanLabel : Self.taegLabel, text: $draft.rate, unit: "%")
                     .frame(width: 100)
-                if let terms, draft.rateKind == .taeg || draft.rate.trimmingCharacters(in: .whitespaces).isEmpty {
+                if let terms, draft.rateIsEstimate || draft.solvesRate {
                     hint("\(Self.tanLabel) \(WealthText.rate(terms.annualRatePpm, decimals: 3))")
                 }
             }
@@ -174,7 +174,7 @@ struct LoanSheet: View {
                         Text(WealthText.euro(first.payment))
                             .font(Face.ui(13, .semibold))
                             .foregroundStyle(Ink.text)
-                        if draft.rateKind == .taeg {
+                        if draft.rateIsEstimate {
                             RowTag(text: String(localized: "estimate"), tint: Ink.accent, opacity: 0.14)
                         } else {
                             hint(String(localized: "worked out from the rate"))
@@ -237,7 +237,7 @@ struct LoanSheet: View {
                     if templates.isEmpty {
                         FormNote(String(localized: "No expense template to link"))
                     } else {
-                        FormNote(String(localized: "Its amount and end follow the schedule from now on, what was typed in it included."))
+                        FormNote(linkWarning(templates.first { $0.id == draft.linkedRecurringId }), tone: .warning)
                     }
                 }
             case .none:
@@ -246,6 +246,26 @@ struct LoanSheet: View {
         }
         .padding(.top, 10)
         .overlay(alignment: .top) { Hairline() }
+    }
+
+    /// What linking `template` does to it: the schedule's installment
+    /// replaces the amount typed in it, and its last due date becomes its
+    /// end (`LoanLink.alignment`), said with the figures once the terms make
+    /// a schedule.
+    private func linkWarning(_ template: RecurringView?) -> String {
+        let general = String(localized: "Its amount and end follow the schedule from now on, what was typed in it included.")
+        guard let template, let preview else { return general }
+        let patch = LoanLink.alignment(of: template, to: preview, today: CoreDate.day(Date()))
+        let name = RecurringTitle.of(template)
+        let end = (patch.schedule?.endDate ?? template.schedule.endDate).map { RecurringDayText.full($0) }
+            ?? TransactionRow.placeholder
+        if let amount = patch.amount {
+            return String(localized: "Linked, \u{00AB}\(name)\u{00BB} goes from \(WealthText.euro(template.amount)) to \(WealthText.euro(amount)) and ends on \(end): the schedule's installment replaces what was typed in it.")
+        }
+        if patch.schedule != nil {
+            return String(localized: "Linked, \u{00AB}\(name)\u{00BB} keeps its amount and ends on \(end), with the schedule's last installment.")
+        }
+        return general
     }
 
     /// «una nuova, 948,42 € al mese»: the template's amount, fee included.
@@ -298,10 +318,10 @@ struct LoanSheet: View {
     /// does beside the loan.
     @ViewBuilder
     private var footerNote: some View {
-        let words: (String, Bool)? = if case .failure(let error) = draft.terms() {
+        let words: (String, Bool)? = if case .failure(let error) = draft.terms(currency: store.currency) {
             error.message.isEmpty ? nil : (error.message, !isBlank(error.field))
-        } else if draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            (String(localized: "Give the loan a name"), false)
+        } else if case .failure(let error) = draft.loanName() {
+            (error.message, false)
         } else if case .failure(let error) = draft.paymentRequest() {
             error.message.isEmpty ? nil : (error.message, true)
         } else if isNew, draft.payment == .create {
@@ -317,7 +337,7 @@ struct LoanSheet: View {
     }
 
     private var draftName: String {
-        draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        (try? draft.loanName().get()) ?? ""
     }
 
     /// An error on a field still empty is guidance, not a mistake.
@@ -343,15 +363,15 @@ struct LoanSheet: View {
 
     private func submit() {
         guard !working, let terms else { return }
-        let name = draftName
-        let note = draft.note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard case .success(let name) = draft.loanName() else { return }
+        let note = draft.noteText
         $working.run {
             let saved: Bool
             if let loan {
-                saved = await store.updateLoan(loan, name: name, note: note.isEmpty ? nil : note, terms: terms)
+                saved = await store.updateLoan(loan, name: name, note: note, terms: terms)
             } else {
                 guard case .success(let payment) = draft.paymentRequest() else { return }
-                saved = await store.createLoan(name: name, note: note.isEmpty ? nil : note, terms: terms, payment: payment)
+                saved = await store.createLoan(name: name, note: note, terms: terms, payment: payment)
             }
             if saved { dismiss() }
         }
@@ -366,39 +386,5 @@ struct LoanSheet: View {
     private static func firstOfNextMonth(_ now: Date = Date(), calendar: Calendar = .current) -> Date {
         let start = calendar.dateInterval(of: .month, for: now)?.start ?? now
         return calendar.date(byAdding: .month, value: 1, to: start) ?? now
-    }
-
-    /// A saved loan as the form types it, so that `terms()` reads it back
-    /// as it is.
-    ///
-    /// Stand-in for `LoanDraft(loan:)`, which the drafts' own file brings.
-    static func editDraft(_ loan: LoanView) -> LoanDraft {
-        let terms = loan.terms
-        var draft = LoanDraft(firstDue: CoreDate.localDay(terms.firstDue) ?? Date())
-        draft.name = loan.name
-        draft.note = loan.note ?? ""
-        draft.principal = LedgerMoney.bare(terms.principal)
-        let ppm = terms.annualRatePpm
-        let decimals = ppm % 100 == 0 ? 2 : ppm % 10 == 0 ? 3 : 4
-        draft.rate = LedgerMoney.number(Decimal(ppm) / 10_000 as NSDecimalNumber, decimals: decimals)
-        draft.rateKind = .tan
-        if terms.months % 12 == 0 {
-            draft.duration = String(terms.months / 12)
-            draft.durationUnit = .years
-        } else {
-            draft.duration = String(terms.months)
-            draft.durationUnit = .months
-        }
-        if case .contract(let amount) = terms.installment {
-            draft.installmentMode = .contract
-            draft.installment = LedgerMoney.bare(amount)
-        } else {
-            draft.installmentMode = .computed
-        }
-        draft.upfrontFees = terms.upfrontFees == 0 ? "" : LedgerMoney.bare(terms.upfrontFees)
-        draft.installmentFee = terms.installmentFee == 0 ? "" : LedgerMoney.bare(terms.installmentFee)
-        draft.payment = .none
-        draft.linkedRecurringId = loan.recurringId
-        return draft
     }
 }

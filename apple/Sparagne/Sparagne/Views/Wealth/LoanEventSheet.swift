@@ -16,6 +16,9 @@ struct LoanEventSheet: View {
     /// repayment; `nil` while the event makes none.
     @State private var next: LoanSchedule?
     @State private var other: LoanSchedule?
+    /// The debt left on the day chosen, the most a repayment can take
+    /// (`AppStore.residualDebt`); `nil` until the core answers.
+    @State private var residual: Int64?
     @State private var working = false
     /// The list under the CATEGORY field (`CategoryFormField`).
     @State private var completion = CategoryCompletionModel()
@@ -30,7 +33,13 @@ struct LoanEventSheet: View {
         _draft = State(initialValue: draft)
     }
 
-    private var event: LoanEvent? { try? draft.event().get() }
+    private var event: LoanEvent? { try? checked.get() }
+
+    /// The event as typed, held to the loan's dates and, for a repayment,
+    /// to the debt left on its day.
+    private var checked: Result<LoanEvent, LoanDraftError> {
+        draft.event(currency: store.currency, terms: loan.terms, residual: residual)
+    }
     private var day: NaiveDate { CoreDate.day(draft.date) }
     private var template: RecurringView? {
         loan.recurringId.flatMap { id in store.recurringTemplates.first { $0.id == id } }
@@ -67,6 +76,9 @@ struct LoanEventSheet: View {
         .task(id: loan) {
             current = await store.loanSchedule(loan.id)
         }
+        .task(id: ResidualKey(loan: loan, day: day)) {
+            residual = await store.residualDebt(of: loan, on: day)
+        }
         .task(id: event) {
             guard let event else {
                 next = nil
@@ -82,17 +94,22 @@ struct LoanEventSheet: View {
         }
     }
 
+    private struct ResidualKey: Equatable {
+        let loan: LoanView
+        let day: NaiveDate
+    }
+
     private func events(with event: LoanEvent) -> [LoanEventView] {
         loan.events + [LoanEventView(id: LoanEventEffect.previewId, event: event)]
     }
 
     /// «Mutuo casa · debito residuo 152.081,25 al 1 dic 2026, dopo la rata.»
     private var subtitle: String {
-        guard let current else { return loan.name }
-        let residual = LoanFacts.residual(on: day, loan: loan, schedule: current)
-        let amount = LedgerMoney.bare(residual.amount)
+        guard let residual else { return loan.name }
+        let amount = LedgerMoney.bare(residual)
         let date = RecurringDayText.full(day)
-        return residual.afterInstallment
+        let afterInstallment = current?.rows.contains { $0.dueDate == day } ?? false
+        return afterInstallment
             ? String(localized: "\(loan.name) \u{00B7} remaining debt \(amount) on \(date), after the installment.")
             : String(localized: "\(loan.name) \u{00B7} remaining debt \(amount) on \(date).")
     }
@@ -127,8 +144,7 @@ struct LoanEventSheet: View {
             HStack(spacing: 10) {
                 UnitField(label: String(localized: "Amount"), text: $draft.amount, unit: "\u{20AC}").frame(width: 140)
                 // The whole debt left: the loan paid off, its penalty on top.
-                if let current {
-                    let residual = LoanFacts.residual(on: day, loan: loan, schedule: current).amount
+                if let residual {
                     if residual > 0 {
                         Button(String(localized: "All of it: \(LedgerMoney.bare(residual))")) {
                             draft.amount = LedgerMoney.bare(residual)
@@ -273,7 +289,7 @@ struct LoanEventSheet: View {
 
     /// What keeps «Aggiungi evento» off, at the footer's left.
     private var footerNote: some View {
-        let words: (String, Bool)? = if case .failure(let error) = draft.event(), !error.message.isEmpty {
+        let words: (String, Bool)? = if case .failure(let error) = checked, !error.message.isEmpty {
             (error.message, !isBlank(error.field))
         } else {
             nil

@@ -96,15 +96,6 @@ enum LoanFacts {
         }
         return max(loan.terms.principal - repaid, 0)
     }
-
-    /// The residual right after the installments due on or before `day`,
-    /// and whether one falls on it: what an event dated `day` starts from.
-    static func residual(on day: NaiveDate, loan: LoanView, schedule: LoanSchedule) -> (amount: Int64, afterInstallment: Bool) {
-        guard let row = schedule.rows.last(where: { $0.dueDate <= day }) else {
-            return (opening(loan, schedule: schedule), false)
-        }
-        return (row.residual, row.dueDate == day)
-    }
 }
 
 /// One line of the «Prestiti e mutui» table.

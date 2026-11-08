@@ -285,12 +285,15 @@ struct LoanInspector: View {
         let candidates = store.linkableRecurring(for: loan).filter { $0.id != loan.recurringId }
         let names = store.names
         return Menu {
-            ForEach(candidates, id: \.id) { template in
-                Button {
-                    $working.run { await store.linkLoan(loan, to: template.id) }
-                } label: {
-                    Text(RecurringTitle.of(template))
-                    Text(verbatim: "\(RecurringAmount.text(template)) \u{00B7} \(DueRecurringText.envelope(template, names: names))")
+            // Linking rewrites the template: said before the click.
+            Section(String(localized: "Its amount and end follow the schedule from now on, what was typed in it included.")) {
+                ForEach(candidates, id: \.id) { template in
+                    Button {
+                        $working.run { await store.linkLoan(loan, to: template.id) }
+                    } label: {
+                        Text(RecurringTitle.of(template))
+                        Text(verbatim: linkDetail(template, names: names))
+                    }
                 }
             }
         } label: {
@@ -302,6 +305,20 @@ struct LoanInspector: View {
         .fixedSize()
         .disabled(candidates.isEmpty)
         .help(candidates.isEmpty ? String(localized: "No expense template to link") : String(localized: "Link\u{2026}"))
+    }
+
+    /// `780,00 → 771,88 · Casa · fino al 1 feb 2049`: what linking does to
+    /// the template's amount and end (`LoanLink.alignment`), its flow
+    /// between them.
+    private func linkDetail(_ template: RecurringView, names: NameBook) -> String {
+        let envelope = DueRecurringText.envelope(template, names: names)
+        guard let schedule else { return "\(RecurringAmount.text(template)) \u{00B7} \(envelope)" }
+        let patch = LoanLink.alignment(of: template, to: schedule, today: today)
+        let amount = patch.amount.map { "\(RecurringAmount.text(template)) \u{2192} \(LedgerMoney.bare($0))" }
+            ?? RecurringAmount.text(template)
+        let end = (patch.schedule?.endDate ?? template.schedule.endDate)
+            .map { String(localized: "until \(RecurringDayText.full($0))") }
+        return ([amount, envelope] + (end.map { [$0] } ?? [])).joined(separator: " \u{00B7} ")
     }
 
     private func note(_ text: String) -> some View {

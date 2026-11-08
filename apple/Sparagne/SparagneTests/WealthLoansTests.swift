@@ -162,13 +162,6 @@ struct WealthLoansTests {
         let schedule = F.schedule([F.row(1, due: "2024-03-01", residual: 15_400_000)], beforeFirst: ["event-early"])
         #expect(LoanFacts.opening(loan, schedule: schedule) == 15_500_000)
         #expect(LoanFacts.opening(F.loan(), schedule: F.schedule([])) == 16_500_000)
-
-        let on = LoanFacts.residual(on: "2024-03-01", loan: loan, schedule: schedule)
-        #expect(on.amount == 15_400_000)
-        #expect(on.afterInstallment)
-        let before = LoanFacts.residual(on: "2024-02-20", loan: loan, schedule: schedule)
-        #expect(before.amount == 15_500_000)
-        #expect(!before.afterInstallment)
     }
 
     // MARK: - Chart
