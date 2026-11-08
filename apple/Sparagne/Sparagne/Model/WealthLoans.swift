@@ -50,13 +50,40 @@ enum LoanFacts {
 
     /// The schedule's warnings, then the installments the ledger misses.
     /// A loan with no linked template has nothing to compare: the
-    /// installments are the user's to record.
-    static func issues(_ overview: LoanOverview) -> [LoanIssue] {
+    /// installments are the user's to record. `templateStart` is the linked
+    /// template's first period (`recordable`).
+    static func issues(_ overview: LoanOverview, firstDue: NaiveDate, templateStart: NaiveDate?) -> [LoanIssue] {
         var issues = overview.warnings.map(LoanIssue.schedule)
-        if let registered = overview.registeredCount, registered < overview.paidCount {
-            issues.append(.unregistered(registered: registered, due: overview.paidCount))
+        if let registered = overview.registeredCount {
+            let due = recordable(overview, firstDue: firstDue, templateStart: templateStart)
+            if registered < due { issues.append(.unregistered(registered: registered, due: due)) }
         }
         return issues
+    }
+
+    /// The installments due by today that the linked template could have
+    /// recorded: those from its first period on. A template made for a loan
+    /// already running starts at the next installment, and one linked later
+    /// at its own start, so the installments the bank took before it are not
+    /// asked of the ledger. Without a start, every installment due.
+    static func recordable(_ overview: LoanOverview, firstDue: NaiveDate, templateStart: NaiveDate?) -> UInt32 {
+        guard let templateStart, templateStart > firstDue else { return overview.paidCount }
+        let before = installments(from: firstDue, before: templateStart)
+        return UInt32(max(Int(overview.paidCount) - before, 0))
+    }
+
+    /// How many monthly installments from `firstDue` fall before `day`: the
+    /// whole months between them, and one more when `day` is past the last
+    /// of them.
+    static func installments(from firstDue: NaiveDate, before day: NaiveDate) -> Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = CoreDate.utc
+        guard let first = CoreDate.localDay(firstDue, timeZone: CoreDate.utc),
+              let end = CoreDate.localDay(day, timeZone: CoreDate.utc), first < end
+        else { return 0 }
+        let months = calendar.dateComponents([.month], from: first, to: end).month ?? 0
+        let reached = calendar.date(byAdding: .month, value: months, to: first) ?? end
+        return months + (reached < end ? 1 : 0)
     }
 
     /// The overview of a loan the core's leaves out (an archived one), from
@@ -130,16 +157,20 @@ struct LoanRow: Identifiable, Equatable, Sendable {
     /// The loans as the table lists them: the running ones in the vault's
     /// order (by name), then the archived ones. `overview` covers the
     /// running loans; `schedules` stands in for the ones it leaves out,
-    /// when the tab has loaded theirs.
+    /// when the tab has loaded theirs. `templates` gives the linked
+    /// templates' starts, from which the ledger is asked for installments.
     static func rows(
         loans: [LoanView],
         overview: [LoanOverview],
         schedules: [Uuid: LoanSchedule],
+        templates: [RecurringView] = [],
         today: NaiveDate
     ) -> [LoanRow] {
         let byLoan = Dictionary(overview.map { ($0.loanId, $0) }, uniquingKeysWith: { first, _ in first })
+        let starts = Dictionary(templates.map { ($0.id, $0.schedule.startDate) }, uniquingKeysWith: { first, _ in first })
         let ordered = loans.filter { !$0.archived } + loans.filter(\.archived)
         return ordered.map { loan in
+            let start = loan.recurringId.flatMap { starts[$0] }
             let schedule = schedules[loan.id]
             let figures = byLoan[loan.id] ?? schedule.map { LoanFacts.overview(of: loan, schedule: $0, today: today) }
             let last = schedule?.rows.last.map { $0.payment + $0.fee }
@@ -160,7 +191,9 @@ struct LoanRow: Identifiable, Equatable, Sendable {
                 total: figures?.totalCount,
                 residual: figures?.residual,
                 end: figures?.endDate,
-                issues: loan.archived ? [] : figures.map(LoanFacts.issues) ?? []
+                issues: loan.archived
+                    ? []
+                    : figures.map { LoanFacts.issues($0, firstDue: loan.terms.firstDue, templateStart: start) } ?? []
             )
         }
     }

@@ -90,8 +90,10 @@ struct LoanChartView: View {
         }
         .chartLegend(.hidden)
         .chartPlotStyle { $0.frame(height: 110) }
-        // Room for the years under the plot.
+        // Room for the years under the plot, and for «oggi» over it, clear
+        // of the group's heading.
         .padding(.bottom, 16)
+        .padding(.top, 14)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(localized: "Remaining debt over time"))
         .accessibilityValue(spoken)

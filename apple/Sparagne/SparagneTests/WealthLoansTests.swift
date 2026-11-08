@@ -136,20 +136,42 @@ struct WealthLoansTests {
 
     @Test("Warnings and installments the ledger misses are issues; an archived loan has none")
     func issues() throws {
+        let first: NaiveDate = "2024-03-01"
         let overview = F.overview(registered: 21, warnings: [.balloon(amount: 120_000)])
-        #expect(LoanFacts.issues(overview) == [.schedule(.balloon(amount: 120_000)), .unregistered(registered: 21, due: 33)])
-        #expect(LoanFacts.issues(F.overview(registered: 33)).isEmpty)
+        #expect(LoanFacts.issues(overview, firstDue: first, templateStart: first)
+            == [.schedule(.balloon(amount: 120_000)), .unregistered(registered: 21, due: 33)])
+        #expect(LoanFacts.issues(F.overview(registered: 33), firstDue: first, templateStart: first).isEmpty)
         // No linked template: nothing to compare.
-        #expect(LoanFacts.issues(F.overview(registered: nil)).isEmpty)
+        #expect(LoanFacts.issues(F.overview(registered: nil), firstDue: first, templateStart: nil).isEmpty)
 
+        let template = RecurringFixture.template(amount: 77_188, schedule: RecurringFixture.schedule(from: first))
+        let linked = F.loan(id: "a", recurringId: template.id)
         let rows = LoanRow.rows(
-            loans: [F.loan(id: "a"), F.loan(id: "b", archived: true)],
+            loans: [linked, F.loan(id: "b", archived: true)],
             overview: [F.overview(loanId: "a", registered: 21), F.overview(loanId: "b", registered: 0)],
             schedules: [:],
+            templates: [template],
             today: F.today
         )
         #expect(rows[0].issues == [.unregistered(registered: 21, due: 33)])
         #expect(rows[1].issues.isEmpty)
+    }
+
+    @Test("Only the installments due since the template's first period are asked of the ledger")
+    func recordableSinceTheTemplate() {
+        let first: NaiveDate = "2024-03-01"
+        // A template made today for a loan 33 installments in: none yet.
+        let fresh = F.overview(paid: 33, registered: 0)
+        #expect(LoanFacts.recordable(fresh, firstDue: first, templateStart: "2026-12-01") == 0)
+        #expect(LoanFacts.issues(fresh, firstDue: first, templateStart: "2026-12-01").isEmpty)
+        // Linked from mid-month: the installment of its month was before it.
+        #expect(LoanFacts.recordable(fresh, firstDue: first, templateStart: "2026-06-15") == 5)
+        #expect(LoanFacts.issues(fresh, firstDue: first, templateStart: "2026-06-15") == [.unregistered(registered: 0, due: 5)])
+        // A template older than the loan asks for every installment.
+        #expect(LoanFacts.recordable(fresh, firstDue: first, templateStart: "2023-01-01") == 33)
+        #expect(LoanFacts.installments(from: first, before: "2024-03-01") == 0)
+        #expect(LoanFacts.installments(from: first, before: "2024-03-02") == 1)
+        #expect(LoanFacts.installments(from: first, before: "2026-12-01") == 33)
     }
 
     @Test("Early repayments before the first installment lower the opening debt")

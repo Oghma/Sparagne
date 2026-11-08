@@ -22,6 +22,11 @@ struct LoanInspector: View {
     /// An archived loan is restored before it changes.
     private var editable: Bool { store.canWrite && !loan.archived }
 
+    /// The template that records the installments, archived or not.
+    private var linkedTemplate: RecurringView? {
+        loan.recurringId.flatMap { id in store.recurringTemplates.first { $0.id == id } }
+    }
+
     private var figures: LoanOverview? {
         overview ?? schedule.map { LoanFacts.overview(of: loan, schedule: $0, today: today) }
     }
@@ -141,7 +146,10 @@ struct LoanInspector: View {
                         upfrontFees: loan.terms.upfrontFees
                     ))
                 }
-                ForEach(LoanFacts.issues(figures), id: \.self) { issue in
+                ForEach(
+                    LoanFacts.issues(figures, firstDue: loan.terms.firstDue, templateStart: linkedTemplate?.schedule.startDate),
+                    id: \.self
+                ) { issue in
                     FormNote(WealthText.issue(issue), tone: .warning, indented: false)
                 }
             }
@@ -227,7 +235,7 @@ struct LoanInspector: View {
     // MARK: - Pagamento
 
     private var paymentGroup: some View {
-        let template = loan.recurringId.flatMap { id in store.recurringTemplates.first { $0.id == id } }
+        let template = linkedTemplate
         let names = store.names
         return FormGroup(String(localized: "Payment")) {
             VStack(spacing: 0) {
@@ -241,11 +249,12 @@ struct LoanInspector: View {
                         ].joined(separator: " \u{00B7} ")
                     } ?? String(localized: "loan.recurring.none", defaultValue: "none")
                 )
-                if template != nil, let figures, let registered = figures.registeredCount {
+                if let template, let figures, let registered = figures.registeredCount {
+                    let due = LoanFacts.recordable(figures, firstDue: loan.terms.firstDue, templateStart: template.schedule.startDate)
                     WealthFact(
                         String(localized: "Recorded in the ledger"),
-                        String(localized: "\(Int(registered)) of \(Int(figures.paidCount))"),
-                        tint: registered < figures.paidCount ? Ink.warning : Ink.text
+                        String(localized: "\(Int(registered)) of \(Int(due))"),
+                        tint: registered < due ? Ink.warning : Ink.text
                     )
                 }
             }

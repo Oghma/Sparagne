@@ -24,6 +24,7 @@ struct WealthTab: View {
             loans: store.loans,
             overview: store.loanOverview,
             schedules: archivedSchedules,
+            templates: store.recurringTemplates,
             today: today
         )
         HStack(spacing: 0) {
