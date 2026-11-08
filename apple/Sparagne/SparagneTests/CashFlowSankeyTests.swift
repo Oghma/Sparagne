@@ -339,6 +339,16 @@ struct CashFlowSankeyTests {
         #expect(sankey.node("cat:uncategorized")?.title == String(localized: "Uncategorized"))
     }
 
+    @Test("The heading names the month on screen, or January up to it for the year")
+    func periodTitle() {
+        let italian = Locale(identifier: "it_IT")
+        let october = MonthKey(year: 2026, month: 10)
+        #expect(CashFlowSankeyCard.periodTitle(.month, upTo: october, locale: italian) == "Ottobre 2026")
+        #expect(CashFlowSankeyCard.periodTitle(.year, upTo: october, locale: italian) == "Gennaio\u{2013}ottobre 2026")
+        let january = MonthKey(year: 2026, month: 1)
+        #expect(CashFlowSankeyCard.periodTitle(.year, upTo: january, locale: italian) == "Gennaio 2026")
+    }
+
     @Test("Nothing earned and nothing spent is no graph, refunds that cancel the expenses included")
     func empty() {
         #expect(CashFlowSankey.build(income: [], expenses: [], flows: F.flows) == nil)
