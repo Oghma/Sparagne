@@ -194,7 +194,13 @@ struct MoveSheet: View {
         let title = row.target?.name ?? TransactionRow.placeholder
         let active = hovered == row.targetId || focused == row.targetId
         let overCap = if case .overCap = row.issue { true } else { false }
-        return HStack(spacing: 0) {
+        return SetupRow(
+            highlighted: active,
+            editing: focused == row.targetId,
+            separator: row.issue == nil || row.issue == .empty,
+            height: MoveColumn.rowHeight,
+            barInset: 4
+        ) {
             Text(title).foregroundStyle(row.target == nil ? Ink.text3 : Ink.text)
                 .tableCell(minWidth: MoveColumn.nameMinimum, padding: MoveColumn.padding)
             Text(row.balance.map { LedgerMoney.bare($0.balance) } ?? TransactionRow.placeholder)
@@ -225,20 +231,6 @@ struct MoveSheet: View {
                 }
             }
             .tableCell(width: MoveColumn.actions, alignment: .trailing, padding: MoveColumn.padding)
-        }
-        .frame(height: MoveColumn.rowHeight)
-        .background {
-            if active { RoundedRectangle(cornerRadius: 4).fill(Ink.raised) }
-        }
-        .overlay(alignment: .leading) {
-            if focused == row.targetId {
-                RoundedRectangle(cornerRadius: 1).fill(Ink.accent).frame(width: 2).padding(.vertical, 4)
-            }
-        }
-        .overlay(alignment: .bottom) {
-            if !active && (row.issue == nil || row.issue == .empty) {
-                Rectangle().fill(Ink.rowLine).frame(height: 1)
-            }
         }
         .hoverId($hovered, row.targetId)
     }

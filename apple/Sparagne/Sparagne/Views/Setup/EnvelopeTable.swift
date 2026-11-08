@@ -14,11 +14,7 @@ private enum EnvelopeColumn {
 struct EnvelopeTable: View {
     @Bindable var store: AppStore
 
-    /// Which envelope is open for editing; the empty line is `nil` and lives
-    /// in `newLine` instead, so the two drafts never overwrite each other.
-    @State private var editing: Uuid?
-    @State private var draft = EnvelopeDraft()
-    @State private var newLine = EnvelopeDraft()
+    @State private var rows = RowEditing(EnvelopeDraft())
     @State private var hovered: Uuid?
     @FocusState private var focus: EnvelopeCell?
 
@@ -34,9 +30,7 @@ struct EnvelopeTable: View {
                 archived
             }
         }
-        .editsRows(editing: $editing, focus: $focus, hovered: hovered, store: store) {
-            newLine = EnvelopeDraft()
-        } commit: { commit($0) }
+        .editsRows($rows, focus: $focus, hovered: hovered, store: store) { commit($0) }
     }
 
     /// The top bar's search; the empty line stays.
@@ -46,15 +40,15 @@ struct EnvelopeTable: View {
 
     private var header: some View {
         SetupHeaderRow {
-            SetupCell { Text(String(localized: "Name")) }
+            GridCell { Text(String(localized: "Name")) }
                 .frame(minWidth: EnvelopeColumn.nameMinimum)
-            SetupCell(width: EnvelopeColumn.type) { Text(String(localized: "Cap type")) }
-            SetupCell(width: EnvelopeColumn.cap, alignment: .trailing) { Text(String(localized: "Limit")) }
-            SetupCell(width: EnvelopeColumn.negative) { Text(String(localized: "Neg.")) }
-            SetupCell(width: EnvelopeColumn.balance, alignment: .trailing) {
+            GridCell(width: EnvelopeColumn.type) { Text(String(localized: "Cap type")) }
+            GridCell(width: EnvelopeColumn.cap, alignment: .trailing) { Text(String(localized: "Limit")) }
+            GridCell(width: EnvelopeColumn.negative) { Text(String(localized: "Neg.")) }
+            GridCell(width: EnvelopeColumn.balance, alignment: .trailing) {
                 Text(String(localized: "Balance"))
             }
-            SetupCell(width: SetupColumn.action) { EmptyView() }
+            GridCell(width: SetupColumn.action) { EmptyView() }
         }
     }
 
@@ -62,7 +56,7 @@ struct EnvelopeTable: View {
 
     @ViewBuilder
     private func activeRow(_ flow: FlowView) -> some View {
-        let isEditing = editing == flow.id
+        let isEditing = rows.row == flow.id
         SetupRow(highlighted: isEditing || hovered == flow.id, editing: isEditing) {
             if isEditing {
                 editingCells(flow)
@@ -71,7 +65,7 @@ struct EnvelopeTable: View {
             }
         }
         .hoverId($hovered, flow.id)
-        .onEscape(when: isEditing, perform: cancel)
+        .onEscape(when: isEditing) { rows.cancel($focus) }
         .contextMenu {
             // Unallocated is a system envelope: the core refuses to update or
             // archive it.
@@ -84,48 +78,53 @@ struct EnvelopeTable: View {
     }
 
     /// A closed row: every cell is a click target that opens the row there.
-    /// The system envelope reads in `text2` and carries the "system" tag.
+    /// The system envelope reads in `text2` and carries the "system" tag; an
+    /// archived one is `dimmed`, its name struck through, and opens nowhere.
     @ViewBuilder
-    private func displayCells(_ flow: FlowView) -> some View {
+    private func displayCells(_ flow: FlowView, dimmed: Bool = false) -> some View {
         let system = flow.isUnallocated
-        SetupCell {
+        let secondary = dimmed ? Ink.text3 : Ink.text2
+        GridCell {
             HStack(spacing: 6) {
-                rowText(store.flowName(flow), tint: system ? Ink.text2 : Ink.text)
+                rowText(store.flowName(flow), tint: dimmed ? Ink.text3 : system ? Ink.text2 : Ink.text)
+                    .strikethrough(dimmed)
                 if system { SetupTag(text: String(localized: "system")) }
             }
         }
         .frame(minWidth: EnvelopeColumn.nameMinimum)
         .onTapGesture { open(flow, at: .name) }
-        SetupCell(width: EnvelopeColumn.type) {
+        GridCell(width: EnvelopeColumn.type) {
             if system {
                 dash
             } else {
-                rowText(EnvelopeCapKind(flow.mode).label, tint: Ink.text2)
+                rowText(EnvelopeCapKind(flow.mode).label, tint: secondary)
             }
         }
         .onTapGesture { open(flow, at: .type) }
-        SetupCell(width: EnvelopeColumn.cap, alignment: .trailing) {
+        GridCell(width: EnvelopeColumn.cap, alignment: .trailing) {
             if let cap = EnvelopeCapKind.cap(of: flow.mode), !system {
-                rowText(LedgerMoney.bare(cap), tint: Ink.text2)
+                rowText(LedgerMoney.bare(cap), tint: secondary)
             } else {
                 dash
             }
         }
         .onTapGesture { open(flow, at: .cap) }
-        SetupCell(width: EnvelopeColumn.negative) {
+        GridCell(width: EnvelopeColumn.negative) {
             if system {
                 dash
             } else {
-                rowText(Self.label(negative: flow.allowNegative), tint: Ink.text2)
+                rowText(Self.label(negative: flow.allowNegative), tint: secondary)
             }
         }
         .onTapGesture { open(flow, at: .negative) }
-        balanceCell(flow)
+        balanceCell(flow, dimmed: dimmed)
             .onTapGesture { open(flow, at: .name) }
         // Only on a closed row, so it never fights the open row's save on
-        // leaving.
-        SetupArchiveCell(name: flow.name, shown: !system && hovered == flow.id && store.canWrite) {
-            Task { await store.archiveEnvelope(flow.id) }
+        // leaving. An archived row has its own, which restores.
+        if !dimmed {
+            SetupArchiveCell(name: flow.name, shown: !system && hovered == flow.id && store.canWrite) {
+                Task { await store.archiveEnvelope(flow.id) }
+            }
         }
     }
 
@@ -133,37 +132,36 @@ struct EnvelopeTable: View {
     /// an amount and picking a type in either order must work.
     @ViewBuilder
     private func editingCells(_ flow: FlowView) -> some View {
-        SetupCell {
+        GridCell {
             SetupTextField(
-                placeholder: "", text: $draft.name,
+                placeholder: "", text: $rows.draft.name,
                 focus: $focus, key: EnvelopeCell(row: flow.id, field: .name), submit: commitFocusedLine
             )
         }
         .frame(minWidth: EnvelopeColumn.nameMinimum)
-        typeCell($draft)
-        SetupCell(width: EnvelopeColumn.cap, alignment: .trailing) {
+        typeCell($rows.draft)
+        GridCell(width: EnvelopeColumn.cap, alignment: .trailing) {
             SetupTextField(
-                placeholder: String(localized: "cap…"), text: $draft.cap, alignment: .trailing,
+                placeholder: String(localized: "cap…"), text: $rows.draft.cap, alignment: .trailing,
                 focus: $focus, key: EnvelopeCell(row: flow.id, field: .cap), submit: commitFocusedLine
             )
         }
-        negativeCell($draft)
+        negativeCell($rows.draft)
         balanceCell(flow)
-        SetupCell(width: SetupColumn.action) { EmptyView() }
+        GridCell(width: SetupColumn.action) { EmptyView() }
     }
 
     /// The balance, and under it the 2 pt bar of a capped envelope: how much
-    /// of the cap it has used (`EnvelopeCapFill`).
-    private func balanceCell(_ flow: FlowView) -> some View {
-        let fill = flow.isUnallocated
+    /// of the cap it has used (`EnvelopeCapFill`). A `dimmed` one has no bar.
+    private func balanceCell(_ flow: FlowView, dimmed: Bool = false) -> some View {
+        let fill = flow.isUnallocated || dimmed
             ? nil
             : EnvelopeCapFill.fraction(mode: flow.mode, balance: flow.balance, incomeTotal: flow.incomeTotal)
-        return SetupCell(width: EnvelopeColumn.balance, alignment: .trailing) {
+        return GridCell(width: EnvelopeColumn.balance, alignment: .trailing) {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(LedgerMoney.amount(flow.balance))
                     .font(Face.row)
-                    .foregroundStyle(Self.tint(balance: flow.balance))
-                    .strikethrough(flow.archived)
+                    .foregroundStyle(dimmed ? Ink.text3 : Self.tint(balance: flow.balance))
                 if let fill { CapBar(fraction: fill) }
             }
         }
@@ -174,24 +172,7 @@ struct EnvelopeTable: View {
             SetupArchivedRow(name: flow.name, id: flow.id, hovered: $hovered, canWrite: store.canWrite) {
                 Task { await store.restoreEnvelope(flow.id) }
             } cells: {
-                SetupCell {
-                    Text(flow.name).font(Face.row).foregroundStyle(Ink.text3).strikethrough()
-                }
-                .frame(minWidth: EnvelopeColumn.nameMinimum)
-                SetupCell(width: EnvelopeColumn.type) {
-                    Text(EnvelopeCapKind(flow.mode).label).font(Face.row).foregroundStyle(Ink.text3)
-                }
-                SetupCell(width: EnvelopeColumn.cap, alignment: .trailing) {
-                    Text(EnvelopeCapKind.cap(of: flow.mode).map(LedgerMoney.bare) ?? "—")
-                        .font(Face.row)
-                        .foregroundStyle(Ink.text3)
-                }
-                SetupCell(width: EnvelopeColumn.negative) {
-                    Text(Self.label(negative: flow.allowNegative)).font(Face.row).foregroundStyle(Ink.text3)
-                }
-                SetupCell(width: EnvelopeColumn.balance, alignment: .trailing) {
-                    Text(LedgerMoney.amount(flow.balance)).font(Face.row).foregroundStyle(Ink.text3)
-                }
+                displayCells(flow, dimmed: true)
             }
         }
     }
@@ -204,33 +185,30 @@ struct EnvelopeTable: View {
     private var newLineRow: some View {
         let active = focus?.row == nil && focus != nil
         return SetupRow(highlighted: active, editing: active) {
-            SetupCell {
+            GridCell {
                 SetupTextField(
-                    placeholder: String(localized: "New flow…"), text: $newLine.name,
+                    placeholder: String(localized: "New flow…"), text: $rows.newLine.name,
                     focus: $focus, key: EnvelopeCell(row: nil, field: .name), submit: commitFocusedLine
                 )
             }
             .frame(minWidth: EnvelopeColumn.nameMinimum)
-            typeCell($newLine, emptyLabel: String(localized: "No cap"))
-            SetupCell(width: EnvelopeColumn.cap, alignment: .trailing) {
+            typeCell($rows.newLine, emptyLabel: String(localized: "No cap"))
+            GridCell(width: EnvelopeColumn.cap, alignment: .trailing) {
                 SetupTextField(
-                    placeholder: "—", text: $newLine.cap, alignment: .trailing,
+                    placeholder: "—", text: $rows.newLine.cap, alignment: .trailing,
                     focus: $focus, key: EnvelopeCell(row: nil, field: .cap), submit: commitFocusedLine
                 )
             }
-            negativeCell($newLine)
-            SetupCell(width: EnvelopeColumn.balance, alignment: .trailing) {
+            negativeCell($rows.newLine)
+            GridCell(width: EnvelopeColumn.balance, alignment: .trailing) {
                 SetupTextField(
-                    placeholder: String(localized: "allocation"), text: $newLine.allocation, alignment: .trailing,
+                    placeholder: String(localized: "allocation"), text: $rows.newLine.allocation, alignment: .trailing,
                     focus: $focus, key: EnvelopeCell(row: nil, field: .allocation), submit: commitFocusedLine
                 )
             }
-            SetupCell(width: SetupColumn.action) { EmptyView() }
+            GridCell(width: SetupColumn.action) { EmptyView() }
         }
-        .onEscape {
-            newLine = EnvelopeDraft()
-            focus = nil
-        }
+        .onEscape { rows.cancelNewLine($focus) }
     }
 
     // MARK: - Shared cells
@@ -239,7 +217,7 @@ struct EnvelopeTable: View {
     /// and a typo has no meaning here. On the empty
     /// line an unchosen kind reads as "No cap" rather than "None".
     private func typeCell(_ line: Binding<EnvelopeDraft>, emptyLabel: String? = nil) -> some View {
-        SetupCell(width: EnvelopeColumn.type) {
+        GridCell(width: EnvelopeColumn.type) {
             Menu {
                 ForEach(EnvelopeCapKind.allCases) { kind in
                     Button(kind.label) { line.wrappedValue.kind = kind }
@@ -256,7 +234,7 @@ struct EnvelopeTable: View {
 
     /// NEG is one click, as the mockup writes it: no menu for two values.
     private func negativeCell(_ line: Binding<EnvelopeDraft>) -> some View {
-        SetupCell(width: EnvelopeColumn.negative) {
+        GridCell(width: EnvelopeColumn.negative) {
             Button {
                 line.wrappedValue.allowNegative.toggle()
             } label: {
@@ -297,27 +275,15 @@ struct EnvelopeTable: View {
     /// promises) and a click on TIPO leaves the caret on NOME with the menu
     /// one click away.
     private func open(_ flow: FlowView, at field: EnvelopeField) {
-        guard !flow.isUnallocated, store.canWrite else { return }
-        if editing != flow.id {
-            if let editing, !commit(editing) { return }
-            editing = flow.id
-            draft = EnvelopeDraft(flow: flow)
-        }
-        if field == .negative { draft.allowNegative.toggle() }
+        guard !flow.isUnallocated, !flow.archived, store.canWrite else { return }
+        if let other = rows.other(than: flow.id), !commit(other) { return }
+        rows.open(flow.id) { EnvelopeDraft(flow: flow) }
+        if field == .negative { rows.draft.allowNegative.toggle() }
         focus = EnvelopeCell(row: flow.id, field: field.caret)
     }
 
-    private func cancel() {
-        editing = nil
-        focus = nil
-    }
-
     private func commitFocusedLine() {
-        if let row = focus?.row {
-            if commit(row) { focus = nil }
-        } else {
-            Task { await commitNewLine() }
-        }
+        rows.submit($focus, commit: commit) { Task { await commitNewLine() } }
     }
 
     /// Writes the draft back and says whether it went through. Only the cells
@@ -325,15 +291,15 @@ struct EnvelopeTable: View {
     /// same vault do not conflict.
     @discardableResult
     private func commit(_ flowId: Uuid) -> Bool {
-        guard editing == flowId else { return true }
+        guard rows.row == flowId else { return true }
         guard let flow = store.flows.first(where: { $0.id == flowId }) else {
             // Archived, or gone from under the row by a sync while it was open.
-            editing = nil
+            rows.row = nil
             return true
         }
         do {
-            let patch = try draft.patch(against: flow, currency: store.currency)
-            editing = nil
+            let patch = try rows.draft.patch(against: flow, currency: store.currency)
+            rows.row = nil
             // The row closes now: the draft was already checked against the
             // cells, and the write itself belongs to the core actor.
             if !patch.isEmpty {
@@ -362,7 +328,7 @@ struct EnvelopeTable: View {
     /// its text, so the mistake can be fixed instead of retyped.
     private func commitNewLine() async {
         do {
-            guard let entry = try newLine.envelope(currency: store.currency) else { return }
+            guard let entry = try rows.newLine.envelope(currency: store.currency) else { return }
             let created = await store.createEnvelope(
                 name: entry.name,
                 mode: entry.mode,
@@ -370,7 +336,7 @@ struct EnvelopeTable: View {
                 openingAllocation: entry.allocation
             )
             if created {
-                newLine = EnvelopeDraft()
+                rows.clearNewLine()
             }
             focus = EnvelopeCell(row: nil, field: .name)
         } catch let failure as EnvelopeDraftError {

@@ -12,11 +12,7 @@ private enum WalletColumn {
 struct WalletTable: View {
     @Bindable var store: AppStore
 
-    /// Which wallet is open for editing; the empty line is `nil` and lives in
-    /// `newLine` instead, so the two drafts never overwrite each other.
-    @State private var editing: Uuid?
-    @State private var draft = WalletDraft()
-    @State private var newLine = WalletDraft()
+    @State private var rows = RowEditing(WalletDraft())
     @State private var hovered: Uuid?
     @FocusState private var focus: WalletCell?
 
@@ -34,9 +30,7 @@ struct WalletTable: View {
             }
             if store.canWrite { footnote }
         }
-        .editsRows(editing: $editing, focus: $focus, hovered: hovered, store: store) {
-            newLine = WalletDraft()
-        } commit: { commit($0) }
+        .editsRows($rows, focus: $focus, hovered: hovered, store: store) { commit($0) }
     }
 
     /// The top bar's search; the empty line and the total stay.
@@ -58,12 +52,12 @@ struct WalletTable: View {
 
     private var header: some View {
         SetupHeaderRow {
-            SetupCell { Text(String(localized: "Name")) }
+            GridCell { Text(String(localized: "Name")) }
                 .frame(minWidth: WalletColumn.nameMinimum)
-            SetupCell(width: WalletColumn.balance, alignment: .trailing) {
+            GridCell(width: WalletColumn.balance, alignment: .trailing) {
                 Text(String(localized: "Balance"))
             }
-            SetupCell(width: SetupColumn.action) { EmptyView() }
+            GridCell(width: SetupColumn.action) { EmptyView() }
         }
     }
 
@@ -71,16 +65,16 @@ struct WalletTable: View {
     /// add up to.
     private var totalRow: some View {
         SetupRow(separator: false, topRule: true) {
-            SetupCell {
+            GridCell {
                 Text(String(localized: "Total")).font(Face.row.weight(.semibold)).foregroundStyle(Ink.text)
             }
             .frame(minWidth: WalletColumn.nameMinimum)
-            SetupCell(width: WalletColumn.balance, alignment: .trailing) {
+            GridCell(width: WalletColumn.balance, alignment: .trailing) {
                 Text(LedgerMoney.amount(SetupFigures.total(of: store.wallets)))
                     .font(Face.row.weight(.semibold))
                     .foregroundStyle(Ink.text)
             }
-            SetupCell(width: SetupColumn.action) { EmptyView() }
+            GridCell(width: SetupColumn.action) { EmptyView() }
         }
     }
 
@@ -88,21 +82,20 @@ struct WalletTable: View {
 
     @ViewBuilder
     private func activeRow(_ wallet: WalletView) -> some View {
-        let isEditing = editing == wallet.id
+        let isEditing = rows.row == wallet.id
         SetupRow(highlighted: isEditing || hovered == wallet.id, editing: isEditing) {
             if isEditing {
-                SetupCell {
+                GridCell {
                     SetupTextField(
-                        placeholder: "", text: $draft.name,
+                        placeholder: "", text: $rows.draft.name,
                         focus: $focus, key: WalletCell(row: wallet.id, field: .name), submit: commitFocusedLine
                     )
                 }
                 .frame(minWidth: WalletColumn.nameMinimum)
                 balanceCell(wallet)
-                SetupCell(width: SetupColumn.action) { EmptyView() }
+                GridCell(width: SetupColumn.action) { EmptyView() }
             } else {
-                SetupCell { Text(wallet.name).font(Face.row).foregroundStyle(Ink.text) }
-                    .frame(minWidth: WalletColumn.nameMinimum)
+                nameCell(wallet)
                     .onTapGesture { open(wallet) }
                 balanceCell(wallet)
                     .onTapGesture { open(wallet) }
@@ -114,7 +107,7 @@ struct WalletTable: View {
             }
         }
         .hoverId($hovered, wallet.id)
-        .onEscape(when: isEditing, perform: cancel)
+        .onEscape(when: isEditing) { rows.cancel($focus) }
         .contextMenu {
             if store.canWrite {
                 Button(String(localized: "Archive"), role: .destructive) {
@@ -124,13 +117,24 @@ struct WalletTable: View {
         }
     }
 
+    /// An archived wallet's name is `dimmed` and struck through.
+    private func nameCell(_ wallet: WalletView, dimmed: Bool = false) -> some View {
+        GridCell {
+            Text(wallet.name).font(Face.row).foregroundStyle(dimmed ? Ink.text3 : Ink.text).strikethrough(dimmed)
+        }
+        .frame(minWidth: WalletColumn.nameMinimum)
+    }
+
     /// A wallet may go negative (a card), and then it reads like any other
-    /// negative amount; a zero reads as background.
-    private func balanceCell(_ wallet: WalletView) -> some View {
-        SetupCell(width: WalletColumn.balance, alignment: .trailing) {
+    /// negative amount; a zero reads as background, and so does every
+    /// `dimmed` balance.
+    private func balanceCell(_ wallet: WalletView, dimmed: Bool = false) -> some View {
+        GridCell(width: WalletColumn.balance, alignment: .trailing) {
             Text(LedgerMoney.amount(wallet.balance))
                 .font(Face.row)
-                .foregroundStyle(wallet.balance == 0 ? Ink.text3 : wallet.balance < 0 ? Ink.negative : Ink.text)
+                .foregroundStyle(
+                    dimmed || wallet.balance == 0 ? Ink.text3 : wallet.balance < 0 ? Ink.negative : Ink.text
+                )
         }
     }
 
@@ -139,13 +143,8 @@ struct WalletTable: View {
             SetupArchivedRow(name: wallet.name, id: wallet.id, hovered: $hovered, canWrite: store.canWrite) {
                 Task { await store.restoreWallet(wallet.id) }
             } cells: {
-                SetupCell {
-                    Text(wallet.name).font(Face.row).foregroundStyle(Ink.text3).strikethrough()
-                }
-                .frame(minWidth: WalletColumn.nameMinimum)
-                SetupCell(width: WalletColumn.balance, alignment: .trailing) {
-                    Text(LedgerMoney.amount(wallet.balance)).font(Face.row).foregroundStyle(Ink.text3)
-                }
+                nameCell(wallet, dimmed: true)
+                balanceCell(wallet, dimmed: true)
             }
         }
     }
@@ -156,25 +155,22 @@ struct WalletTable: View {
     /// for a card that starts in debt) and ↩.
     private var newLineRow: some View {
         SetupRow(highlighted: focus?.row == nil && focus != nil, editing: focus?.row == nil && focus != nil) {
-            SetupCell {
+            GridCell {
                 SetupTextField(
-                    placeholder: String(localized: "New wallet…"), text: $newLine.name,
+                    placeholder: String(localized: "New wallet…"), text: $rows.newLine.name,
                     focus: $focus, key: WalletCell(row: nil, field: .name), submit: commitFocusedLine
                 )
             }
             .frame(minWidth: WalletColumn.nameMinimum)
-            SetupCell(width: WalletColumn.balance, alignment: .trailing) {
+            GridCell(width: WalletColumn.balance, alignment: .trailing) {
                 SetupTextField(
-                    placeholder: String(localized: "opening balance"), text: $newLine.opening, alignment: .trailing,
+                    placeholder: String(localized: "opening balance"), text: $rows.newLine.opening, alignment: .trailing,
                     focus: $focus, key: WalletCell(row: nil, field: .opening), submit: commitFocusedLine
                 )
             }
-            SetupCell(width: SetupColumn.action) { EmptyView() }
+            GridCell(width: SetupColumn.action) { EmptyView() }
         }
-        .onEscape {
-            newLine = WalletDraft()
-            focus = nil
-        }
+        .onEscape { rows.cancelNewLine($focus) }
     }
 
     // MARK: - Actions
@@ -182,46 +178,36 @@ struct WalletTable: View {
     /// Opens `wallet` with the caret on NOME, saving whatever row was open.
     private func open(_ wallet: WalletView) {
         guard store.canWrite else { return }
-        if editing != wallet.id {
-            if let editing { commit(editing) }
-            editing = wallet.id
-            draft = WalletDraft(wallet: wallet)
-        }
+        if let other = rows.other(than: wallet.id) { commit(other) }
+        rows.open(wallet.id) { WalletDraft(wallet: wallet) }
         focus = WalletCell(row: wallet.id, field: .name)
     }
 
-    private func cancel() {
-        editing = nil
-        focus = nil
-    }
-
     private func commitFocusedLine() {
-        if let row = focus?.row {
-            commit(row)
-            focus = nil
-        } else {
-            Task { await commitNewLine() }
-        }
+        rows.submit($focus, commit: commit) { Task { await commitNewLine() } }
     }
 
-    /// Closes the row and sends the new name, if there is one. A name the
-    /// core refuses (a duplicate) comes back through the store's alert.
-    private func commit(_ walletId: Uuid) {
-        guard editing == walletId else { return }
-        editing = nil
+    /// Closes the row and sends the new name, if there is one; a row always
+    /// closes. A name the core refuses (a duplicate) comes back through the
+    /// store's alert.
+    @discardableResult
+    private func commit(_ walletId: Uuid) -> Bool {
+        guard rows.row == walletId else { return true }
+        rows.row = nil
         guard let wallet = store.wallets.first(where: { $0.id == walletId }),
-              let name = draft.rename(against: wallet)
-        else { return }
+              let name = rows.draft.rename(against: wallet)
+        else { return true }
         Task { await store.renameWallet(walletId, name: name) }
+        return true
     }
 
     /// ↩ on the empty line. The line is cleared only when a wallet actually
     /// appeared, so a refused name keeps its text and can be fixed.
     private func commitNewLine() async {
         do {
-            guard let entry = try newLine.wallet(currency: store.currency) else { return }
+            guard let entry = try rows.newLine.wallet(currency: store.currency) else { return }
             if await store.createWallet(name: entry.name, openingBalance: entry.opening) {
-                newLine = WalletDraft()
+                rows.clearNewLine()
             }
             focus = WalletCell(row: nil, field: .name)
         } catch {

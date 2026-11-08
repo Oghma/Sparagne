@@ -3,31 +3,11 @@ import SparagneCore
 
 // The frame the Setup tables share: a card with a title row, a header, rows
 // of 24 pt with a hairline under each, the pieces the rows are made of and
-// the one rule of editing them. The cell is local rather than the ledger's
-// `GridCell`: this sheet pads cells by 8 and lets rows highlight with rounded
-// corners, which the ledger's grid does not.
+// the one rule of editing them. Their cells are the ledger's `GridCell`.
 
 /// The width of the trailing column that holds the archive icon.
 enum SetupColumn {
     static let action: CGFloat = 36
-}
-
-/// One cell: a fixed width (or the rest of the row), one line, 8 pt of
-/// padding. The whole cell is the click target, like the ledger's.
-struct SetupCell<Content: View>: View {
-    var width: CGFloat?
-    var alignment: Alignment = .leading
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        content
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .frame(width: width, alignment: alignment)
-            .frame(maxWidth: width == nil ? .infinity : nil, alignment: alignment)
-            .padding(.horizontal, Metrics.cellPad)
-            .contentShape(Rectangle())
-    }
 }
 
 /// A rounded card with a title, an optional hint in `text3` and an optional
@@ -92,26 +72,36 @@ struct SetupHeaderRow<Content: View>: View {
     }
 }
 
-/// One 24 pt row: raised and without its hairline when `highlighted`, the amber bar when `editing`.
+/// One row, 24 pt unless `height` says otherwise: raised and without its
+/// hairline when `highlighted`, the amber bar when `editing`.
 struct SetupRow<Content: View>: View {
     var highlighted = false
     var editing = false
     var separator = true
     /// A `line2` rule above the row, for the totals.
     var topRule = false
+    var height: CGFloat = Metrics.rowHeight
+    /// As the table's header is inset.
+    var horizontalPadding: CGFloat = 0
+    /// A row that runs to the edges of a card without padding: square, with
+    /// the bar the whole height, and its hairline gone only while edited.
+    var flush = false
+    /// How far short of the row's ends the bar stops, unless `flush`.
+    var barInset: CGFloat = 3
     @ViewBuilder var content: Content
 
     var body: some View {
         HStack(spacing: 0) { content }
-            .frame(height: Metrics.rowHeight)
+            .padding(.horizontal, horizontalPadding)
+            .frame(height: height)
             .contentShape(Rectangle())
             .background {
                 if highlighted {
-                    RoundedRectangle(cornerRadius: 4).fill(Ink.raised)
+                    RoundedRectangle(cornerRadius: flush ? 0 : 4).fill(Ink.raised)
                 }
             }
             .overlay(alignment: .bottom) {
-                if separator && !highlighted {
+                if separator && !(flush ? editing : highlighted) {
                     Rectangle().fill(Ink.rowLine).frame(height: 1)
                 }
             }
@@ -120,7 +110,10 @@ struct SetupRow<Content: View>: View {
             }
             .overlay(alignment: .leading) {
                 if editing {
-                    RoundedRectangle(cornerRadius: 1).fill(Ink.accent).frame(width: 2).padding(.vertical, 3)
+                    RoundedRectangle(cornerRadius: flush ? 0 : 1)
+                        .fill(Ink.accent)
+                        .frame(width: 2)
+                        .padding(.vertical, flush ? 0 : barInset)
                 }
             }
     }
@@ -192,7 +185,7 @@ struct SetupArchiveCell: View {
     let action: () -> Void
 
     var body: some View {
-        SetupCell(width: SetupColumn.action) {
+        GridCell(width: SetupColumn.action) {
             if shown {
                 if archived {
                     SetupIconButton(
@@ -244,6 +237,67 @@ protocol RowFocus: Hashable {
     var row: Uuid? { get }
 }
 
+/// What a table edited by rows keeps: the open row and its draft, and the
+/// empty line's own draft, apart so the two never overwrite each other.
+struct RowEditing<Draft> {
+    /// The open row; `nil` when none is, the empty line included.
+    var row: Uuid?
+    var draft: Draft
+    var newLine: Draft
+    private let blank: Draft
+
+    init(_ blank: Draft) {
+        self.blank = blank
+        draft = blank
+        newLine = blank
+    }
+
+    /// The row open other than `id`. Opening `id` saves it first, and stops
+    /// when it refuses: the click that would have left it does not lose
+    /// what was typed.
+    func other(than id: Uuid) -> Uuid? {
+        row == id ? nil : row
+    }
+
+    /// `id` open on the draft `make` builds. The open row keeps its draft:
+    /// another cell of it only moves the caret.
+    mutating func open(_ id: Uuid, draft make: () -> Draft) {
+        guard row != id else { return }
+        row = id
+        draft = make()
+    }
+
+    /// esc on the open row: it closes unsaved, and the caret goes.
+    mutating func cancel<Focus>(_ focus: FocusState<Focus?>.Binding) {
+        row = nil
+        focus.wrappedValue = nil
+    }
+
+    mutating func clearNewLine() {
+        newLine = blank
+    }
+
+    /// esc on the empty line: it empties, and the caret goes.
+    mutating func cancelNewLine<Focus>(_ focus: FocusState<Focus?>.Binding) {
+        newLine = blank
+        focus.wrappedValue = nil
+    }
+
+    /// ↩ in whichever line holds the caret. The open row loses it once
+    /// `commit` took the row; the empty line goes to `commitNewLine`.
+    func submit<Focus: RowFocus>(
+        _ focus: FocusState<Focus?>.Binding,
+        commit: (Uuid) -> Bool,
+        commitNewLine: () -> Void
+    ) {
+        if let row = focus.wrappedValue?.row {
+            if commit(row) { focus.wrappedValue = nil }
+        } else {
+            commitNewLine()
+        }
+    }
+}
+
 /// A text cell of a Setup table.
 nonisolated struct SetupFocus<Field: Hashable>: RowFocus {
     let row: Uuid?
@@ -272,31 +326,30 @@ struct SetupTextField<Focus: Hashable>: View {
 }
 
 extension View {
-    /// The one rule of the tables edited by rows: the open row (`editing`)
-    /// is saved when the focus leaves it, for another cell or for nothing
-    /// with the pointer elsewhere, the way a spreadsheet does. The row's own
-    /// context menu resigns the field without giving the focus to anything,
-    /// with the pointer over the row: that is not leaving it. Another vault
-    /// drops the open row and `reset`s the empty line; a vault turned
-    /// read-only drops the open row, which could not be saved.
+    /// The one rule of the tables edited by rows: the open row is saved
+    /// when the focus leaves it, for another cell or for nothing with the
+    /// pointer elsewhere, the way a spreadsheet does. The row's own context
+    /// menu resigns the field without giving the focus to anything, with the
+    /// pointer over the row: that is not leaving it. Another vault drops the
+    /// open row and empties the empty line; a vault turned read-only drops
+    /// the open row, which could not be saved.
     ///
-    /// Whoever drops the open row clears `editing` before the focus, so the
-    /// blur that follows is not read as leaving it.
-    func editsRows<Focus: RowFocus>(
-        editing: Binding<Uuid?>,
+    /// Whoever drops the open row clears it before the focus, so the blur
+    /// that follows is not read as leaving it.
+    func editsRows<Focus: RowFocus, Draft>(
+        _ rows: Binding<RowEditing<Draft>>,
         focus: FocusState<Focus?>.Binding,
         hovered: Uuid?,
         store: AppStore,
-        reset: @escaping () -> Void,
         commit: @escaping (Uuid) -> Void
     ) -> some View {
         onChange(of: store.currentVault?.id) { _, _ in
-            editing.wrappedValue = nil
+            rows.wrappedValue.row = nil
             focus.wrappedValue = nil
-            reset()
+            rows.wrappedValue.clearNewLine()
         }
         .onChange(of: focus.wrappedValue) { old, new in
-            guard let open = editing.wrappedValue else { return }
+            guard let open = rows.wrappedValue.row else { return }
             if let new {
                 if new.row != open { commit(open) }
             } else if old?.row == open, hovered != open {
@@ -304,7 +357,7 @@ extension View {
             }
         }
         .onChange(of: store.isReadOnly) { _, _ in
-            editing.wrappedValue = nil
+            rows.wrappedValue.row = nil
             focus.wrappedValue = nil
         }
     }

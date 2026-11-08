@@ -19,11 +19,8 @@ private typealias CategoryCellFocus = SetupFocus<CategoryField>
 struct CategoryTable: View {
     @Bindable var store: AppStore
 
-    /// Which row is open for editing; nil means none, the empty line has no
-    /// draft of its own beyond `newName`.
-    @State private var editing: Uuid?
-    @State private var draft = CategoryDraft()
-    @State private var newName = ""
+    /// The empty line only has a name; its aliases stay empty.
+    @State private var rows = RowEditing(CategoryDraft())
     @State private var hovered: Uuid?
     @State private var merging: MergeSubject?
     /// The names the core reports as close to what is being typed in the
@@ -55,13 +52,11 @@ struct CategoryTable: View {
                 if store.canWrite { newLine }
             }
         }
-        .editsRows(editing: $editing, focus: $focus, hovered: hovered, store: store) {
-            newName = ""
-        } commit: { row in
+        .editsRows($rows, focus: $focus, hovered: hovered, store: store) { row in
             Task { await commit(row) }
         }
-        .task(id: newName) {
-            similar = await store.similarCategories(name: newName).map(\.name)
+        .task(id: rows.newLine.name) {
+            similar = await store.similarCategories(name: rows.newLine.name).map(\.name)
         }
         .sheet(item: $merging) { subject in
             MergeCategorySheet(
@@ -74,10 +69,10 @@ struct CategoryTable: View {
 
     private var header: some View {
         SetupHeaderRow {
-            SetupCell(width: CategoryColumn.name) { Text(String(localized: "Name")) }
-            SetupCell { Text(String(localized: "Aliases")) }
-            SetupCell(width: CategoryColumn.usage, alignment: .trailing) { Text(String(localized: "Rows 12 m")) }
-            SetupCell(width: SetupColumn.action) { EmptyView() }
+            GridCell(width: CategoryColumn.name) { Text(String(localized: "Name")) }
+            GridCell { Text(String(localized: "Aliases")) }
+            GridCell(width: CategoryColumn.usage, alignment: .trailing) { Text(String(localized: "Rows 12 m")) }
+            GridCell(width: SetupColumn.action) { EmptyView() }
         }
     }
 
@@ -111,18 +106,18 @@ struct CategoryTable: View {
     }
 
     private func line(_ category: CategoryView, aliases: [String]) -> some View {
-        let isEditing = editing == category.id && CategoryDraft.isEditable(category)
+        let isEditing = rows.row == category.id && CategoryDraft.isEditable(category)
         return CategoryRowView(
             category: category,
             aliases: aliases,
             usage: store.categoryUsage[category.id] ?? 0,
-            draft: isEditing ? $draft : nil,
+            draft: isEditing ? $rows.draft : nil,
             isHovered: hovered == category.id,
             isWritable: store.canWrite,
             focus: $focus,
             onOpen: { field in Task { await open(category, at: field) } },
             onCommit: { Task { await submit(category.id) } },
-            onCancel: cancel,
+            onCancel: { rows.cancel($focus) },
             onArchive: {
                 dropIfOpen(category.id)
                 Task { await store.archiveCategory(category.id) }
@@ -137,26 +132,23 @@ struct CategoryTable: View {
     private var newLine: some View {
         let active = focus == CategoryCellFocus(row: nil, field: .name)
         return SetupRow(highlighted: active, editing: active, separator: false) {
-            SetupCell(width: CategoryColumn.name) {
+            GridCell(width: CategoryColumn.name) {
                 SetupTextField(
-                    placeholder: String(localized: "New category…"), text: $newName,
+                    placeholder: String(localized: "New category…"), text: $rows.newLine.name,
                     focus: $focus, key: CategoryCellFocus(row: nil, field: .name)
                 ) {
                     Task { await commitNewLine() }
                 }
             }
-            SetupCell {
+            GridCell {
                 Text(similarHint)
                     .font(Face.row)
                     .foregroundStyle(Ink.text3)
             }
-            SetupCell(width: CategoryColumn.usage) { EmptyView() }
-            SetupCell(width: SetupColumn.action) { EmptyView() }
+            GridCell(width: CategoryColumn.usage) { EmptyView() }
+            GridCell(width: SetupColumn.action) { EmptyView() }
         }
-        .onEscape {
-            newName = ""
-            focus = nil
-        }
+        .onEscape { rows.cancelNewLine($focus) }
     }
 
     /// The hint beside the empty line, refreshed by a `task(id:)` on the
@@ -180,27 +172,15 @@ struct CategoryTable: View {
     /// the click that would have left it does not lose what was typed.
     private func open(_ category: CategoryView, at field: CategoryField) async {
         guard CategoryDraft.isEditable(category), store.canWrite else { return }
-        if editing == category.id {
-            // Another cell of the same row: move the caret only, or the draft
-            // would be rebuilt from the store and lose the edit.
-            focus = CategoryCellFocus(row: category.id, field: field)
-            return
-        }
-        if let editing, !(await commit(editing)) { return }
-        editing = category.id
-        draft = CategoryDraft(name: category.name, aliases: aliases(of: category.id))
+        if let other = rows.other(than: category.id), !(await commit(other)) { return }
+        rows.open(category.id) { CategoryDraft(name: category.name, aliases: aliases(of: category.id)) }
         focus = CategoryCellFocus(row: category.id, field: field)
-    }
-
-    private func cancel() {
-        editing = nil
-        focus = nil
     }
 
     /// Archive and Merge Into… act on the row as it is stored: what was typed
     /// into it goes, as the menu never saves.
     private func dropIfOpen(_ categoryId: Uuid) {
-        if editing == categoryId { cancel() }
+        if rows.row == categoryId { rows.cancel($focus) }
     }
 
     /// ↩: save the row and close it.
@@ -213,23 +193,23 @@ struct CategoryTable: View {
     /// gone, then one AddAlias per new one. Nothing changed sends nothing.
     @discardableResult
     private func commit(_ categoryId: Uuid) async -> Bool {
-        guard editing == categoryId else { return true }
+        guard rows.row == categoryId else { return true }
         guard let category = store.windowCategories.first(where: { $0.id == categoryId }) else {
             // Merged away, or gone with a sync while the row was open.
-            editing = nil
+            rows.row = nil
             return true
         }
         guard CategoryDraft.isEditable(category) else {
             // Archived meanwhile, by the menu or a sync: nothing to write.
-            editing = nil
+            rows.row = nil
             return true
         }
-        if let name = draft.rename(from: category.name) {
+        if let name = rows.draft.rename(from: category.name) {
             guard await accepted({ await store.renameCategory(categoryId, name: name) }) else {
                 return keepOpen(categoryId, at: .name)
             }
         }
-        let changes = draft.aliasChanges(from: aliases(of: categoryId))
+        let changes = rows.draft.aliasChanges(from: aliases(of: categoryId))
         for alias in changes.removed {
             guard await accepted({ await store.removeAlias(categoryId: categoryId, alias: alias) }) else {
                 return keepOpen(categoryId, at: .aliases)
@@ -240,16 +220,16 @@ struct CategoryTable: View {
                 return keepOpen(categoryId, at: .aliases)
             }
         }
-        editing = nil
+        rows.row = nil
         return true
     }
 
     /// ↩ on the empty line. An empty name is not an error, it is nothing; a
     /// name the core refuses stays in the cell so it can be fixed.
     private func commitNewLine() async {
-        guard let name = CategoryDraft.creation(from: newName) else { return }
+        guard let name = CategoryDraft.creation(from: rows.newLine.name) else { return }
         guard await accepted({ await store.createCategory(name: name) }) else { return }
-        newName = ""
+        rows.clearNewLine()
         focus = CategoryCellFocus(row: nil, field: .name)
     }
 
@@ -295,12 +275,12 @@ private struct CategoryRowView: View {
                 cell(draft.name, .name, width: CategoryColumn.name)
                 cell(draft.aliases, .aliases, width: nil)
             } else {
-                SetupCell(width: CategoryColumn.name) { nameCell }
+                GridCell(width: CategoryColumn.name) { nameCell }
                     .onTapGesture { onOpen(.name) }
-                SetupCell { aliasCell }
+                GridCell { aliasCell }
                     .onTapGesture { onOpen(.aliases) }
             }
-            SetupCell(width: CategoryColumn.usage, alignment: .trailing) { usageText }
+            GridCell(width: CategoryColumn.usage, alignment: .trailing) { usageText }
             actionCell
         }
         .onEscape(when: draft != nil, perform: onCancel)
@@ -378,7 +358,7 @@ private struct CategoryRowView: View {
     }
 
     private func cell(_ value: Binding<String>, _ field: CategoryField, width: CGFloat?) -> some View {
-        SetupCell(width: width) {
+        GridCell(width: width) {
             SetupTextField(
                 placeholder: "", text: value,
                 focus: $focus, key: CategoryCellFocus(row: category.id, field: field), submit: onCommit

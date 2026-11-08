@@ -45,7 +45,8 @@ extension RowActionTrack where Content == EmptyView {
 }
 
 /// One cell: fixed width, one line, the grid's padding. Shared with the
-/// statement import's tables (`Views/Import`), ruled as the grid is.
+/// statement import's tables (`Views/Import`), ruled as the grid is, and
+/// with the Setup tables.
 struct GridCell<Content: View>: View {
     var width: CGFloat?
     var alignment: Alignment = .leading

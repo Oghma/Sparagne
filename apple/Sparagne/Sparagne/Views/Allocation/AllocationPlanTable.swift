@@ -28,12 +28,9 @@ struct AllocationPlanTable: View {
     /// whether it went through.
     let save: ([AllocationLine]) -> Task<Bool, Never>
 
-    /// The open line, by the envelope it had when it was opened; the empty
-    /// row is apart (`newLine`), so the two drafts never overwrite each
-    /// other.
-    @State private var editing: Uuid?
-    @State private var draft = AllocationLineDraft()
-    @State private var newLine = AllocationLineDraft()
+    /// The open line by the envelope it had when it was opened, and the
+    /// empty row apart.
+    @State private var rows = RowEditing(AllocationLineDraft())
     @State private var hovered: Uuid?
     @FocusState private var focus: PlanFocus?
 
@@ -53,10 +50,8 @@ struct AllocationPlanTable: View {
                 totals
             }
         }
-        .editsRows(editing: $editing, focus: $focus, hovered: hovered, store: store) {
-            newLine = AllocationLineDraft()
-        } commit: { commit($0) }
-        .onChange(of: editing != nil || focus != nil, initial: true) { _, open in rowOpen = open }
+        .editsRows($rows, focus: $focus, hovered: hovered, store: store) { commit($0) }
+        .onChange(of: rows.row != nil || focus != nil, initial: true) { _, open in rowOpen = open }
     }
 
     private var hint: String {
@@ -82,15 +77,21 @@ struct AllocationPlanTable: View {
 
     private func row(_ line: AllocationLine, index: Int, preview: PreviewLine?, names: NameBook) -> some View {
         let key = line.flowId
-        let isEditing = editing == key
+        let isEditing = rows.row == key
         let flow = store.snapshot?.flows.first { $0.id == key }
         let gone = flow.map(\.archived) ?? true
-        return HStack(spacing: 0) {
+        return SetupRow(
+            highlighted: isEditing || hovered == key,
+            editing: isEditing,
+            height: isEditing ? 30 : 26,
+            horizontalPadding: 4,
+            flush: true
+        ) {
             Text(index + 1, format: .number).foregroundStyle(Ink.text3)
                 .tableCell(width: PlanColumn.order, alignment: .center, hitTestable: true)
             if isEditing {
-                envelopeMenu(draft: $draft, key: key, placeholder: names.flow(key) ?? TransactionRow.placeholder)
-                ruleEditor(draft: $draft, focusKey: .line(key))
+                envelopeMenu(draft: $rows.draft, key: key, placeholder: names.flow(key) ?? TransactionRow.placeholder)
+                ruleEditor(draft: $rows.draft, focusKey: .line(key))
             } else {
                 Text(names.flow(key) ?? TransactionRow.placeholder)
                     .foregroundStyle(gone ? Ink.text3 : Ink.text)
@@ -107,18 +108,8 @@ struct AllocationPlanTable: View {
             moveButtons(key: key, index: index)
         }
         .font(Face.row)
-        .padding(.horizontal, 4)
-        .frame(height: isEditing ? 30 : 26)
-        .background(isEditing || hovered == key ? Ink.raised : .clear)
-        .overlay(alignment: .leading) {
-            if isEditing { Rectangle().fill(Ink.accent).frame(width: 2) }
-        }
-        .overlay(alignment: .bottom) {
-            if !isEditing { Rectangle().fill(Ink.rowLine).frame(height: 1) }
-        }
-        .contentShape(Rectangle())
         .hoverId($hovered, key)
-        .onEscape(when: isEditing, perform: cancel)
+        .onEscape(when: isEditing) { rows.cancel($focus) }
         // ⌥↑ ⌥↓ move the open row; the arrows alone stay the caret's.
         .onKeyPress(keys: [.upArrow, .downArrow], phases: .down) { press in
             guard isEditing, press.modifiers.contains(.option) else { return .ignored }
@@ -286,16 +277,23 @@ struct AllocationPlanTable: View {
     /// "Aggiungi busta…": pick an envelope, a rule and its value, then ↩.
     /// The first line of a vault without a plan creates it.
     private func newLineRow(names: NameBook) -> some View {
-        let active = newLine.flowId != nil || focus == .newLine
-        return HStack(spacing: 0) {
+        let active = rows.newLine.flowId != nil || focus == .newLine
+        return SetupRow(
+            highlighted: active,
+            editing: active,
+            separator: false,
+            height: active ? 30 : 26,
+            horizontalPadding: 4,
+            flush: true
+        ) {
             Image(systemName: "plus")
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(Ink.text3)
                 .accessibilityHidden(true)
                 .tableCell(width: PlanColumn.order, alignment: .center, hitTestable: true)
-            envelopeMenu(draft: $newLine, key: nil, placeholder: String(localized: "Add flow\u{2026}"))
+            envelopeMenu(draft: $rows.newLine, key: nil, placeholder: String(localized: "Add flow\u{2026}"))
             if active {
-                ruleEditor(draft: $newLine, focusKey: .newLine)
+                ruleEditor(draft: $rows.newLine, focusKey: .newLine)
             } else {
                 Text(String(localized: "Fixed \u{00B7} % \u{00B7} To cap")).foregroundStyle(Ink.text3)
                     .tableCell(width: PlanColumn.rule, hitTestable: true)
@@ -303,16 +301,7 @@ struct AllocationPlanTable: View {
             blankCells([PlanColumn.room, PlanColumn.gets, PlanColumn.after, PlanColumn.status, PlanColumn.move])
         }
         .font(Face.row)
-        .padding(.horizontal, 4)
-        .frame(height: active ? 30 : 26)
-        .background(active ? Ink.raised : .clear)
-        .overlay(alignment: .leading) {
-            if active { Rectangle().fill(Ink.accent).frame(width: 2) }
-        }
-        .onEscape {
-            newLine = AllocationLineDraft()
-            focus = nil
-        }
+        .onEscape { rows.cancelNewLine($focus) }
     }
 
     // MARK: - Totals
@@ -348,17 +337,9 @@ struct AllocationPlanTable: View {
     /// not lose what was typed.
     private func open(_ line: AllocationLine) {
         guard store.canWrite else { return }
-        if editing != line.flowId {
-            if let editing, !commit(editing) { return }
-            editing = line.flowId
-            draft = AllocationLineDraft(line: line)
-        }
+        if let other = rows.other(than: line.flowId), !commit(other) { return }
+        rows.open(line.flowId) { AllocationLineDraft(line: line) }
         focus = .line(line.flowId)
-    }
-
-    private func cancel() {
-        editing = nil
-        focus = nil
     }
 
     /// The focus again on `key` once the cell that holds it is drawn: a
@@ -370,14 +351,7 @@ struct AllocationPlanTable: View {
 
     /// ↩ in whichever row holds the focus.
     private func commitFocused() {
-        switch focus {
-        case .line(let key):
-            if commit(key) { focus = nil }
-        case .newLine:
-            commitNewLine()
-        case nil:
-            break
-        }
+        rows.submit($focus, commit: commit, commitNewLine: commitNewLine)
     }
 
     /// Writes the open row into the list and sends it; says whether the draft
@@ -385,15 +359,15 @@ struct AllocationPlanTable: View {
     /// the write itself belongs to the core.
     @discardableResult
     private func commit(_ key: Uuid) -> Bool {
-        guard editing == key else { return true }
+        guard rows.row == key else { return true }
         guard lines.contains(where: { $0.flowId == key }) else {
             // Gone from under the row, by a sync while it was open.
-            editing = nil
+            rows.row = nil
             return true
         }
         do {
-            let updated = try draft.committing(into: lines, replacing: key, currency: store.currency)
-            editing = nil
+            let updated = try rows.draft.committing(into: lines, replacing: key, currency: store.currency)
+            rows.row = nil
             if updated != lines { send(updated) }
             return true
         } catch {
@@ -405,15 +379,15 @@ struct AllocationPlanTable: View {
     /// ↩ on the empty row: the line goes to the end of the plan, and the row
     /// empties for the next. A refusal puts back what was typed.
     private func commitNewLine() {
-        guard !newLine.isBlank else { return }
+        guard !rows.newLine.isBlank else { return }
         do {
-            let updated = try newLine.committing(into: lines, replacing: nil, currency: store.currency)
-            let typed = newLine
-            newLine = AllocationLineDraft()
+            let updated = try rows.newLine.committing(into: lines, replacing: nil, currency: store.currency)
+            let typed = rows.newLine
+            rows.clearNewLine()
             focus = nil
             let saving = save(updated)
             Task {
-                if !(await saving.value) { newLine = typed }
+                if !(await saving.value) { rows.newLine = typed }
             }
         } catch {
             refuse(error, at: .newLine)
@@ -429,7 +403,7 @@ struct AllocationPlanTable: View {
         else { return }
         // The draft went in with the move: the open row follows its line, or
         // closes when another one moved.
-        editing = editing == key ? current.target : nil
+        rows.row = rows.row == key ? current.target : nil
         send(moved)
     }
 
@@ -439,7 +413,7 @@ struct AllocationPlanTable: View {
         guard store.canWrite, let current = linesWithDraft(for: key),
               let remaining = AllocationLines.removing(current.target, from: current.lines)
         else { return }
-        editing = nil
+        rows.row = nil
         send(remaining)
     }
 
@@ -447,10 +421,10 @@ struct AllocationPlanTable: View {
     /// line has there (the open row's draft may have changed it); `nil` when
     /// the draft is refused, which is reported.
     private func linesWithDraft(for key: Uuid) -> (lines: [AllocationLine], target: Uuid)? {
-        guard let editing else { return (lines, key) }
+        guard let editing = rows.row else { return (lines, key) }
         do {
-            let updated = try draft.committing(into: lines, replacing: editing, currency: store.currency)
-            return (updated, key == editing ? (draft.flowId ?? key) : key)
+            let updated = try rows.draft.committing(into: lines, replacing: editing, currency: store.currency)
+            return (updated, key == editing ? (rows.draft.flowId ?? key) : key)
         } catch {
             refuse(error, at: .line(editing))
             return nil
