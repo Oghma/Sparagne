@@ -66,8 +66,8 @@ struct CoreActorTests {
         // either wrote it would let them both through.
         let first = Task { await store.submit(quickAdd: "-40.00 first >Food") }
         let second = Task { await store.submit(quickAdd: "-40.00 second >Food") }
-        await first.value
-        await second.value
+        _ = await first.value
+        _ = await second.value
         await store.settle()
 
         #expect(store.rows.contains { $0.note == "First" })
@@ -83,8 +83,8 @@ struct CoreActorTests {
 
         let first = Task { await store.submit(quickAdd: "-10.00 bus >Food") }
         let second = Task { await store.submit(quickAdd: "-20.00 pizza >Food") }
-        await first.value
-        await second.value
+        _ = await first.value
+        _ = await second.value
         await store.settle()
 
         #expect(store.presentedError == nil)

@@ -152,11 +152,10 @@ struct QuickAddOverlay: View {
             return
         }
         Task {
-            await store.submit(quickAdd: store.quickAddText)
-            // A failed submit leaves the text in place and raises
-            // `presentedError`; stay open so the user can fix the line
-            // instead of closing over an empty grid.
-            if store.presentedError == nil {
+            // A refused line stays, with the alert up, so the user can fix it
+            // instead of closing over an empty grid; a blank one has nothing
+            // to fix.
+            if await store.submit(quickAdd: store.quickAddText) || trimmed.isEmpty {
                 isPresented = false
             }
         }

@@ -977,7 +977,7 @@ final class AppStore {
     /// palette. The name is a label, so two vaults may share it, and the
     /// currency never changes.
     func renameVault(_ vaultId: Uuid, name: String) async {
-        await write(.renameVault(name: name), in: vaultId) { try await adoptVaultList() }
+        await written(in: vaultId, showing: adoptVaultList) { try await core.execute(vaultId: vaultId, .renameVault(name: name)) }
     }
 
     /// Deletes a vault with everything in it, for every member and on every
@@ -995,7 +995,7 @@ final class AppStore {
             ledgerEditor.reset()
             await ledgerEditor.settle()
         }
-        await write(.deleteVault, in: vaultId) { try await adoptVaultList() }
+        await written(in: vaultId, showing: adoptVaultList) { try await core.execute(vaultId: vaultId, .deleteVault) }
     }
 
     /// `true` when the core took it. A refusal (a name already taken) is up
@@ -1022,39 +1022,48 @@ final class AppStore {
     }
 
     // MARK: - Wallet and envelope management
+    //
+    // Each says whether the core took it, as the creations do; a refusal is
+    // up as the alert.
 
-    func renameWallet(_ walletId: Uuid, name: String) async {
-        await command(.renameWallet(walletId: walletId, name: name))
+    @discardableResult
+    func renameWallet(_ walletId: Uuid, name: String) async -> Bool {
+        await command(.renameWallet(walletId: walletId, name: name)) != nil
     }
 
     /// Requires a zero balance in the core; the error surfaces as-is, with no
     /// check of the app's own before it.
-    func archiveWallet(_ walletId: Uuid) async {
-        await command(.archiveWallet(walletId: walletId))
+    @discardableResult
+    func archiveWallet(_ walletId: Uuid) async -> Bool {
+        await command(.archiveWallet(walletId: walletId)) != nil
     }
 
-    func restoreWallet(_ walletId: Uuid) async {
-        await command(.restoreWallet(walletId: walletId))
+    @discardableResult
+    func restoreWallet(_ walletId: Uuid) async -> Bool {
+        await command(.restoreWallet(walletId: walletId)) != nil
     }
 
     /// Only the given fields change; Unallocated cannot be updated
     /// (`.updateFlow`).
+    @discardableResult
     func updateEnvelope(
         _ flowId: Uuid,
         name: String? = nil,
         mode: FlowMode? = nil,
         allowNegative: Bool? = nil
-    ) async {
-        await command(.updateFlow(flowId: flowId, name: name, mode: mode, allowNegative: allowNegative))
+    ) async -> Bool {
+        await command(.updateFlow(flowId: flowId, name: name, mode: mode, allowNegative: allowNegative)) != nil
     }
 
     /// Requires a zero balance in the core; the error surfaces as-is.
-    func archiveEnvelope(_ flowId: Uuid) async {
-        await command(.archiveFlow(flowId: flowId))
+    @discardableResult
+    func archiveEnvelope(_ flowId: Uuid) async -> Bool {
+        await command(.archiveFlow(flowId: flowId)) != nil
     }
 
-    func restoreEnvelope(_ flowId: Uuid) async {
-        await command(.restoreFlow(flowId: flowId))
+    @discardableResult
+    func restoreEnvelope(_ flowId: Uuid) async -> Bool {
+        await command(.restoreFlow(flowId: flowId)) != nil
     }
 
     /// One command against the vault on screen, then the reload that shows
@@ -1062,21 +1071,37 @@ final class AppStore {
     @discardableResult
     private func command(_ command: Command) async -> Receipt? {
         guard let vault = currentVault, !refusedAsReadOnly() else { return nil }
-        return await write(command, in: vault.id) { await reload() }
+        return await written(in: vault.id) { try await core.execute(vaultId: vault.id, command) }
     }
 
-    /// `command` written to `vaultId`, then `show`: every write of one
-    /// command goes through here, so every one that goes through moves
-    /// "saved at". `nil` when the core refused it, with the alert up.
+    /// `work` written to `vaultId`, then shown: by the reload when that vault
+    /// is on screen, or by `show`. Every write goes through here, so every
+    /// one that goes through moves "saved at". `nil` when the core refused
+    /// it, with the alert up.
     @discardableResult
-    private func write(_ command: Command, in vaultId: Uuid, then show: () async throws -> Void) async -> Receipt? {
-        var receipt: Receipt?
+    private func written<T>(
+        in vaultId: Uuid,
+        showing show: (() async throws -> Void)? = nil,
+        _ work: () async throws -> T
+    ) async -> T? {
+        var result: T?
         await guarded {
-            receipt = try await core.execute(vaultId: vaultId, command)
+            result = try await work()
             savedAt = Date()
-            try await show()
+            if let show {
+                try await show()
+            } else if vaultId == currentVault?.id {
+                await reload()
+            }
         }
-        return receipt
+        return result
+    }
+
+    /// `command` run under an id minted for it, which comes back as the id of
+    /// what it created: undo voids that row, redo adds it back as a new one.
+    private func executeMinted(_ command: Command, in vaultId: Uuid) async throws -> Uuid {
+        let minted = await core.envelope(vaultId: vaultId, command)
+        return try await core.execute(envelope: minted).resultId ?? minted.id
     }
 
     // MARK: - Category management (the SETUP tab)
@@ -1148,50 +1173,58 @@ final class AppStore {
         return try? await core.read { try $0.previewMerge(vaultId: vault.id, sourceId: sourceId, targetId: targetId) }
     }
 
-    func createCategory(name: String) async {
+    @discardableResult
+    func createCategory(name: String) async -> Bool {
         await categoryCommand(.createCategory(name: name))
     }
 
     /// System categories cannot be renamed; the core refuses it.
-    func renameCategory(_ categoryId: Uuid, name: String) async {
+    @discardableResult
+    func renameCategory(_ categoryId: Uuid, name: String) async -> Bool {
         await categoryCommand(.renameCategory(categoryId: categoryId, name: name))
     }
 
-    func archiveCategory(_ categoryId: Uuid) async {
+    @discardableResult
+    func archiveCategory(_ categoryId: Uuid) async -> Bool {
         await categoryCommand(.archiveCategory(categoryId: categoryId))
     }
 
-    func restoreCategory(_ categoryId: Uuid) async {
+    @discardableResult
+    func restoreCategory(_ categoryId: Uuid) async -> Bool {
         await categoryCommand(.restoreCategory(categoryId: categoryId))
     }
 
-    func addAlias(categoryId: Uuid, alias: String) async {
+    @discardableResult
+    func addAlias(categoryId: Uuid, alias: String) async -> Bool {
         await categoryCommand(.addAlias(categoryId: categoryId, alias: alias))
     }
 
-    func removeAlias(categoryId: Uuid, alias: String) async {
+    @discardableResult
+    func removeAlias(categoryId: Uuid, alias: String) async -> Bool {
         await categoryCommand(.removeAlias(categoryId: categoryId, alias: alias))
     }
 
     /// Refused when `previewCategoryMerge` reports conflicts; repoints every
     /// transaction of `sourceId` to `targetId` and deletes the source.
-    func mergeCategory(sourceId: Uuid, targetId: Uuid) async {
+    @discardableResult
+    func mergeCategory(sourceId: Uuid, targetId: Uuid) async -> Bool {
         await categoryCommand(.mergeCategory(sourceId: sourceId, targetId: targetId))
     }
 
     /// A category command, then the refresh of the picker list and the
-    /// management table together. A full `reload()` because a rename
-    /// propagates its denormalized name onto transactions and a merge
-    /// repoints them: the loaded
-    /// transactions page can be stale, not just the category lists.
-    private func categoryCommand(_ command: Command) async {
+    /// management table together; says whether the core took it. A full
+    /// `reload()` because a rename propagates its denormalized name onto
+    /// transactions and a merge repoints them: the loaded transactions page
+    /// can be stale, not just the category lists.
+    private func categoryCommand(_ command: Command) async -> Bool {
+        guard let vault = currentVault, await self.command(command) != nil else { return false }
         // A failed refetch leaves the lists as they were until the tab
         // loads them again: the write itself went through.
-        guard let vault = currentVault, await self.command(command) != nil,
-              let management = try? await core.categoryManagement(vaultId: vault.id)
-        else { return }
-        windowCategories = management.categories
-        categoryAliases = management.aliases
+        if let management = try? await core.categoryManagement(vaultId: vault.id) {
+            windowCategories = management.categories
+            categoryAliases = management.aliases
+        }
+        return true
     }
 
     // MARK: - Recurring
@@ -1227,19 +1260,23 @@ final class AppStore {
         )?.resultId
     }
 
-    func updateRecurring(_ recurringId: Uuid, patch: RecurringPatch) async {
-        guard !patch.isEmpty else { return }
-        await command(.updateRecurring(recurringId: recurringId, patch: patch))
+    /// An empty patch writes nothing, and nothing was refused.
+    @discardableResult
+    func updateRecurring(_ recurringId: Uuid, patch: RecurringPatch) async -> Bool {
+        guard !patch.isEmpty else { return true }
+        return await command(.updateRecurring(recurringId: recurringId, patch: patch)) != nil
     }
 
-    func archiveRecurring(_ recurringId: Uuid) async {
-        await command(.archiveRecurring(recurringId: recurringId))
+    @discardableResult
+    func archiveRecurring(_ recurringId: Uuid) async -> Bool {
+        await command(.archiveRecurring(recurringId: recurringId)) != nil
     }
 
     /// Puts an archived template back on the schedule; the periods it missed
     /// while archived come back as due.
-    func restoreRecurring(_ recurringId: Uuid) async {
-        await command(.restoreRecurring(recurringId: recurringId))
+    @discardableResult
+    func restoreRecurring(_ recurringId: Uuid) async -> Bool {
+        await command(.restoreRecurring(recurringId: recurringId)) != nil
     }
 
     /// Every period waiting for a decision, oldest first: what the due sheet
@@ -1294,13 +1331,7 @@ final class AppStore {
         }
         var refused = false
         if !commands.isEmpty {
-            refused = true
-            await guarded {
-                try await core.executeBatch(vaultId: vault.id, commands)
-                refused = false
-                savedAt = Date()
-                await reload()
-            }
+            refused = await written(in: vault.id) { try await core.executeBatch(vaultId: vault.id, commands) } == nil
         }
         // A refused batch has its own alert, and recorded nothing either.
         guard !held.isEmpty, !refused else { return }
@@ -1431,19 +1462,16 @@ final class AppStore {
         // Two ends, not a wallet and an envelope: the grid never writes one.
         case .transferWallet, .transferFlow: return
         }
-        await guarded {
+        let created = await written(in: vault.id) {
             // Minted first, so undo knows which row to void.
-            let minted = await core.envelope(vaultId: vault.id, command)
-            let receipt = try await core.execute(envelope: minted)
-            let created = receipt.resultId ?? minted.id
+            let created = try await executeMinted(command, in: vault.id)
             recordAddedRow(command, id: created, vaultId: vault.id)
             lastWalletId = entry.walletId ?? lastWalletId
             lastFlowId = envelope ?? lastFlowId
-            savedAt = Date()
-            await reload()
-            if !typedIn.kinds.contains(rowKind) {
-                noticeMove(to: rowKind, first: created, occurredAt: entry.occurredAt, count: 1, in: vault.id)
-            }
+            return created
+        }
+        if let created, !typedIn.kinds.contains(rowKind) {
+            noticeMove(to: rowKind, first: created, occurredAt: entry.occurredAt, count: 1, in: vault.id)
         }
     }
 
@@ -1532,13 +1560,16 @@ final class AppStore {
         }
     }
 
-    /// Parses, resolves names against the vault, executes, reloads.
-    func submit(quickAdd input: String) async {
-        guard let vault = currentVault else { return }
+    /// Parses, resolves names against the vault, executes, reloads; says
+    /// whether the row was written. A refused line stays, with the alert up.
+    @discardableResult
+    func submit(quickAdd input: String) async -> Bool {
+        guard let vault = currentVault else { return false }
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         // The line stays as typed, and nothing is resolved against the core:
         // a viewer is told, not left wondering why the row never came.
-        guard !trimmed.isEmpty, !refusedAsReadOnly() else { return }
+        guard !trimmed.isEmpty, !refusedAsReadOnly() else { return false }
+        var saved = false
         await guarded {
             let parsed = try parseQuickAdd(input: trimmed, currency: currency)
             let resolved: ResolvedQuickAdd
@@ -1559,17 +1590,18 @@ final class AppStore {
             }
             // A row like one typed in the grid, and undone the same way.
             let command = withExplicitPerson(resolved.command)
-            let minted = await core.envelope(vaultId: vault.id, command)
-            let receipt = try await core.execute(envelope: minted)
-            recordAddedRow(command, id: receipt.resultId ?? minted.id, vaultId: vault.id)
-            savedAt = Date()
-            // The core reports what the names resolved to, so the sticky
-            // defaults never depend on the shape of the command.
-            lastWalletId = resolved.walletId ?? lastWalletId
-            lastFlowId = resolved.flowId ?? lastFlowId
-            quickAddText = ""
-            await reload()
+            saved = await written(in: vault.id) {
+                let created = try await executeMinted(command, in: vault.id)
+                recordAddedRow(command, id: created, vaultId: vault.id)
+                // The core reports what the names resolved to, so the sticky
+                // defaults never depend on the shape of the command.
+                lastWalletId = resolved.walletId ?? lastWalletId
+                lastFlowId = resolved.flowId ?? lastFlowId
+                quickAddText = ""
+                return created
+            } != nil
         }
+        return saved
     }
 
     /// Called from the error alert's candidate buttons after an
@@ -1669,15 +1701,15 @@ final class AppStore {
         history.forgetPendingVoid()
         await guarded {
             guard try await core.read({ try $0.vaults() }).contains(where: { $0.id == pending.vaultId }) else { return }
-            try await core.executeBatch(
-                vaultId: pending.vaultId,
-                pending.ids.map { .voidTransaction(transactionId: $0) }
-            )
-            history.forget(rows: Set(pending.ids))
-            savedAt = Date()
             // Another vault's void changes nothing on screen: after a switch
             // `select` reloads the vault it moved to by itself.
-            if pending.vaultId == currentVault?.id { await reload() }
+            await written(in: pending.vaultId) {
+                try await core.executeBatch(
+                    vaultId: pending.vaultId,
+                    pending.ids.map { .voidTransaction(transactionId: $0) }
+                )
+                history.forget(rows: Set(pending.ids))
+            }
         }
     }
 
@@ -1695,7 +1727,8 @@ final class AppStore {
     /// gets its turn after that month's rows have replaced its own.
     func update(transactionId: Uuid, patch: TransactionPatch, inverse: TransactionPatch?) async {
         guard let vault = currentVault, !patch.isEmpty, !refusedAsReadOnly() else { return }
-        await write(.updateTransaction(transactionId: transactionId, patch: patch), in: vault.id) {
+        await written(in: vault.id) {
+            try await core.execute(vaultId: vault.id, .updateTransaction(transactionId: transactionId, patch: patch))
             if let inverse {
                 recordPatches(
                     [RowPatch(id: transactionId, patch: patch)],
@@ -1704,7 +1737,6 @@ final class AppStore {
                     name: String(localized: "Edit Row")
                 )
             }
-            await reload()
         }
     }
 
@@ -1719,29 +1751,14 @@ final class AppStore {
     @discardableResult
     func apply(_ commands: [Command], in vaultId: Uuid) async -> Bool {
         guard !commands.isEmpty, !refusedAsReadOnly() else { return false }
-        var applied = false
-        await guarded {
-            try await core.executeBatch(vaultId: vaultId, commands)
-            applied = true
-            savedAt = Date()
-            if vaultId == currentVault?.id { await reload() }
-        }
-        return applied
+        return await written(in: vaultId) { try await core.executeBatch(vaultId: vaultId, commands) } != nil
     }
 
     /// Applies `command` under an id minted for it and returns the id of what
     /// it created: redo adds a row back as a new one, and has to know which.
     func applyMinted(_ command: Command, in vaultId: Uuid) async -> Uuid? {
         guard !refusedAsReadOnly() else { return nil }
-        var created: Uuid?
-        await guarded {
-            let minted = await core.envelope(vaultId: vaultId, command)
-            let receipt = try await core.execute(envelope: minted)
-            created = receipt.resultId ?? minted.id
-            savedAt = Date()
-            if vaultId == currentVault?.id { await reload() }
-        }
-        return created
+        return await written(in: vaultId) { try await executeMinted(command, in: vaultId) }
     }
 
     /// Envelopes minted with `core.envelope(vaultId:_:)`, as one batch, all of
@@ -1751,14 +1768,7 @@ final class AppStore {
     @discardableResult
     func apply(envelopes: [CommandEnvelope], in vaultId: Uuid) async -> Bool {
         guard !envelopes.isEmpty, !refusedAsReadOnly() else { return false }
-        var applied = false
-        await guarded {
-            try await core.executeBatch(envelopes: envelopes)
-            applied = true
-            savedAt = Date()
-            if vaultId == currentVault?.id { await reload() }
-        }
-        return applied
+        return await written(in: vaultId) { try await core.executeBatch(envelopes: envelopes) } != nil
     }
 
     // MARK: - Errors

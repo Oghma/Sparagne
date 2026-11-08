@@ -205,18 +205,18 @@ struct CategoryTable: View {
             return true
         }
         if let name = rows.draft.rename(from: category.name) {
-            guard await accepted({ await store.renameCategory(categoryId, name: name) }) else {
+            guard await store.renameCategory(categoryId, name: name) else {
                 return keepOpen(categoryId, at: .name)
             }
         }
         let changes = rows.draft.aliasChanges(from: aliases(of: categoryId))
         for alias in changes.removed {
-            guard await accepted({ await store.removeAlias(categoryId: categoryId, alias: alias) }) else {
+            guard await store.removeAlias(categoryId: categoryId, alias: alias) else {
                 return keepOpen(categoryId, at: .aliases)
             }
         }
         for alias in changes.added {
-            guard await accepted({ await store.addAlias(categoryId: categoryId, alias: alias) }) else {
+            guard await store.addAlias(categoryId: categoryId, alias: alias) else {
                 return keepOpen(categoryId, at: .aliases)
             }
         }
@@ -228,25 +228,16 @@ struct CategoryTable: View {
     /// name the core refuses stays in the cell so it can be fixed.
     private func commitNewLine() async {
         guard let name = CategoryDraft.creation(from: rows.newLine.name) else { return }
-        guard await accepted({ await store.createCategory(name: name) }) else { return }
+        guard await store.createCategory(name: name) else { return }
         rows.clearNewLine()
         focus = CategoryCellFocus(row: nil, field: .name)
     }
 
     /// A refused command keeps the row open with its draft and sends the caret
-    /// back to the cell that caused it.
+    /// back to the cell that caused it; the refusal is up as the alert.
     private func keepOpen(_ categoryId: Uuid, at field: CategoryField) -> Bool {
         focus = CategoryCellFocus(row: categoryId, field: field)
         return false
-    }
-
-    /// Runs a store command and says whether the core took it. The store turns
-    /// a refusal into `presentedError`, the alert the ledger already uses
-    /// (`AppStore.report` feeds the same one), instead of throwing.
-    private func accepted(_ work: () async -> Void) async -> Bool {
-        let before = store.presentedError
-        await work()
-        return store.presentedError == before
     }
 }
 
