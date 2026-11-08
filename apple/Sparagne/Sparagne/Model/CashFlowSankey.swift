@@ -90,6 +90,20 @@ struct CashFlowSankey: Equatable, Sendable {
         income > 0 ? Double(value) / Double(income) : nil
     }
 
+    /// `"14,2%"`: `value`'s share of the income as the labels and the
+    /// tooltip write it, and `"< 0,1%"` for a share that would round to
+    /// `"0,0%"` (7,90 of interest in a year of salary): it is not nothing.
+    /// `nil` when nothing came in.
+    func shareText(_ value: Int64) -> String? {
+        guard income > 0 else { return nil }
+        // Up to 0,05% included, `value × 2000 <= income`: the formatter
+        // rounds half to even, so 0,05% would print 0,0% too.
+        if value > 0, value <= income / 2000 {
+            return "< \(LedgerMoney.number(0.1, decimals: 1))%"
+        }
+        return LedgerMoney.percent(value, of: income, decimals: 1)
+    }
+
     // MARK: - Building
 
     /// The graph of one period, `nil` when it earned and spent nothing.

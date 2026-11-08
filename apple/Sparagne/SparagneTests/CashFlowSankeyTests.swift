@@ -146,6 +146,22 @@ struct CashFlowSankeyTests {
         #expect(sankey.shown(try #require(sankey.node(CashFlowSankey.totalId))) == 270_000)
     }
 
+    @Test("A share written for the labels has one decimal, and one too small to show reads under 0,1% rather than 0,0%")
+    func shareText() throws {
+        let sankey = try #require(F.month)
+        // 270.000 of income: 0,05% is 135.
+        #expect(sankey.shareText(27_000) == "10,0%")
+        #expect(sankey.shareText(136) == "0,1%")
+        #expect(sankey.shareText(135) == "< 0,1%")
+        #expect(sankey.shareText(1) == "< 0,1%")
+        #expect(sankey.shareText(270_000) == "100,0%")
+
+        let noIncome = try #require(
+            CashFlowSankey.build(income: [], expenses: [F.spent("Casa", "Mutuo", 40_000)], flows: F.flows)
+        )
+        #expect(noIncome.shareText(40_000) == nil)
+    }
+
     @Test("Spending more than came in takes the rest from the balance, never with savings")
     func fromTheBalance() throws {
         let sankey = try #require(

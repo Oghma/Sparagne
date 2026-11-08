@@ -385,7 +385,7 @@ private struct SankeyGraph: View {
     }
 
     private func share(_ value: Int64) -> String? {
-        LedgerMoney.percent(value, of: sankey.income, decimals: 1)
+        sankey.shareText(value)
     }
 
     // MARK: - Tooltip
