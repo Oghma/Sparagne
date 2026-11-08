@@ -9,7 +9,8 @@ import Testing
 /// for, kept, moved in from another wallet or imported anyway; the other
 /// side of a transfer already recorded; description rules and the start day
 /// as the core applies them. Every assertion is about what the review shows
-/// or what the vault holds afterwards. No real statement is used.
+/// and what the import reports: the balances and transactions it writes are
+/// core/tests/statement.rs's. No real statement is used.
 struct StatementMatchTests {
     /// Vault `Main` with the card wallet `Card`, empty, and `Bank` holding
     /// 1000.00. Nothing typed yet.
@@ -52,9 +53,6 @@ struct StatementMatchTests {
         #expect(report.possibleDuplicates == 1)
         #expect(report.moved == 0)
         #expect(report.rejected.isEmpty)
-        let grocers = try await StatementFixture.transactions(store).filter { $0.amount == 1475 && !$0.voided }
-        #expect(grocers.count == 1)
-        #expect(grocers.first?.note == "Green grocer")
 
         // The same file again: the row stands for the one typed, for good.
         let again = StatementImportModel(store: store, mappings: mappings)
@@ -211,11 +209,7 @@ struct StatementMatchTests {
 
         await model.runImport()
 
-        let all = try await StatementFixture.transactions(store)
-        let coffees = all.filter { $0.amount == 350 && !$0.voided }
-        #expect(coffees.count == 2)
-        #expect(coffees.allSatisfy { $0.walletId == bank })
-        #expect(StatementFixture.balance(store, cash) == 10_000)
+        #expect(model.report?.moved == 1)
     }
 
     @Test("A match dated before the start day is pointed out on the row")
@@ -285,16 +279,12 @@ struct StatementMatchTests {
 
         #expect(model.report?.executed == 3)
         #expect(model.report?.possibleDuplicates == 0)
-        let grocers = try await StatementFixture.transactions(store).filter { $0.amount == 1475 && $0.kind == .expense && !$0.voided }
-        #expect(grocers.count == 2)
-        #expect(Set(grocers.compactMap(\.note)) == ["Green grocer", "GREEN GROCER"])
     }
 
-    @Test("A spend typed into a wallet ticked under Duplicates also in is moved into the statement's wallet with its note and category")
+    @Test("A spend typed into a wallet ticked under Duplicates also in is moved into the statement's wallet")
     func handRowMovedIn() async throws {
         let (store, card, bank) = try await Self.vault()
         await Self.type("-14.75 green grocer #Spesa @bank 2026-09-11", into: store)
-        #expect(StatementFixture.balance(store, bank) == 98_525)
         let model = try await StatementFixture.cardModel(store, wallet: card)
 
         // Not searched yet: the bank's spend is no business of the card's file.
@@ -329,19 +319,11 @@ struct StatementMatchTests {
         #expect(report.moved == 1)
         #expect(report.executed == 2)
         #expect(report.rejected.isEmpty)
-        let after = try await StatementFixture.transactions(store)
-        let moved = try #require(after.first { $0.note == "Green grocer" })
-        #expect(moved.walletId == card)
-        #expect(moved.category == "Spesa")
-        #expect(moved.amount == 1475)
-        // Out of the bank, into the card's own spending: counted once.
-        #expect(StatementFixture.balance(store, bank) == 100_000)
-        #expect(StatementFixture.balance(store, card) == -2_005) // 3.20 + 2.10 + 14.75 spent
     }
 
     // MARK: - The other side of a transfer
 
-    @Test("A transfer typed between the two wallets makes the card's top-up a transfer already there, not imported, and the money moves once")
+    @Test("A transfer typed between the two wallets makes the card's top-up a transfer already there, not imported")
     func typedTransferMatched() async throws {
         let (store, card, bank) = try await Self.vault()
         await Self.type("tw> 150.00 @bank @card ricarica 2026-09-13", into: store)
@@ -362,10 +344,6 @@ struct StatementMatchTests {
 
         #expect(model.report?.matchedTransfers == 1)
         #expect(model.report?.executed == 3)
-        let transfers = try await StatementFixture.transactions(store).filter { $0.kind == .transferWallet && !$0.voided }
-        #expect(transfers.count == 1)
-        #expect(StatementFixture.balance(store, bank) == 85_000)
-        #expect(StatementFixture.balance(store, card) == 12_995) // 150.00 in, 20.05 spent
     }
 
     @Test("A description rule makes the bank's top-up of the card a transfer with a clean note, and the card's file then finds it instead of writing it twice")
@@ -402,11 +380,6 @@ struct StatementMatchTests {
         await bankModel.runImport()
 
         #expect(bankModel.report?.executed == 2)
-        let written = try await StatementFixture.transactions(store)
-        let transfer = try #require(written.first { $0.kind == .transferWallet })
-        #expect(transfer.fromId == bank)
-        #expect(transfer.toId == card)
-        #expect(transfer.note == "Ricarica carta")
 
         // The card's file: its top-up is that transfer's other side.
         let cardModel = try await StatementFixture.cardModel(store, wallet: card, mappings: mappings)
@@ -415,10 +388,6 @@ struct StatementMatchTests {
         await cardModel.runImport()
 
         #expect(cardModel.report?.matchedTransfers == 1)
-        let transfers = try await StatementFixture.transactions(store).filter { $0.kind == .transferWallet && !$0.voided }
-        #expect(transfers.count == 1)
-        #expect(StatementFixture.balance(store, bank) == 84_680) // 1000.00 less 150.00 and 3.20
-        #expect(StatementFixture.balance(store, card) == 12_995) // 150.00 in, 20.05 spent
     }
 
     // MARK: - An entry standing for a transfer
@@ -467,7 +436,6 @@ struct StatementMatchTests {
         #expect(try StatementFixture.row(first, line: 2).kind == .income)
         await first.runImport()
         #expect(first.report?.executed == 1)
-        #expect(StatementFixture.balance(store, revolut) == 20_000)
         await before(store)
 
         let rule = StatementDescriptionRule(contains: "revolut", action: .transferOut(toWalletId: revolut))
@@ -477,9 +445,9 @@ struct StatementMatchTests {
         return (store, revolut, ing, model)
     }
 
-    @Test("A bank's transfer whose other side another bank's file imported as an income replaces that income by default, and the money moves once")
+    @Test("A bank's transfer whose other side another bank's file imported as an income replaces that income by default")
     func transferReplacesIncome() async throws {
-        let (store, revolut, ing, model) = try await Self.revolutThenIng()
+        let (store, revolut, _, model) = try await Self.revolutThenIng()
         let row = try StatementFixture.row(model, line: 2)
         #expect(row.status == .possibleDuplicate)
         #expect(row.kind == .transferWallet)
@@ -506,15 +474,6 @@ struct StatementMatchTests {
         #expect(report.executed == 1)
         #expect(report.rejected.isEmpty)
         #expect(model.replaced == 1)
-        let all = try await StatementFixture.transactions(store)
-        let income = try #require(all.first { $0.kind == .income && $0.amount == 20_000 })
-        #expect(income.voided)
-        let transfers = all.filter { $0.kind == .transferWallet && !$0.voided }
-        #expect(transfers.count == 1)
-        #expect(transfers.first?.fromId == ing)
-        #expect(transfers.first?.toId == revolut)
-        #expect(StatementFixture.balance(store, revolut) == 20_000)
-        #expect(StatementFixture.balance(store, ing) == 80_000)
     }
 
     /// Vault `Main` with `Revolut`, empty, and `ING` holding 1000.00. The
@@ -550,7 +509,7 @@ struct StatementMatchTests {
 
     @Test("The weekend bonifico: once Revolut is a wallet statements go to, its income two days after ING's transfer is replaced by default")
     func weekendBonificoReplaced() async throws {
-        let (store, revolut, ing, model) = try await Self.weekendBonifico(remembered: true)
+        let (_, revolut, _, model) = try await Self.weekendBonifico(remembered: true)
         #expect(model.previewInput?.options.statementWallets == [revolut])
 
         let row = try StatementFixture.row(model, line: 2)
@@ -565,11 +524,6 @@ struct StatementMatchTests {
 
         #expect(model.report?.executed == 1)
         #expect(model.replaced == 1)
-        let all = try await StatementFixture.transactions(store)
-        #expect(all.first { $0.kind == .income && $0.amount == 20_000 }?.voided == true)
-        #expect(all.filter { $0.kind == .transferWallet && !$0.voided }.count == 1)
-        #expect(StatementFixture.balance(store, ing) == 80_000)
-        #expect(StatementFixture.balance(store, revolut) == 20_000)
     }
 
     @Test("The weekend bonifico with nothing remembered of Revolut: two days apart, the transfer comes in beside the income by default")
@@ -603,9 +557,9 @@ struct StatementMatchTests {
         #expect(!model.isPlanCurrent)
     }
 
-    @Test("A transfer row standing for an entry, ticked off, writes nothing: no transfer, the entry left as it is")
+    @Test("A transfer row standing for an entry, ticked off, is sent as a skip and writes nothing")
     func replaceRowLeftOut() async throws {
-        let (store, revolut, ing, model) = try await Self.revolutThenIng()
+        let model = try await Self.revolutThenIng().model
         let row = try StatementFixture.row(model, line: 2)
         #expect(StatementImportModel.replaces(row))
         #expect(StatementImportModel.takesTick(row))
@@ -623,11 +577,6 @@ struct StatementMatchTests {
         #expect(report.executed == 0)
         #expect(report.rejected.isEmpty)
         #expect(model.replaced == 0)
-        let all = try await StatementFixture.transactions(store)
-        #expect(all.first { $0.kind == .income && $0.amount == 20_000 }?.voided == false)
-        #expect(!all.contains { $0.kind == .transferWallet })
-        #expect(StatementFixture.balance(store, revolut) == 20_000)
-        #expect(StatementFixture.balance(store, ing) == 100_000)
     }
 
     @Test("A cash withdrawal to Cash and an unrelated cash income typed two days later: the income may be its other side, so the transfer comes in beside it by default and both stay")
@@ -663,16 +612,11 @@ struct StatementMatchTests {
 
         #expect(model.report?.executed == 1)
         #expect(model.replaced == 0)
-        let all = try await StatementFixture.transactions(store)
-        #expect(all.first { $0.note == "Regalo" }?.voided == false)
-        #expect(all.filter { $0.kind == .transferWallet && !$0.voided }.count == 1)
-        #expect(StatementFixture.balance(store, cash) == 10_000) // the gift and the withdrawal
-        #expect(StatementFixture.balance(store, bank) == 95_000)
     }
 
     @Test("A choice made over one match is not carried to the next: a row imported anyway beside a typed spend, then made a transfer to Revolut, replaces Revolut's income by default instead of landing beside it")
     func choiceForgottenWithTheKind() async throws {
-        let (store, revolut, ing, model) = try await Self.revolutThenIng(
+        let (_, revolut, _, model) = try await Self.revolutThenIng(
             rules: [], ingRow: "01/10/2026;-200,00;BONIFICO"
         ) { store in
             await Self.type("-200.00 affitto @ing 2026-09-29", into: store)
@@ -698,12 +642,7 @@ struct StatementMatchTests {
 
         await model.runImport()
 
-        let all = try await StatementFixture.transactions(store)
-        #expect(all.first { $0.kind == .income && $0.amount == 20_000 }?.voided == true)
-        #expect(all.filter { $0.kind == .transferWallet && !$0.voided }.count == 1)
-        // Counted once in Revolut; the rent typed in ING stays.
-        #expect(StatementFixture.balance(store, revolut) == 20_000)
-        #expect(StatementFixture.balance(store, ing) == 60_000)
+        #expect(model.replaced == 1)
     }
 
     @Test("A By sign row matched to a transfer typed between the two wallets takes an expense of the user's")
@@ -797,8 +736,5 @@ struct StatementMatchTests {
         await model.runImport()
 
         #expect(model.report?.executed == 2)
-        let imported = try await StatementFixture.transactions(store)
-        #expect(!imported.contains { $0.note == "GREEN GROCER" })
-        #expect(imported.contains { $0.note == "METRO TICKET" })
     }
 }

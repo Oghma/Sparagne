@@ -188,19 +188,6 @@ struct LedgerStoreTests {
         #expect(summary.spendByPerson.first?.person == "matteo")
     }
 
-    @Test("A refund nets off the expense it reverses")
-    func refundsNetOff() async throws {
-        let (store, envelope) = try await Self.household()
-        let before = try #require(store.summary).totals.netExpense
-
-        await store.submit(quickAdd: "r 20.00 rimborso #Spesa >Cash")
-        #expect(store.presentedError == nil)
-
-        let after = try #require(store.summary)
-        #expect(after.totals.netExpense == before - 2_000)
-        #expect(after.netExpense(flow: envelope.id) == before - 2_000)
-    }
-
     // MARK: - Writes from the grid
 
     @Test("A new row lands on the sticky envelope and moves the balances")

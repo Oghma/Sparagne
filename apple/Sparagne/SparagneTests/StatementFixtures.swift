@@ -144,10 +144,6 @@ enum StatementFixture {
         try #require(store.flows.first { $0.name == name }, sourceLocation: sourceLocation).id
     }
 
-    static func balance(_ store: AppStore, _ wallet: Uuid) -> Int64? {
-        store.wallets.first { $0.id == wallet }?.balance
-    }
-
     /// Every transaction of the vault, oldest first, transfers included and
     /// the voided ones unless `voided` is false.
     static func transactions(

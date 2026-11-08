@@ -6,8 +6,9 @@ import Testing
 
 /// The statement import end to end over an in-memory core: the model reads a
 /// synthetic card export, the core previews and imports it, and every
-/// assertion is about what the vault holds afterwards. No real statement is
-/// used anywhere.
+/// assertion is about the model: the mapping, what the review offers and what
+/// it sends. What the core makes of each row is core/tests/statement.rs's. No
+/// real statement is used anywhere.
 struct StatementImportTests {
     /// Vault `Main` with the card wallet `Card` and a `Bank` holding 1000.00.
     /// A past `forno bianco` filed under Bakery gives the history something
@@ -168,8 +169,8 @@ struct StatementImportTests {
 
     // MARK: - Preview and import
 
-    @Test("The card header opens on the preset, and the preview counts every row")
-    func presetAndPreviewCounts() async throws {
+    @Test("The card header opens on the preset, a skipped row reads in words, and the history fills a category in")
+    func presetAndSuggestion() async throws {
         let (store, card, _) = try await Self.vault()
         let model = StatementImportModel(store: store, mappings: try StatementFixture.mappings())
 
@@ -190,24 +191,8 @@ struct StatementImportTests {
         await model.refreshPreview()
 
         #expect(model.previewProblem == nil)
-        #expect(model.counts == .init(new: 4, alreadyImported: 0, skipped: 4, invalid: 0, rounded: 0))
-        let pending = try StatementFixture.row(model, line: 2)
-        #expect(pending.status == .skipped(code: "skipped_status", reason: "status PENDING is skipped"))
         let cancelled = try StatementFixture.row(model, line: 6)
         #expect(StatementText.status(cancelled.status) == StatementText.skipped("skipped_status"))
-        let topup = try StatementFixture.row(model, line: 7)
-        #expect(topup.kind == .transferWallet)
-        guard case .skipped(let code, _) = topup.status else {
-            Issue.record("the top-up should wait for its wallet")
-            return
-        }
-        #expect(code == "needs_wallet")
-        let deposit = try StatementFixture.row(model, line: 8)
-        guard case .skipped(let depositCode, _) = deposit.status else {
-            Issue.record("the liquid deposit should be skipped by its rule")
-            return
-        }
-        #expect(depositCode == "skipped_by_rule")
         // The history's category for the payee fills the field in.
         let bakery = try StatementFixture.row(model, line: 3)
         let metro = try StatementFixture.row(model, line: 4)
@@ -241,12 +226,6 @@ struct StatementImportTests {
         #expect(model.problem == nil)
         #expect(model.step == .report)
         #expect(model.report?.executed == 5)
-        let imported = try await StatementFixture.transactions(store)
-        let transfer = try #require(imported.first { $0.kind == .transferWallet })
-        #expect(transfer.fromId == bank)
-        #expect(transfer.toId == card)
-        #expect(transfer.amount == 15_000)
-        #expect(store.wallets.first { $0.id == bank }?.balance == 85_000)
 
         // Making the bank the target releases the rule instead of pointing
         // a transfer at itself.
@@ -281,20 +260,12 @@ struct StatementImportTests {
 
         let report = try #require(model.report)
         #expect(report.executed == 4)
-        #expect(report.skipped == 4)
-        #expect(report.deduplicated == 0)
         #expect(report.rejected.isEmpty)
-
-        let imported = try await StatementFixture.transactions(store)
-        #expect(imported.first { $0.note == "FORNO BIANCO" }?.category == "Bakery")
-        #expect(imported.first { $0.note == "METRO TICKET" }?.category == "Transport")
-        #expect(imported.first { $0.note == "SHOE SHOP" }?.kind == .refund)
-        #expect(!imported.contains { $0.note == "GREEN GROCER" })
         // The typed category was created; the window reloaded after the import.
         #expect(store.categories.contains { $0.name == "Transport" })
 
         // Same file again, in a new sheet: the mapping is remembered, top-up
-        // wallet included, and every row already in the vault is recognised.
+        // wallet included.
         let again = StatementImportModel(store: store, mappings: mappings)
         await again.load(data: Data(StatementFixture.cardOfEveryKind.utf8), fileName: "card.csv")
         #expect(again.source == .remembered)
@@ -303,7 +274,6 @@ struct StatementImportTests {
         await again.refreshPreview()
 
         // The row ticked off last time was never imported, so it is new.
-        #expect(again.counts == .init(new: 1, alreadyImported: 4, skipped: 3, invalid: 0, rounded: 0))
         let grocer = try StatementFixture.row(again, line: 9)
         #expect(grocer.status == .new)
         again.setIncluded(false, line: 9)
@@ -311,9 +281,6 @@ struct StatementImportTests {
         await again.runImport()
 
         #expect(again.report?.executed == 0)
-        #expect(again.report?.deduplicated == 4)
-        let after = try await StatementFixture.transactions(store)
-        #expect(after.count == imported.count)
     }
 
     // MARK: - The steps

@@ -7,7 +7,9 @@ import Testing
 /// The Riparto tab's commands on the store (`AppStore+Allocation.swift`),
 /// against the in-memory core: a plan made from its first line, the period
 /// it puts due, Distribuisci, Salta and Annulla, and a vault only read.
-/// Every assertion reads the core's own answer after the command.
+/// Every assertion is about the store after the command: the plan, the period
+/// due, the runs and the toast. What the moves leave in each envelope is
+/// core/tests/allocation*.rs's.
 struct AllocationStoreTests {
     /// Vault `Casa`, wallet `Conto` opened with 1.000,00 (in Unallocated,
     /// as an opening the plan never counts), envelopes `Affitto` with no cap
@@ -24,10 +26,6 @@ struct AllocationStoreTests {
 
     private static func flow(_ store: AppStore, _ name: String) throws -> FlowView {
         try #require(store.flows.first { $0.name == name })
-    }
-
-    private static func unallocated(_ store: AppStore) throws -> Int64 {
-        try #require(store.flows.first { $0.isUnallocated }).balance
     }
 
     /// An income into Unallocated, today.
@@ -110,7 +108,7 @@ struct AllocationStoreTests {
 
     // MARK: - The period due
 
-    @Test("A period due today shares out the incomes since the start, and the preview says what each line gets")
+    @Test("A period due today shares out the incomes since the start, and the preview comes back for the lines given")
     func preview() async throws {
         let store = try await Self.vault()
         let lines = try await Self.plan(store)
@@ -125,17 +123,7 @@ struct AllocationStoreTests {
         #expect(store.allocationBase.incomes.map(\.note) == ["Stipendio"])
 
         let preview = try #require(await store.previewAllocation(lines: lines, total: store.allocationBase.total))
-        #expect(preview.lines.map(\.amount) == [80_000, 50_000])
-        #expect(preview.lines.map(\.status) == [.full, .full])
-        #expect(preview.lines[1].room == 50_000)
-        #expect(preview.distributed == 130_000)
-        #expect(preview.remainder == 20_000)
-        #expect(preview.unallocatedAfter == 250_000 - 130_000)
-
-        // A total lowered by hand: the last line runs short first.
-        let short = try #require(await store.previewAllocation(lines: lines, total: 60_000))
-        #expect(short.lines.map(\.amount) == [60_000, 0])
-        #expect(short.lines.map(\.status) == [.short, .short])
+        #expect(preview.lines.map(\.flowId) == lines.map(\.flowId))
     }
 
     @Test("Distribuisci moves what the plan gives on the total, closes the period and leaves the toast")
@@ -147,9 +135,6 @@ struct AllocationStoreTests {
         await store.executeAllocation(total: store.allocationBase.total)
 
         #expect(store.presentedError == nil)
-        #expect(try Self.flow(store, "Affitto").balance == 80_000)
-        #expect(try Self.flow(store, "Vacanze").balance == 50_000)
-        #expect(try Self.unallocated(store) == 250_000 - 130_000)
         #expect(store.pendingAllocation == nil)
         #expect(store.actionableAllocationCount == 0)
         #expect(store.allocationBase.total == 0)
@@ -167,7 +152,7 @@ struct AllocationStoreTests {
         #expect(undo.periodDate == Self.today)
     }
 
-    @Test("Annulla puts the period back: its transfers deleted, its incomes back in the total")
+    @Test("Annulla puts the period back, its incomes back in the total, from the toast or from the history")
     func reopen() async throws {
         let store = try await Self.vault()
         _ = try await Self.plan(store)
@@ -179,20 +164,15 @@ struct AllocationStoreTests {
         await store.undoAllocation()
         #expect(store.presentedError == nil)
         #expect(store.allocationUndo == nil)
-        #expect(try Self.flow(store, "Affitto").balance == 0)
-        #expect(try Self.flow(store, "Vacanze").balance == 0)
-        #expect(try Self.unallocated(store) == 250_000)
         #expect(store.pendingAllocation?.periodDate == Self.today)
         #expect(store.allocationBase.total == 150_000)
         #expect(store.allocationRuns.isEmpty)
 
         // From the history, after sharing out again.
         await store.executeAllocation(total: 100_000)
-        #expect(try Self.flow(store, "Affitto").balance == 80_000)
-        #expect(try Self.flow(store, "Vacanze").balance == 20_000)
+        #expect(store.allocationRuns.count == 1)
         await store.reopenAllocation(periodDate: Self.today)
         #expect(store.presentedError == nil)
-        #expect(try Self.flow(store, "Affitto").balance == 0)
         #expect(store.pendingAllocation != nil)
         #expect(store.allocationUndo == nil)
     }
@@ -208,8 +188,6 @@ struct AllocationStoreTests {
         #expect(store.presentedError == nil)
         #expect(store.pendingAllocation == nil)
         #expect(store.allocationBase.total == 0)
-        #expect(try Self.flow(store, "Affitto").balance == 0)
-        #expect(try Self.unallocated(store) == 250_000)
         #expect(store.allocationRuns.map(\.outcome) == [.skipped])
         #expect(store.allocationUndo == nil)
 
@@ -262,8 +240,6 @@ struct AllocationStoreTests {
         await store.executeAllocation(total: 150_000, lines: shown)
 
         #expect(store.presentedError == nil)
-        #expect(try Self.flow(store, "Affitto").balance == 30_000)
-        #expect(try Self.flow(store, "Vacanze").balance == 0)
         #expect(store.allocationRuns.first?.moves.map(\.amount) == [30_000])
         #expect(store.allocationUndo?.distributed == 30_000)
         // The plan is still the one saved.
@@ -298,11 +274,10 @@ struct AllocationStoreTests {
         let refusal = try #require(sharing.presentedError)
         #expect(refusal.code == "already_exists")
         #expect(refusal.summary == String(localized: "This period was already decided"))
-        // Reloaded: the period is gone, and the transfers are the first window's.
+        // Reloaded: the period is gone, and the run is the first window's.
         #expect(sharing.pendingAllocation == nil)
         #expect(sharing.allocationRuns.count == 1)
         #expect(sharing.allocationUndo == nil)
-        #expect(try Self.flow(sharing, "Affitto").balance == 80_000)
 
         await skipping.skipAllocation()
         #expect(skipping.presentedError?.summary == String(localized: "This period was already decided"))
@@ -329,7 +304,6 @@ struct AllocationStoreTests {
         #expect(store.allocationUndo == nil)
         #expect(!store.allocationReopening)
         #expect(store.pendingAllocation != nil)
-        #expect(try Self.flow(store, "Affitto").balance == 0)
         #expect(store.allocationRuns.isEmpty)
     }
 
@@ -357,7 +331,6 @@ struct AllocationStoreTests {
         #expect(!store.allocationReopening)
         #expect(store.allocationUndo == nil)
         #expect(store.pendingAllocation != nil)
-        #expect(try Self.flow(store, "Affitto").balance == 0)
     }
 
     // MARK: - A vault only read
@@ -391,6 +364,5 @@ struct AllocationStoreTests {
         #expect(store.pendingAllocation != nil)
         #expect(store.allocationRuns.isEmpty)
         #expect(store.allocationUndo == nil)
-        #expect(try Self.flow(store, "Affitto").balance == 0)
     }
 }

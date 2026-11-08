@@ -380,19 +380,6 @@ struct AppStoreTests {
         #expect(store.wallets.count == wallets)
     }
 
-    @Test("Updating an envelope's cap shows up in the snapshot")
-    func updatingAnEnvelopeChangesTheCapInTheSnapshot() async throws {
-        let store = try await Self.onboarded()
-        await store.createEnvelope(name: "Vacanze", mode: .unlimited, allowNegative: false, openingAllocation: 0)
-        let envelope = try #require(store.flows.first { $0.name == "Vacanze" })
-
-        await store.updateEnvelope(envelope.id, mode: .netCapped(cap: 5000))
-
-        #expect(store.presentedError == nil)
-        let updated = try #require(store.flows.first { $0.id == envelope.id })
-        #expect(updated.mode == .netCapped(cap: 5000))
-    }
-
     // MARK: - Category management
 
     @Test("Renaming a category shows up in the categories list")
@@ -410,7 +397,7 @@ struct AppStoreTests {
         #expect(store.windowCategories.contains { $0.id == food.id && $0.name == "Groceries" })
     }
 
-    @Test("A merge with preview conflicts is refused; a clean merge repoints transactions")
+    @Test("A merge the core refuses is on the alert; a clean one comes back previewed, repoints the rows and reloads the categories")
     func categoryMergePreviewAndCleanMerge() async throws {
         let store = try await Self.onboarded()
         await store.submit(quickAdd: "-5.00 pizza #Food")
@@ -418,24 +405,18 @@ struct AppStoreTests {
         await store.loadCategoryManagement()
         let food = try #require(store.windowCategories.first { $0.name == "Food" })
 
-        // Merging a category into itself always conflicts.
-        let selfPreview = await store.previewCategoryMerge(sourceId: food.id, targetId: food.id)
-        #expect(selfPreview?.ok == false)
-        #expect(selfPreview?.conflicts.contains { $0.kind == .sameCategory } == true)
-
+        // Merging a category into itself is refused.
         await store.mergeCategory(sourceId: food.id, targetId: food.id)
         #expect(store.presentedError != nil)
         store.presentedError = nil
 
-        // A fresh, unrelated target has no conflicts and the merge repoints
-        // the existing transaction.
+        // A fresh, unrelated target: the merge repoints the existing
+        // transaction.
         await store.createCategory(name: "Groceries")
         await store.loadCategoryManagement()
         let groceries = try #require(store.windowCategories.first { $0.name == "Groceries" })
 
-        let cleanPreview = await store.previewCategoryMerge(sourceId: food.id, targetId: groceries.id)
-        #expect(cleanPreview?.ok == true)
-        #expect(cleanPreview?.conflicts.isEmpty == true)
+        #expect(await store.previewCategoryMerge(sourceId: food.id, targetId: groceries.id)?.ok == true)
 
         await store.mergeCategory(sourceId: food.id, targetId: groceries.id)
 

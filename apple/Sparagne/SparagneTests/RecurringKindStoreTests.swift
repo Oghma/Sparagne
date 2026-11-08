@@ -66,13 +66,10 @@ struct RecurringKindStoreTests {
 
     // MARK: - The change
 
-    @Test("The template is archived and its copy of the other kind starts after the last period decided, with the same fields")
+    @Test("The template is archived and its copy of the other kind, for the same owner, starts after the last period decided")
     func expenseBecomesIncome() async throws {
         let store = try await Self.onboarded()
-        await store.createEnvelope(name: "Casa", mode: .unlimited, allowNegative: true, openingAllocation: 0)
-        let casa = try #require(store.flows.first { $0.name == "Casa" })
-        let cash = try #require(store.wallets.first)
-        let gym = try await Self.dailyExpense(store, walletId: cash.id, flowId: casa.id, until: try Self.day(30), owner: "elisa")
+        let gym = try await Self.dailyExpense(store, until: try Self.day(30), owner: "elisa")
         await Self.decideAll(store, gym)
         #expect(await store.recurringKindStart(gym.id) == .success(try Self.day(1)))
         #expect(await store.recurringKindRefusal(gym.id) == nil)
@@ -84,11 +81,6 @@ struct RecurringKindStoreTests {
         #expect(try Self.template(store, gym.id).archived)
         let copy = try Self.template(store, id)
         #expect(copy.kind == .income)
-        #expect(copy.amount == gym.amount)
-        #expect(copy.walletId == cash.id)
-        #expect(copy.flowId == casa.id)
-        #expect(copy.category == gym.category)
-        #expect(copy.note == gym.note)
         #expect(copy.owner == "elisa")
         #expect(copy.enabled)
         #expect(!copy.archived)

@@ -6,9 +6,9 @@ import Testing
 
 /// An export holding every account of the user's, as the BudgetBakers
 /// Wallet app writes it: each account's rows go to the wallet chosen for it,
-/// the file's or another, or nowhere; the two halves of a move between two
-/// accounts make one transfer, or nothing inside one wallet. Over an
-/// in-memory core; no real export is used.
+/// the file's or another, or nowhere, and that choice is remembered. What
+/// the core makes of the halves of a move is core/tests/statement.rs's. Over
+/// an in-memory core; no real export is used.
 struct StatementAccountsTests {
     /// Three accounts; lines count the header. A move from Revolut to BBVA
     /// (3 and 4), one from Conto Arancio to Revolut (7 and 8), and a half
@@ -51,18 +51,16 @@ struct StatementAccountsTests {
         return model
     }
 
-    private static func code(_ row: StatementRow) -> String? {
-        if case .skipped(let code, _) = row.status { return code }
-        return nil
-    }
-
     // MARK: - Choosing where accounts go
 
-    @Test("The accounts are listed with their rows, and those sent elsewhere than the file's wallet become the core's account wallets")
+    @Test("The Wallet preset is recognised, the accounts are listed with their rows, and those sent elsewhere than the file's wallet become the core's account wallets")
     func accountChoices() async throws {
         let (store, cash, revolut, _) = try await Self.vault()
         let model = try await Self.model(store, cash: cash, mappings: try StatementFixture.mappings())
 
+        #expect(model.source == .preset(StatementImportModel.presetName(
+            try #require(statementPresets().first { $0.id == "budgetbakers-wallet" })
+        )))
         #expect(model.mapping.accountColumn == "account")
         #expect(model.mapping.transferColumn == "transfer")
         #expect(model.accounts.map(\.value) == ["Revolut", "BBVA", "Conto Arancio"])
@@ -125,89 +123,6 @@ struct StatementAccountsTests {
         #expect(third.previewInput?.options.accountWallets == [])
     }
 
-    // MARK: - The core
-
-    @Test("Every account into Cash: the Wallet preset is recognised, both halves of each move are a transfer within one wallet, and a half without its other is imported")
-    func everythingIntoCash() async throws {
-        let (store, cash, _, _) = try await Self.vault()
-        let model = try await Self.model(store, cash: cash, mappings: try StatementFixture.mappings())
-        #expect(model.source == .preset(StatementImportModel.presetName(
-            try #require(statementPresets().first { $0.id == "budgetbakers-wallet" })
-        )))
-        await model.refreshPreview()
-        #expect(model.previewProblem == nil)
-
-        for line: UInt32 in [3, 4, 7, 8] {
-            let half = try StatementFixture.row(model, line: line)
-            #expect(Self.code(half) == "internal_transfer", "line \(line)")
-            #expect(half.transferLeg)
-            #expect(half.pairedLine != nil)
-        }
-        #expect(try StatementFixture.row(model, line: 3).pairedLine == 4)
-        let friend = try StatementFixture.row(model, line: 9)
-        #expect(friend.status == .new)
-        #expect(friend.transferLeg)
-        #expect(friend.pairedLine == nil)
-        #expect(friend.kind == .income)
-        let groceries = try StatementFixture.row(model, line: 2)
-        #expect(groceries.account == "Revolut")
-        #expect(groceries.walletId == cash)
-        #expect(model.counts.new == 5)
-
-        await model.runImport()
-
-        #expect(model.report?.executed == 5)
-        let all = try await StatementFixture.transactions(store, voided: false)
-        #expect(!all.contains { $0.kind == .transferWallet })
-        // 1850.00 + 75.00 in, 23.40 + 35.00 + 100.79 out.
-        #expect(StatementFixture.balance(store, cash) == 176_581)
-    }
-
-    @Test("Revolut and BBVA into their wallets and Conto Arancio left out: one transfer, a half whose other was left out imported, and both balances right")
-    func accountsIntoWallets() async throws {
-        let (store, cash, revolut, bbva) = try await Self.vault()
-        let model = try await Self.model(store, cash: cash, mappings: try StatementFixture.mappings())
-        model.setDestination(.wallet(revolut), ofAccount: "Revolut")
-        model.setDestination(.wallet(bbva), ofAccount: "BBVA")
-        model.setDestination(.leftOut, ofAccount: "Conto Arancio")
-        await model.refreshPreview()
-        #expect(model.previewProblem == nil)
-
-        let out = try StatementFixture.row(model, line: 3)
-        #expect(out.status == .new)
-        #expect(out.kind == .transferWallet)
-        #expect(out.walletId == revolut)
-        #expect(out.pairedLine == 4)
-        let into = try StatementFixture.row(model, line: 4)
-        #expect(Self.code(into) == "transfer_pair")
-        #expect(into.pairedLine == 3)
-        #expect(into.walletId == bbva)
-        #expect(StatementText.otherHalf(of: 3) != StatementText.skipped("transfer_pair"))
-        for line: UInt32 in [6, 7] {
-            #expect(Self.code(try StatementFixture.row(model, line: line)) == "skipped_account", "line \(line)")
-        }
-        // Its other half's account left out, Revolut's 200.00 is an income.
-        let lonely = try StatementFixture.row(model, line: 8)
-        #expect(lonely.status == .new)
-        #expect(lonely.kind == .income)
-        #expect(lonely.pairedLine == nil)
-        #expect(model.counts.new == 6)
-
-        await model.runImport()
-
-        #expect(model.report?.executed == 6)
-        let transfers = try await StatementFixture.transactions(store, voided: false).filter { $0.kind == .transferWallet }
-        #expect(transfers.count == 1)
-        #expect(transfers.first?.fromId == revolut)
-        #expect(transfers.first?.toId == bbva)
-        #expect(transfers.first?.amount == 50_000)
-        // Revolut: 200.00 + 75.00 in, 23.40 + 500.00 + 100.79 out.
-        #expect(StatementFixture.balance(store, revolut) == -34_919)
-        // BBVA: 500.00 in, 35.00 out.
-        #expect(StatementFixture.balance(store, bbva) == 46_500)
-        #expect(StatementFixture.balance(store, cash) == 0)
-    }
-
     @Test("A match is movable when it sits in another wallet than the row's own, the account's, not the file's: Revolut's spend typed into Revolut is kept, BBVA's typed into a wallet also checked is moved")
     func matchChoicesFollowTheRowsWallet() async throws {
         let (store, cash, revolut, bbva) = try await Self.vault()
@@ -252,5 +167,6 @@ struct StatementAccountsTests {
         #expect(Set(codes).count == codes.count)
         #expect(!codes.contains(StatementText.skipped("something_new")))
         #expect(!StatementText.unpairedLeg.isEmpty)
+        #expect(StatementText.otherHalf(of: 3) != StatementText.skipped("transfer_pair"))
     }
 }
