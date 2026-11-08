@@ -313,7 +313,6 @@ fn create_refuses_terms_out_of_range_and_leaves_nothing() {
 
 /// 100,000.00 at 6%: the first month's interest is 500.00.
 #[test]
-#[ignore = "waits for loan::math"]
 fn a_contract_installment_must_pay_more_than_the_first_months_interest() {
     let mut fx = setup();
     let terms = loan_terms(10_000_000, 60_000, 120, day(2026, 1, 15));
@@ -1097,7 +1096,6 @@ fn preview_refuses_what_the_commands_refuse() {
 /// interest. The first month's interest is 500.00, so the first installment
 /// repays 448.42.
 #[test]
-#[ignore = "waits for loan::math"]
 fn a_schedule_is_the_previews_of_the_same_terms_and_events() {
     let mut fx = setup();
     let id = fx.id(loan_cmd("Mutuo", mortgage()));
@@ -1133,7 +1131,6 @@ fn a_schedule_is_the_previews_of_the_same_terms_and_events() {
 }
 
 #[test]
-#[ignore = "waits for loan::math"]
 fn the_overview_counts_the_installments_due_by_the_day() {
     let mut fx = setup();
     let terms = LoanTerms {
@@ -1200,7 +1197,6 @@ fn the_overview_counts_the_installments_due_by_the_day() {
 /// 10,000.00 at 7.5% in 60 months from 2026-01-10, with early repayments
 /// before the first installment and between the first two.
 #[test]
-#[ignore = "waits for loan::math"]
 fn the_overview_counts_only_the_repayments_dated_by_the_day() {
     let mut fx = setup();
     let id = fx.id(loan_cmd(
@@ -1260,7 +1256,6 @@ fn the_overview_counts_only_the_repayments_dated_by_the_day() {
 /// The template starts a month before the loan: its run of 2025-12-15 is
 /// not one of the loan's.
 #[test]
-#[ignore = "waits for loan::math"]
 fn registered_counts_the_live_executions_from_the_first_due_date_to_the_day() {
     let mut fx = setup();
     let template = fx.id(expense_template(94_842, 15, day(2025, 12, 1)));
@@ -1305,7 +1300,6 @@ fn registered_counts_the_live_executions_from_the_first_due_date_to_the_day() {
 }
 
 #[test]
-#[ignore = "waits for loan::math"]
 fn linked_installments_list_every_due_date_of_the_active_linked_loans() {
     let mut fx = setup();
     let mutuo_template = fx.id(expense_template(95_092, 15, day(2026, 1, 1)));
