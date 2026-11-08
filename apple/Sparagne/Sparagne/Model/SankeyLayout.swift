@@ -32,7 +32,7 @@ struct SankeyLayout: Equatable, Sendable {
     static let gap: CGFloat = 8
     static let minimumHeight: CGFloat = 2
     /// Left of the income column, for its labels, which sit on the left.
-    static let leadingRoom: CGFloat = 160
+    static let leadingRoom: CGFloat = 180
     /// Right of the categories, for theirs.
     static let trailingRoom: CGFloat = 170
 

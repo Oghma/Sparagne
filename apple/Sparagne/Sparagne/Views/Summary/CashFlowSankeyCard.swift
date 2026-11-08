@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The RIEPILOGO's «Flusso di cassa» card: who spent what, for the month on
@@ -127,6 +128,8 @@ private struct SankeyGraph: View {
     private static let labelSpacing: CGFloat = 2
     /// Between a bar and its label.
     private static let labelGap: CGFloat = 6
+    /// Between a one-line label's name and its figure.
+    private static let figureGap: CGFloat = 6
 
     var body: some View {
         GeometryReader { proxy in
@@ -270,9 +273,10 @@ private struct SankeyGraph: View {
     // MARK: - Labels
 
     /// Every node's name and figure: left of the income column, right of
-    /// every other node. A tall node takes two lines, a short one one; in a
-    /// column whose labels would overlap they move apart, and those of the
-    /// lightest nodes go when there is no room at all.
+    /// every other node. A short node's label is one line when it fits the
+    /// room up to the next column, two otherwise, a tall node's always two;
+    /// in a column whose labels would overlap they move apart, and those of
+    /// the lightest nodes go when there is no room at all.
     private func labels(
         _ layout: SankeyLayout, size: CGSize, lit: (ribbons: Set<String>, nodes: Set<String>)?
     ) -> some View {
@@ -303,20 +307,25 @@ private struct SankeyGraph: View {
         var placed: [PlacedLabel] = []
         for (index, ids) in layout.columns.enumerated() {
             let nodes = ids.compactMap { id in byId[id].flatMap { node in layout.nodes[id].map { (node, $0) } } }
-            let twoLines = nodes.map { $0.1.height >= 2 * Self.lineHeight - 2 }
+            guard let bar = nodes.first?.1 else { continue }
+            // The bars of a column share their x, so their labels share the
+            // room: up to the next column, or to the edge.
+            let leading = index == 0 && firstIsIncome
+            let nextX = layout.columns.indices.contains(index + 1)
+                ? layout.columns[index + 1].first.flatMap { layout.nodes[$0]?.minX } : nil
+            let x = leading ? 0 : bar.maxX + Self.labelGap
+            let width = leading ? bar.minX - Self.labelGap : (nextX.map { $0 - Self.labelGap } ?? size.width) - x
+            let twoLines = nodes.map { node, rect in
+                rect.height >= 2 * Self.lineHeight - 2 || oneLineWidth(node) > width
+            }
             let tops = SankeyLayout.labelTops(
                 centres: nodes.map { $0.1.midY },
                 heights: twoLines.map { ($0 ? 2 : 1) * Self.lineHeight + Self.labelSpacing },
                 weights: nodes.map { $0.0.value },
                 within: size.height
             )
-            let leading = index == 0 && firstIsIncome
-            let nextX = layout.columns.indices.contains(index + 1)
-                ? layout.columns[index + 1].first.flatMap { layout.nodes[$0]?.minX } : nil
-            for ((node, rect), (twoLines, top)) in zip(nodes, zip(twoLines, tops)) {
+            for ((node, _), (twoLines, top)) in zip(nodes, zip(twoLines, tops)) {
                 guard let top else { continue }
-                let x = leading ? 0 : rect.maxX + Self.labelGap
-                let width = leading ? rect.minX - Self.labelGap : (nextX.map { $0 - Self.labelGap } ?? size.width) - x
                 placed.append(
                     PlacedLabel(
                         node: node, twoLines: twoLines, leading: leading,
@@ -343,9 +352,9 @@ private struct SankeyGraph: View {
                     figure.frame(height: Self.lineHeight)
                 }
             } else {
-                HStack(spacing: 6) {
-                    name
-                    figure.layoutPriority(1)
+                HStack(spacing: Self.figureGap) {
+                    name.layoutPriority(1)
+                    figure
                 }
                 .frame(height: Self.lineHeight)
             }
@@ -355,6 +364,15 @@ private struct SankeyGraph: View {
         // keeps them legible.
         .shadow(color: Ink.card, radius: 1)
         .shadow(color: Ink.card, radius: 3)
+    }
+
+    /// The name and the figure side by side, as `labelText` sets them.
+    private func oneLineWidth(_ node: CashFlowSankey.Node) -> CGFloat {
+        let name = NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .medium)
+        let figure = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        return (node.title as NSString).size(withAttributes: [.font: name]).width
+            + Self.figureGap
+            + (self.figure(node) as NSString).size(withAttributes: [.font: figure]).width
     }
 
     /// `"7.290,00 · 14,2%"`: what the node says and its share of the
