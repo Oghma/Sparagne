@@ -22,6 +22,7 @@ use crate::{
     Core, DomainError, PeriodTotals, Result,
     category::OPENING_KEY,
     query::{blob, to_fixed},
+    store::str_enum,
 };
 
 /// Income, expense and refund on one envelope for one person.
@@ -126,6 +127,12 @@ pub enum TargetKind {
     Wallet,
     Flow,
 }
+
+// `legs.target_kind`.
+str_enum!(TargetKind {
+    Wallet => "wallet",
+    Flow => "flow",
+});
 
 /// What one wallet or envelope gained or lost inside one bucket: the signed
 /// sum of its legs, transfers included, voided rows excluded. Bucket 0 of the

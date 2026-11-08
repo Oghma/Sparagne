@@ -10,6 +10,7 @@ use crate::{
     CategoryView, CommandEnvelope, Core, DomainError, FlowMode, Result,
     category::{normalize_category_display, normalize_category_key, validate_category_name},
     flow::UNALLOCATED_NAME,
+    store::str_enum,
 };
 
 pub(super) fn rename_wallet(
@@ -353,17 +354,12 @@ pub enum MergeConflictKind {
     TargetArchived,
 }
 
-impl MergeConflictKind {
-    /// Stable snake_case tag.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::SameCategory => "same_category",
-            Self::SourceSystem => "source_system",
-            Self::TargetArchived => "target_archived",
-        }
-    }
-}
+// Never stored: the strings name the conflicts in a refused merge's message.
+str_enum!(MergeConflictKind {
+    SameCategory => "same_category",
+    SourceSystem => "source_system",
+    TargetArchived => "target_archived",
+});
 
 /// One reason a merge is refused, with the name of the offending category.
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]

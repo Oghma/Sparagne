@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    Currency, DomainError, FlowMode,
+    Currency, FlowMode,
     allocation::{AllocationLine, AllocationMove, AllocationPlanPatch},
     recurring::Schedule,
+    store::str_enum,
 };
 
 /// Kind of a transaction.
@@ -21,29 +22,16 @@ pub enum TransactionKind {
     TransferFlow,
 }
 
+// `transactions.kind` and `recurring_templates.kind`.
+str_enum!(TransactionKind {
+    Income => "income",
+    Expense => "expense",
+    Refund => "refund",
+    TransferWallet => "transfer_wallet",
+    TransferFlow => "transfer_flow",
+});
+
 impl TransactionKind {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Income => "income",
-            Self::Expense => "expense",
-            Self::Refund => "refund",
-            Self::TransferWallet => "transfer_wallet",
-            Self::TransferFlow => "transfer_flow",
-        }
-    }
-
-    pub fn parse(value: &str) -> Result<Self, DomainError> {
-        match value {
-            "income" => Ok(Self::Income),
-            "expense" => Ok(Self::Expense),
-            "refund" => Ok(Self::Refund),
-            "transfer_wallet" => Ok(Self::TransferWallet),
-            "transfer_flow" => Ok(Self::TransferFlow),
-            other => Err(DomainError::Storage(format!("unknown kind '{other}'"))),
-        }
-    }
-
     /// Transfers never count in statistics.
     #[must_use]
     pub const fn is_transfer(self) -> bool {

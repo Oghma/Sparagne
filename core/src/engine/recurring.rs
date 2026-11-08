@@ -53,7 +53,7 @@ pub(super) fn create_recurring(
         params![
             env.id,
             env.vault_id,
-            spec.kind.as_str(),
+            spec.kind,
             spec.amount,
             spec.wallet_id,
             spec.flow_id,
@@ -300,7 +300,7 @@ impl Core {
             "SELECT period_date, outcome, transaction_id FROM recurring_runs
              WHERE recurring_id = ?1 ORDER BY period_date",
         )?;
-        let rows: Vec<(String, String, Option<Uuid>)> = stmt
+        let rows: Vec<(String, RunOutcome, Option<Uuid>)> = stmt
             .query_map(params![recurring_id], |r| {
                 Ok((r.get(0)?, r.get(1)?, r.get(2)?))
             })?
@@ -309,7 +309,7 @@ impl Core {
             .map(|(period_date, outcome, transaction_id)| {
                 Ok(RecurringRunView {
                     period_date: parse_date(&period_date)?,
-                    outcome: RunOutcome::parse(&outcome)?,
+                    outcome,
                     transaction_id,
                 })
             })
@@ -323,7 +323,7 @@ const TEMPLATE_COLUMNS: &str =
 /// Raw `TEMPLATE_COLUMNS` row; turned into a [`RecurringView`] by [`to_view`].
 type TemplateRow = (
     Uuid,
-    String,
+    TransactionKind,
     i64,
     Option<Uuid>,
     Option<Uuid>,
@@ -367,7 +367,7 @@ fn to_view(row: TemplateRow) -> Result<RecurringView> {
     ) = row;
     Ok(RecurringView {
         id,
-        kind: TransactionKind::parse(&kind)?,
+        kind,
         amount,
         wallet_id,
         flow_id,
@@ -448,7 +448,7 @@ fn insert_run(
         params![
             recurring_id,
             period_date.to_string(),
-            outcome.as_str(),
+            outcome,
             transaction_id,
             env.id,
             now,

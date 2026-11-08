@@ -14,6 +14,7 @@ use crate::{
     CommandEnvelope, CommandRecord, Core, Currency, DomainError, Receipt, Result,
     engine::{LogRow, apply_envelope, log_row, try_apply_envelope},
     query::log_records,
+    store::str_enum,
 };
 
 /// Body of `POST /vaults/{vault_id}/push`.
@@ -116,27 +117,14 @@ pub enum MemberRole {
     Viewer,
 }
 
+// `vault_memberships.role` in the server's database.
+str_enum!(MemberRole {
+    Owner => "owner",
+    Editor => "editor",
+    Viewer => "viewer",
+});
+
 impl MemberRole {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Owner => "owner",
-            Self::Editor => "editor",
-            Self::Viewer => "viewer",
-        }
-    }
-
-    pub fn parse(value: &str) -> Result<Self> {
-        match value {
-            "owner" => Ok(Self::Owner),
-            "editor" => Ok(Self::Editor),
-            "viewer" => Ok(Self::Viewer),
-            other => Err(DomainError::InvalidCommand(format!(
-                "unknown role '{other}'"
-            ))),
-        }
-    }
-
     #[must_use]
     pub const fn can_write(self) -> bool {
         matches!(self, Self::Owner | Self::Editor)

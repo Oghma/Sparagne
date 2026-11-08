@@ -277,7 +277,7 @@ impl Core {
                 params![
                     vault_id,
                     unallocated,
-                    TransactionKind::Income.as_str(),
+                    TransactionKind::Income,
                     OPENING_KEY,
                     after_seq
                 ],
@@ -496,7 +496,7 @@ fn decided_runs(conn: &Connection, plan_id: Uuid) -> Result<Vec<RunRow>> {
         "SELECT period_date, outcome, total, command_id, created_by
          FROM allocation_runs WHERE plan_id = ?1",
     )?;
-    let rows: Vec<(String, String, i64, Uuid, String)> = stmt
+    let rows: Vec<(String, RunOutcome, i64, Uuid, String)> = stmt
         .query_map(params![plan_id], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
         })?
@@ -506,7 +506,7 @@ fn decided_runs(conn: &Connection, plan_id: Uuid) -> Result<Vec<RunRow>> {
         .map(|(period_date, outcome, total, command_id, created_by)| {
             Ok(RunRow {
                 period_date: parse_date(&period_date)?,
-                outcome: RunOutcome::parse(&outcome)?,
+                outcome,
                 total,
                 command_id,
                 created_by,
@@ -543,7 +543,7 @@ fn insert_run(
         params![
             plan_id,
             period_date.to_string(),
-            outcome.as_str(),
+            outcome,
             total,
             env.id,
             env.author,

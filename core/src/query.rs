@@ -145,13 +145,12 @@ pub(crate) const TRANSACTION_VIEW_COLUMNS: &str = "t.id, t.kind, t.occurred_at, 
 /// [`TRANSACTION_VIEW_COLUMNS`]; the ids its legs give are left to
 /// [`load_legs`].
 pub(crate) fn transaction_view(r: &rusqlite::Row<'_>) -> rusqlite::Result<TransactionView> {
-    let kind: String = r.get(1)?;
     let at: i64 = r.get(2)?;
     let off: i32 = r.get(3)?;
     let voided_at: Option<i64> = r.get(9)?;
     Ok(TransactionView {
         id: r.get(0)?,
-        kind: TransactionKind::parse(&kind).unwrap_or(TransactionKind::Expense),
+        kind: r.get(1)?,
         occurred_at: to_fixed(at, off),
         amount: r.get(4)?,
         category_id: r.get(5)?,
@@ -177,13 +176,9 @@ pub(crate) const LEGS_SQL: &str =
 pub(crate) fn load_legs(conn: &rusqlite::Connection, views: &mut [TransactionView]) -> Result<()> {
     let mut stmt = conn.prepare(LEGS_SQL)?;
     for view in views {
-        let rows: Vec<(String, Uuid, i64)> = stmt
+        let legs: Vec<LegRow> = stmt
             .query_map(params![view.id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
-            .collect::<std::result::Result<_, _>>()?;
-        let legs: Vec<LegRow> = rows
-            .into_iter()
-            .map(|(target, id, amount)| Ok((TargetKind::parse(&target)?, id, amount)))
-            .collect::<Result<_>>()?;
+            .collect::<rusqlite::Result<_>>()?;
         let (wallet_id, flow_id, from_id, to_id) = leg_shape(view.kind, &legs);
         view.wallet_id = wallet_id;
         view.flow_id = flow_id;
@@ -334,7 +329,7 @@ impl Core {
              GROUP BY l.target_id, t.occurred_at
              ORDER BY l.target_id, t.occurred_at",
         )?;
-        let mut rows = stmt.query(params![vault_id, target.as_str()])?;
+        let mut rows = stmt.query(params![vault_id, target])?;
         let from = from.timestamp();
         // Rows come grouped by target and in time order, so `running` only
         // restarts when the target changes.

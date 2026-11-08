@@ -195,16 +195,14 @@ impl ServerDb {
 
     /// The role of an account on a vault, `None` when it is not a member.
     pub fn membership(&self, vault_id: Uuid, user_id: Uuid) -> ApiResult<Option<MemberRole>> {
-        let role: Option<String> = self
+        Ok(self
             .conn
             .query_row(
                 "SELECT role FROM vault_memberships WHERE vault_id = ?1 AND user_id = ?2",
                 params![vault_id, user_id],
                 |r| r.get(0),
             )
-            .optional()?;
-        role.map(|value| MemberRole::parse(&value).map_err(ApiError::from))
-            .transpose()
+            .optional()?)
     }
 
     /// Adds or changes a membership.
@@ -219,7 +217,7 @@ impl ServerDb {
             "INSERT INTO vault_memberships (vault_id, user_id, role, created_at)
              VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(vault_id, user_id) DO UPDATE SET role = excluded.role",
-            params![vault_id, user_id, role.as_str(), now],
+            params![vault_id, user_id, role, now],
         )?;
         Ok(())
     }
@@ -236,11 +234,8 @@ impl ServerDb {
         self.rows(
             "SELECT vault_id, role FROM vault_memberships WHERE user_id = ?1",
             params![user_id],
-            |r| Ok((r.get::<_, Uuid>(0)?, r.get::<_, String>(1)?)),
-        )?
-        .into_iter()
-        .map(|(vault_id, role)| Ok((vault_id, MemberRole::parse(&role)?)))
-        .collect()
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
     }
 
     /// Members of a vault: the owner first, then editors, then viewers.
@@ -252,15 +247,12 @@ impl ServerDb {
              ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'editor' THEN 1 ELSE 2 END,
                       lower(u.username)",
             params![vault_id],
-            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
-        )?
-        .into_iter()
-        .map(|(username, role)| {
-            Ok(MemberEntry {
-                username,
-                role: MemberRole::parse(&role)?,
-            })
-        })
-        .collect()
+            |r| {
+                Ok(MemberEntry {
+                    username: r.get(0)?,
+                    role: r.get(1)?,
+                })
+            },
+        )
     }
 }

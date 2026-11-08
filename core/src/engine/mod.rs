@@ -749,7 +749,7 @@ fn post(
         params![
             id,
             env.vault_id,
-            kind.as_str(),
+            kind,
             occurred_at.timestamp(),
             occurred_at.offset().local_minus_utc(),
             legs[1].amount.abs(),
@@ -1082,7 +1082,7 @@ fn insert_legs(tx: &Transaction<'_>, transaction_id: Uuid, legs: &[Leg]) -> Resu
     for (ordinal, leg) in (0_i64..).zip(legs) {
         tx.execute(
             "INSERT INTO legs (transaction_id, ordinal, target_kind, target_id, amount) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![transaction_id, ordinal, leg.kind.as_str(), leg.id, leg.amount],
+            params![transaction_id, ordinal, leg.kind, leg.id, leg.amount],
         )?;
     }
     Ok(())

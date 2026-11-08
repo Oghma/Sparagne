@@ -1,4 +1,5 @@
-//! SQLite connection and schema management.
+//! SQLite connection and schema management, and how the enums stored as text
+//! go in and out of their columns.
 
 use std::path::Path;
 
@@ -118,6 +119,46 @@ impl Core {
     }
 }
 
+/// `as_str`, `ToSql` and `FromSql` for an enum stored as text, all three from
+/// one table of variants and strings, so a column and the variant it names
+/// cannot drift apart. The enum keeps its own docs and derives. A string no
+/// variant names fails the read as a conversion error, which reaches the
+/// caller as [`DomainError::Storage`]. The strings live in users' databases:
+/// never change one.
+macro_rules! str_enum {
+    ($name:ident { $($variant:ident => $text:literal),+ $(,)? }) => {
+        impl $name {
+            /// The string this variant is stored as.
+            #[must_use]
+            pub const fn as_str(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $text,)+
+                }
+            }
+        }
+
+        impl rusqlite::types::ToSql for $name {
+            fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+                Ok(self.as_str().into())
+            }
+        }
+
+        impl rusqlite::types::FromSql for $name {
+            fn column_result(
+                value: rusqlite::types::ValueRef<'_>,
+            ) -> rusqlite::types::FromSqlResult<Self> {
+                match value.as_str()? {
+                    $($text => Ok(Self::$variant),)+
+                    other => Err(rusqlite::types::FromSqlError::Other(
+                        format!("unknown {} '{other}'", stringify!($name)).into(),
+                    )),
+                }
+            }
+        }
+    };
+}
+pub(crate) use str_enum;
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
@@ -126,8 +167,13 @@ mod tests {
 
     use uuid::Uuid;
 
+    use rusqlite::types::{FromSql, ToSql};
+
     use super::*;
-    use crate::{CommandEnvelope, Currency};
+    use crate::{
+        CommandEnvelope, Currency, MergeConflictKind, RunOutcome, TargetKind, TransactionKind,
+        sync::MemberRole,
+    };
 
     fn has_column(conn: &Connection, table: &str, column: &str) -> bool {
         let mut stmt = conn
@@ -296,6 +342,63 @@ mod tests {
         assert!(has_index(&conn, "ux_vaults_owner_name"));
         drop(conn);
         remove_database(&path);
+    }
+
+    /// Writes each value into a text column and reads it back, as a string
+    /// and as the enum.
+    fn round_trip<T>(cases: &[(T, &str)])
+    where
+        T: ToSql + FromSql + PartialEq + std::fmt::Debug,
+    {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE stored (value TEXT NOT NULL)")
+            .unwrap();
+        for (value, text) in cases {
+            conn.execute("DELETE FROM stored", []).unwrap();
+            conn.execute("INSERT INTO stored (value) VALUES (?1)", [value])
+                .unwrap();
+            let (raw, back): (String, T) = conn
+                .query_row("SELECT value, value FROM stored", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?))
+                })
+                .unwrap();
+            assert_eq!((raw.as_str(), &back), (*text, value));
+        }
+        let unknown = conn
+            .query_row("SELECT 'bogus'", [], |r| r.get::<_, T>(0))
+            .unwrap_err();
+        assert!(matches!(
+            DomainError::from(unknown),
+            DomainError::Storage(_)
+        ));
+    }
+
+    /// The strings every enum stored as text is written as: existing
+    /// databases hold them, so none may change.
+    #[test]
+    fn the_enums_stored_as_text_keep_their_strings() {
+        round_trip(&[
+            (TransactionKind::Income, "income"),
+            (TransactionKind::Expense, "expense"),
+            (TransactionKind::Refund, "refund"),
+            (TransactionKind::TransferWallet, "transfer_wallet"),
+            (TransactionKind::TransferFlow, "transfer_flow"),
+        ]);
+        round_trip(&[(TargetKind::Wallet, "wallet"), (TargetKind::Flow, "flow")]);
+        round_trip(&[
+            (RunOutcome::Executed, "executed"),
+            (RunOutcome::Skipped, "skipped"),
+        ]);
+        round_trip(&[
+            (MemberRole::Owner, "owner"),
+            (MemberRole::Editor, "editor"),
+            (MemberRole::Viewer, "viewer"),
+        ]);
+        round_trip(&[
+            (MergeConflictKind::SameCategory, "same_category"),
+            (MergeConflictKind::SourceSystem, "source_system"),
+            (MergeConflictKind::TargetArchived, "target_archived"),
+        ]);
     }
 
     #[test]

@@ -7,7 +7,7 @@ use chrono::{Datelike, NaiveDate, TimeDelta};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{DomainError, Result, TransactionKind};
+use crate::{DomainError, Result, TransactionKind, store::str_enum};
 
 /// Rhythm of a recurring template.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
@@ -303,24 +303,11 @@ pub enum RunOutcome {
     Skipped,
 }
 
-impl RunOutcome {
-    /// Tag stored in `recurring_runs.outcome`.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Executed => "executed",
-            Self::Skipped => "skipped",
-        }
-    }
-
-    pub fn parse(value: &str) -> Result<Self> {
-        match value {
-            "executed" => Ok(Self::Executed),
-            "skipped" => Ok(Self::Skipped),
-            other => Err(DomainError::Storage(format!("unknown outcome '{other}'"))),
-        }
-    }
-}
+// `recurring_runs.outcome` and `allocation_runs.outcome`.
+str_enum!(RunOutcome {
+    Executed => "executed",
+    Skipped => "skipped",
+});
 
 /// One handled period of a template.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]

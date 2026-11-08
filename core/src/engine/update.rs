@@ -186,26 +186,6 @@ fn amount_on(legs: &[Leg], kind: TargetKind, id: Uuid) -> i64 {
         .sum()
 }
 
-impl TargetKind {
-    /// `legs.target_kind` of this side.
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            Self::Wallet => "wallet",
-            Self::Flow => "flow",
-        }
-    }
-
-    pub(crate) fn parse(value: &str) -> Result<Self> {
-        match value {
-            "wallet" => Ok(Self::Wallet),
-            "flow" => Ok(Self::Flow),
-            other => Err(DomainError::Storage(format!(
-                "unknown leg target '{other}'"
-            ))),
-        }
-    }
-}
-
 /// One side of a transaction: a signed amount on a wallet or a flow.
 #[derive(Clone, Copy)]
 pub(super) struct Leg {
@@ -255,7 +235,7 @@ fn load_transaction(tx: &Transaction<'_>, vault_id: Uuid, id: Uuid) -> Result<Ro
             params![id, vault_id],
             |r| {
                 Ok((
-                    r.get::<_, String>(0)?,
+                    r.get::<_, TransactionKind>(0)?,
                     r.get::<_, i64>(1)?,
                     r.get::<_, i64>(2)?,
                     r.get::<_, i32>(3)?,
@@ -281,7 +261,7 @@ fn load_transaction(tx: &Transaction<'_>, vault_id: Uuid, id: Uuid) -> Result<Ro
         person,
     ) = row;
     Ok(Row {
-        kind: TransactionKind::parse(&kind)?,
+        kind,
         amount,
         occurred_at,
         occurred_offset,
@@ -295,14 +275,12 @@ fn load_transaction(tx: &Transaction<'_>, vault_id: Uuid, id: Uuid) -> Result<Ro
 
 pub(super) fn load_legs(tx: &Transaction<'_>, transaction_id: Uuid) -> Result<Vec<Leg>> {
     let mut stmt = tx.prepare(LEGS_SQL)?;
-    let rows: Vec<(String, Uuid, i64)> = stmt
+    let legs = stmt
         .query_map(params![transaction_id], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            Ok(Leg::new(r.get(0)?, r.get(1)?, r.get(2)?))
         })?
-        .collect::<std::result::Result<_, _>>()?;
-    rows.into_iter()
-        .map(|(kind, id, amount)| Ok(Leg::new(TargetKind::parse(&kind)?, id, amount)))
-        .collect()
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(legs)
 }
 
 /// The only leg of that kind; entries have exactly one wallet and one flow.
