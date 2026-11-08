@@ -160,13 +160,14 @@ enum LedgerAccessibility {
     }
 
     /// A due period as one sentence: what it is, how much, when; the two
-    /// buttons are the row's actions (`PendingRowView`).
-    static func label(for period: DuePeriod, locale: Locale = .autoupdatingCurrent) -> String {
+    /// buttons are the row's actions (`PendingRowView`). `amount` is what
+    /// Registra records (`AppStore.amount(of:)`), the template's by default.
+    static func label(for period: DuePeriod, amount: Int64? = nil, locale: Locale = .autoupdatingCurrent) -> String {
         let template = period.template
         var parts: [String] = []
         if let note = template.note, !note.isEmpty { parts.append(note) }
         if let category = template.category, !category.isEmpty { parts.append(category) }
-        parts.append(LedgerMoney.amount(template.amount))
+        parts.append(LedgerMoney.amount(amount ?? template.amount))
         if let day = CoreDate.localDay(period.date) {
             parts.append(day.formatted(Date.FormatStyle(locale: locale).day().month(.wide)))
         }
@@ -782,8 +783,10 @@ struct PendingRowView: View {
                 }
                 .disabled(working)
             }
+            // What Registra records: a loan's installment for that date, or
+            // the template's amount.
             GridCell(width: columns[.amount], alignment: .trailing) {
-                Text(LedgerMoney.bare(template.amount))
+                Text(LedgerMoney.bare(store.amount(of: period)))
             }
             // The template's owner: the row is theirs, whoever records it.
             GridCell(width: columns[.person]) {
@@ -800,7 +803,7 @@ struct PendingRowView: View {
         // One sentence and two actions for VoiceOver, as a stored row reads
         // as one sentence with its menu's actions.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(LedgerAccessibility.label(for: period))
+        .accessibilityLabel(LedgerAccessibility.label(for: period, amount: store.amount(of: period)))
         .accessibilityActions {
             if !store.isReadOnly, !working {
                 if !ownerLeft {

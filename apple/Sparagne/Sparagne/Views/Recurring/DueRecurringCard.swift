@@ -40,6 +40,7 @@ struct DueRecurringCard: View {
 
     private func row(_ period: DuePeriod, names: NameBook) -> some View {
         let template = period.template
+        let amount = RecurringAmount.text(template, amount: store.amount(of: period))
         return HStack(spacing: 10) {
             Image(systemName: "arrow.triangle.2.circlepath")
                 .font(.system(size: 12, weight: .medium))
@@ -63,11 +64,13 @@ struct DueRecurringCard: View {
             }
             .lineLimit(1)
             .frame(minWidth: 160, maxWidth: .infinity, alignment: .leading)
-            Text(RecurringAmount.text(template))
+            // What Registra records: a loan's installment for that date, or
+            // the template's amount.
+            Text(amount)
                 .fontWeight(.semibold)
                 .foregroundStyle(RecurringAmount.color(template))
                 .frame(width: 100, alignment: .trailing)
-                .accessibilityLabel("\(RecurringAmount.text(template)), \(DueRecurringText.kind(template.kind))")
+                .accessibilityLabel("\(amount), \(DueRecurringText.kind(template.kind))")
             if store.canWrite {
                 let ownerLeft = store.ownerHasLeft(template)
                 HStack(spacing: 6) {

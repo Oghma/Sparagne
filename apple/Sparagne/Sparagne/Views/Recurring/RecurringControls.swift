@@ -246,8 +246,11 @@ private struct AccentOutlineBody: View {
 /// Amounts as the tab writes them: income with its plus, and in the agenda expenses with their minus.
 enum RecurringAmount {
     /// The table and "Da confermare": an expense bare, an income `+`.
-    static func text(_ template: RecurringView) -> String {
-        template.kind == .income ? "+" + LedgerMoney.bare(template.amount) : LedgerMoney.bare(template.amount)
+    /// `amount` is a due period's own (`AppStore.amount(of:)`), the
+    /// template's by default.
+    static func text(_ template: RecurringView, amount: Int64? = nil) -> String {
+        let value = LedgerMoney.bare(amount ?? template.amount)
+        return template.kind == .income ? "+" + value : value
     }
 
     /// An agenda tile: `−60,00` or `+2.400,00`.

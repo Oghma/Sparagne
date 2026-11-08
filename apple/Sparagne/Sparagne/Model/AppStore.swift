@@ -312,7 +312,12 @@ final class AppStore {
     private(set) var loanOverview: [LoanOverview] = []
     /// The amount a linked template's due date is recorded with, by template
     /// and due date: what `execution()` sends as `ExecuteRecurring.amount`.
-    private(set) var linkedInstallments: [LinkedInstallment] = []
+    private(set) var linkedInstallments: [LinkedInstallment] = [] {
+        didSet { installmentsByPeriod = LinkedInstallment.index(linkedInstallments) }
+    }
+    /// `linkedInstallments` by `DuePeriod.id`, for `installmentAmount`, which
+    /// every due row asks.
+    private(set) var installmentsByPeriod: [String: Int64] = [:]
 
     /// The plan's decided periods, most recent first. Written only by the
     /// loader in `AppStore+Allocation.swift`, hence not `private(set)`.
@@ -1406,12 +1411,17 @@ final class AppStore {
     /// the command rather than being read when it is applied: a later change
     /// of owner must not rewrite on replay what was recorded before it. The
     /// author is left out, as on any row of theirs.
+    ///
+    /// A loan's template records the schedule's installment for that due
+    /// date (`installmentAmount`), carried in the command for the same
+    /// reason; any other period, the template's amount (`nil`).
     private func execution(_ recurringId: Uuid, owner: String?, periodDate: NaiveDate, now: Date) -> Command {
         .executeRecurring(
             recurringId: recurringId,
             periodDate: periodDate,
             occurredAt: Self.stamp(day: CoreDate.localDay(periodDate) ?? now, likeTimeOf: now),
-            person: explicitPerson(owner)
+            person: explicitPerson(owner),
+            amount: installmentAmount(recurringId: recurringId, periodDate: periodDate)
         )
     }
 
