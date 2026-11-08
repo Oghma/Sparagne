@@ -359,6 +359,27 @@ struct AppStoreTests {
         #expect(store.savedAt != afterCategory)
     }
 
+    @Test("A wallet or an envelope under a name already taken is refused: the create says so, the alert is up and the lists stay as they were")
+    func takenNamesAreRefused() async throws {
+        let store = try await Self.onboarded()
+        let created = await store.createEnvelope(name: "Vacanze", mode: .unlimited, allowNegative: false, openingAllocation: 0)
+        #expect(created)
+        #expect(store.presentedError == nil)
+        let flows = store.flows.count
+
+        let again = await store.createEnvelope(name: "Vacanze", mode: .unlimited, allowNegative: false, openingAllocation: 0)
+        #expect(!again)
+        #expect(store.presentedError?.code == "already_exists")
+        #expect(store.flows.count == flows)
+
+        store.presentedError = nil
+        let wallets = store.wallets.count
+        let taken = await store.createWallet(name: "Cash", openingBalance: 0)
+        #expect(!taken)
+        #expect(store.presentedError?.code == "already_exists")
+        #expect(store.wallets.count == wallets)
+    }
+
     @Test("Updating an envelope's cap shows up in the snapshot")
     func updatingAnEnvelopeChangesTheCapInTheSnapshot() async throws {
         let store = try await Self.onboarded()

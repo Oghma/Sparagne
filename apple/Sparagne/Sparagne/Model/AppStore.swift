@@ -1002,11 +1002,18 @@ final class AppStore {
         await write(.deleteVault, in: vaultId) { try await adoptVaultList() }
     }
 
-    func createWallet(name: String, openingBalance: Int64) async {
-        await command(.createWallet(name: name, openingBalance: openingBalance, occurredAt: CoreDate.offset(Date())))
+    /// `true` when the core took it. A refusal (a name already taken) is up
+    /// as the alert and the caller keeps what was typed.
+    @discardableResult
+    func createWallet(name: String, openingBalance: Int64) async -> Bool {
+        await command(.createWallet(name: name, openingBalance: openingBalance, occurredAt: CoreDate.offset(Date()))) != nil
     }
 
-    func createEnvelope(name: String, mode: FlowMode, allowNegative: Bool, openingAllocation: Int64) async {
+    /// `true` when the core took it. A refusal (a name already taken, an
+    /// allocation larger than Unallocated) is up as the alert and the caller
+    /// keeps what was typed.
+    @discardableResult
+    func createEnvelope(name: String, mode: FlowMode, allowNegative: Bool, openingAllocation: Int64) async -> Bool {
         await command(
             .createFlow(
                 name: name,
@@ -1015,7 +1022,7 @@ final class AppStore {
                 openingAllocation: openingAllocation,
                 occurredAt: CoreDate.offset(Date())
             )
-        )
+        ) != nil
     }
 
     // MARK: - Wallet and envelope management

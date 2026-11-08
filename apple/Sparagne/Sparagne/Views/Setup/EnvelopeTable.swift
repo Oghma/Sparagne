@@ -363,13 +363,13 @@ struct EnvelopeTable: View {
     private func commitNewLine() async {
         do {
             guard let entry = try newLine.envelope(currency: store.currency) else { return }
-            await store.createEnvelope(
+            let created = await store.createEnvelope(
                 name: entry.name,
                 mode: entry.mode,
                 allowNegative: entry.allowNegative,
                 openingAllocation: entry.allocation
             )
-            if store.flows.contains(where: { $0.name == entry.name }) {
+            if created {
                 newLine = EnvelopeDraft()
             }
             focus = EnvelopeCell(row: nil, field: .name)

@@ -220,9 +220,7 @@ struct WalletTable: View {
     private func commitNewLine() async {
         do {
             guard let entry = try newLine.wallet(currency: store.currency) else { return }
-            let before = Set(store.wallets.map(\.id))
-            await store.createWallet(name: entry.name, openingBalance: entry.opening)
-            if store.wallets.contains(where: { !before.contains($0.id) }) {
+            if await store.createWallet(name: entry.name, openingBalance: entry.opening) {
                 newLine = WalletDraft()
             }
             focus = WalletCell(row: nil, field: .name)
