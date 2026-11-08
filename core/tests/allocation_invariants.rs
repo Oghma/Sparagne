@@ -1449,6 +1449,21 @@ fn every_refused_execution_leaves_no_transaction_no_run_and_no_balance_change() 
     for (what, code, cmd) in cases {
         refused_as(&mut fx, what, code, cmd);
     }
+    // Before its start the plan has no period to decide.
+    let before_start = day(2025, 12, 1);
+    for (what, cmd) in [
+        (
+            "an execution before the start",
+            execute_cmd(plan, before_start, total, &[(open, 100)]),
+        ),
+        ("a skip before the start", skip_cmd(plan, before_start)),
+    ] {
+        assert_eq!(
+            refused(&mut fx, what, cmd),
+            DomainError::InvalidCommand("period_date is not a due date".to_string()),
+            "{what}"
+        );
+    }
     refused_as(
         &mut fx,
         "skip of an unknown plan",
@@ -1488,8 +1503,16 @@ fn a_refused_plan_leaves_the_vault_without_one_and_a_second_plan_is_refused() {
     let a = envelope(&mut fx, "A", FlowMode::Unlimited);
     let b = envelope(&mut fx, "B", FlowMode::NetCapped { cap: 100 });
     let schedule = monthly_from(1, start());
-    let mut bad_schedule = schedule;
-    bad_schedule.interval = 0;
+    let mut no_interval = schedule;
+    no_interval.interval = 0;
+    let mut ends_first = schedule;
+    ends_first.end_date = Some(day(2025, 12, 31));
+    let broken_schedules = [
+        ("no interval", no_interval),
+        ("day 0 of the month", monthly_from(0, start())),
+        ("day 32 of the month", monthly_from(32, start())),
+        ("an end before the start", ends_first),
+    ];
     let cases = [
         ("no lines", "invalid_command", plan_cmd(schedule, vec![])),
         (
@@ -1527,14 +1550,14 @@ fn a_refused_plan_leaves_the_vault_without_one_and_a_second_plan_is_refused() {
             "not_found",
             plan_cmd(schedule, vec![fixed(Uuid::now_v7(), 10)]),
         ),
-        (
-            "a broken schedule",
-            "invalid_command",
-            plan_cmd(bad_schedule, vec![fixed(a, 10)]),
-        ),
     ];
     for (what, code, cmd) in cases {
         refused_as(&mut fx, what, code, cmd);
+        assert_eq!(fx.core.allocation_plan(fx.vault).unwrap(), None, "{what}");
+    }
+    for (what, broken) in broken_schedules {
+        let cmd = plan_cmd(broken, vec![fixed(a, 10)]);
+        refused_as(&mut fx, what, "invalid_command", cmd);
         assert_eq!(fx.core.allocation_plan(fx.vault).unwrap(), None, "{what}");
     }
 
@@ -1580,14 +1603,6 @@ fn a_refused_plan_leaves_the_vault_without_one_and_a_second_plan_is_refused() {
                 ..AllocationPlanPatch::default()
             },
         ),
-        (
-            "a broken schedule",
-            "invalid_command",
-            AllocationPlanPatch {
-                schedule: Some(bad_schedule),
-                ..AllocationPlanPatch::default()
-            },
-        ),
     ] {
         refused_as(&mut fx, what, code, update_plan_cmd(plan.id, patch));
         assert_eq!(
@@ -1595,6 +1610,14 @@ fn a_refused_plan_leaves_the_vault_without_one_and_a_second_plan_is_refused() {
             Some(plan.clone()),
             "{what}"
         );
+    }
+    for (what, broken) in broken_schedules {
+        let patch = AllocationPlanPatch {
+            schedule: Some(broken),
+            ..AllocationPlanPatch::default()
+        };
+        let cmd = update_plan_cmd(plan.id, patch);
+        refused_as(&mut fx, what, "invalid_command", cmd);
     }
     refused_as(
         &mut fx,
