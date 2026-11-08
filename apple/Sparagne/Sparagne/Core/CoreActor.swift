@@ -89,6 +89,14 @@ actor CoreActor {
         return try body(handle)
     }
 
+    /// Any read the core answers in one call, such as
+    /// `core.read { try $0.snapshot(vaultId: id) }`. Writes go through the
+    /// methods below, which refuse a read-only vault and tell the engine.
+    @discardableResult
+    func read<T: Sendable>(_ body: @Sendable (CoreHandle) throws -> T) async rethrows -> T {
+        try await visit(body)
+    }
+
     /// Whether the core is being called from the main thread. Always false in
     /// the app: the tests assert it to keep the core off the UI thread.
     func runsOnTheMainThread() async -> Bool {
@@ -210,50 +218,8 @@ actor CoreActor {
     }
 
     // MARK: - Reads
-
-    func vaults() async throws -> [VaultView] {
-        try await visit { try $0.vaults() }
-    }
-
-    /// The vaults a `DeleteVault` removed whose log is still here. Their
-    /// outbox has to reach the server like any other, the deletion first of
-    /// all.
-    func deletedVaults() async throws -> [Uuid] {
-        try await visit { try $0.deletedVaults() }
-    }
-
-    func snapshot(vaultId: Uuid) async throws -> VaultSnapshot {
-        try await visit { try $0.snapshot(vaultId: vaultId) }
-    }
-
-    /// Each flow's balance at `from`, or each wallet's by `target`, and the
-    /// lowest and highest it reaches afterwards, for a transfer dated then.
-    func balanceRanges(vaultId: Uuid, from: UtcDateTime, target: TargetKind) async throws -> [BalanceRange] {
-        try await visit { try $0.balanceRanges(vaultId: vaultId, from: from, target: target) }
-    }
-
-    func aliases(vaultId: Uuid) async throws -> [AliasView] {
-        try await visit { try $0.aliases(vaultId: vaultId) }
-    }
-
-    /// Active categories whose name is close to `name`, for the "similar
-    /// categories" hint while typing a new one: it suggests, it never
-    /// blocks.
-    func similarCategories(vaultId: Uuid, name: String) async throws -> [CategoryView] {
-        try await visit { try $0.similarCategories(vaultId: vaultId, name: name) }
-    }
-
-    /// Ids of the categories, wallets and envelopes used most recently, most
-    /// recent first: the "recent" tier of pickers and completions.
-    func recentUsage(vaultId: Uuid, since: UtcDateTime, limit: UInt32) async throws -> RecentUsage {
-        try await visit { try $0.recentUsage(vaultId: vaultId, since: since, limit: limit) }
-    }
-
-    /// Per-category totals over `[from, to)` for everybody, each with the
-    /// number of rows behind it: the usage column of the SETUP categories.
-    func categoryTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime) async throws -> [CategoryTotals] {
-        try await visit { try $0.categoryTotals(vaultId: vaultId, from: from, to: to, person: nil) }
-    }
+    //
+    // Everything else is a `read`; the statement import calls these two by name.
 
     /// The category each note was filed under before, one entry per note.
     func suggestCategories(
@@ -305,36 +271,6 @@ actor CoreActor {
         await visit { _ in
             SparagneCore.statementColumnValues(text: text, delimiter: delimiter, column: column)
         }
-    }
-
-    /// What `MergeCategory` would refuse, without changing anything.
-    func previewMerge(vaultId: Uuid, sourceId: Uuid, targetId: Uuid) async throws -> MergePreview {
-        try await visit { try $0.previewMerge(vaultId: vaultId, sourceId: sourceId, targetId: targetId) }
-    }
-
-    /// The periods of one template already recorded or skipped, oldest first.
-    func recurringRuns(vaultId: Uuid, recurringId: Uuid) async throws -> [RecurringRunView] {
-        try await visit { try $0.recurringRuns(vaultId: vaultId, recurringId: recurringId) }
-    }
-
-    /// `lines` worked out on `total` against the envelopes as they are now;
-    /// the lines may be a draft nobody saved.
-    func previewAllocation(vaultId: Uuid, lines: [AllocationLine], total: Int64) async throws -> AllocationPreview {
-        try await visit { try $0.previewAllocation(vaultId: vaultId, lines: lines, total: total) }
-    }
-
-    /// The plan's decided periods, the most recent first.
-    func allocationRuns(vaultId: Uuid, limit: UInt32) async throws -> [AllocationRunView] {
-        try await visit { try $0.allocationRuns(vaultId: vaultId, limit: limit) }
-    }
-
-    func transactions(
-        vaultId: Uuid,
-        filter: TransactionFilter,
-        limit: UInt32,
-        cursor: String?
-    ) async throws -> Page {
-        try await visit { try $0.listTransactions(vaultId: vaultId, filter: filter, limit: limit, cursor: cursor) }
     }
 
     /// Turns a parsed quick-add line into a command plus the ids its names
@@ -477,29 +413,6 @@ actor CoreActor {
     // The core writes and reads every sync body; `SyncEngine` only carries
     // the strings to the server and back.
 
-    func syncState(vaultId: Uuid) async throws -> SyncState {
-        try await visit { try $0.syncState(vaultId: vaultId) }
-    }
-
-    /// The body of `POST /vaults/{id}/push`: at most `limit` commands of the
-    /// outbox, in local order. The engine pushes again while the outbox is
-    /// not empty.
-    func pushRequestJson(vaultId: Uuid, limit: UInt32) async throws -> String {
-        try await visit { try $0.pushRequestJson(vaultId: vaultId, limit: limit) }
-    }
-
-    @discardableResult
-    func applyPushResponse(vaultId: Uuid, json: String) async throws -> SyncReport {
-        try await visit { try $0.applyPushResponseJson(vaultId: vaultId, json: json) }
-    }
-
-    /// Folds a pull into the log; the core rebases when it has to, and
-    /// creates the vault when this is a join.
-    @discardableResult
-    func integratePull(vaultId: Uuid, json: String) async throws -> SyncReport {
-        try await visit { try $0.integratePullJson(vaultId: vaultId, json: json) }
-    }
-
     /// After a login: every vault's outbox is re-signed with the account's
     /// username, the deleted vaults' included, or
     /// their deletion would be refused as another author's for ever.
@@ -511,28 +424,7 @@ actor CoreActor {
         }
     }
 
-    /// Refuses the whole outbox locally, as if the server had: what a push
-    /// that came back `403` does, so the vault keeps pulling.
-    @discardableResult
-    func rejectOutbox(vaultId: Uuid, code: String, message: String) async throws -> SyncReport {
-        try await visit { try $0.rejectOutbox(vaultId: vaultId, code: code, message: message) }
-    }
-
-    /// Drops a vault from this device without telling the server: after
-    /// leaving it, or once a deletion has reached the server. Returns how
-    /// many outbox commands were thrown away.
-    @discardableResult
-    func forgetVault(_ vaultId: Uuid) async throws -> UInt32 {
-        try await visit { try $0.forgetVault(vaultId: vaultId) }
-    }
-
     // MARK: - Maintenance
-
-    /// A consistent copy of the whole database at `path`, which must not
-    /// exist yet.
-    func backup(to path: String) async throws {
-        try await visit { try $0.backupTo(path: path) }
-    }
 
     /// The outbox count over every vault and everything still held as
     /// rejected: what the top bar's sync pill and the rejections sheet show.

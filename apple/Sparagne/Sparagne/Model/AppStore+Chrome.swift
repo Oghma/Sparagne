@@ -77,12 +77,9 @@ extension AppStore {
         do {
             var cursor: String?
             repeat {
-                let page = try await core.transactions(
-                    vaultId: vault.id,
-                    filter: filter,
-                    limit: Self.pageSize,
-                    cursor: cursor
-                )
+                let page = try await core.read { [cursor, limit = Self.pageSize] in
+                    try $0.listTransactions(vaultId: vault.id, filter: filter, limit: limit, cursor: cursor)
+                }
                 if let row = page.items.first(where: { TransactionRow.isUncategorized($0.category, isSystem: $0.categoryIsSystem) }) {
                     reveal(
                         transactionId: row.id,

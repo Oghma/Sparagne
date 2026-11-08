@@ -157,7 +157,7 @@ enum StatementFixture {
     ) async throws -> [TransactionView] {
         let vaultId = try #require(store.currentVault?.id, sourceLocation: sourceLocation)
         let filter = TransactionFilter(includeVoided: voided, includeTransfers: true, ascending: true)
-        return try await store.core.transactions(vaultId: vaultId, filter: filter, limit: 500, cursor: nil).items
+        return try await store.core.read { try $0.listTransactions(vaultId: vaultId, filter: filter, limit: 500, cursor: nil) }.items
     }
 
     // MARK: - The review

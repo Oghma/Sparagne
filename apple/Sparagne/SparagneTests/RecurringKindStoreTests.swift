@@ -60,7 +60,8 @@ struct RecurringKindStoreTests {
     }
 
     private static func outbox(_ store: AppStore) async throws -> UInt32 {
-        try await store.core.syncState(vaultId: try #require(store.currentVault).id).outbox
+        let vaultId = try #require(store.currentVault).id
+        return try await store.core.read { try $0.syncState(vaultId: vaultId) }.outbox
     }
 
     // MARK: - The change

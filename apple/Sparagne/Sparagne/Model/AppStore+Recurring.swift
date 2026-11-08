@@ -67,7 +67,7 @@ extension AppStore {
     /// being edited. Empty without a vault, or when the core refuses.
     func handledPeriods(of templateId: Uuid) async -> Set<NaiveDate> {
         guard let vault = currentVault else { return [] }
-        let runs = (try? await core.recurringRuns(vaultId: vault.id, recurringId: templateId)) ?? []
+        let runs = (try? await core.read { try $0.recurringRuns(vaultId: vault.id, recurringId: templateId) }) ?? []
         return Set(runs.map(\.periodDate))
     }
 

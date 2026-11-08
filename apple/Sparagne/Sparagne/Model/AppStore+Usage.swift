@@ -29,11 +29,10 @@ extension AppStore {
             return
         }
         let window = CategoryUsage.window(endingAt: now)
-        guard let totals = try? await core.categoryTotals(
-            vaultId: vault.id,
-            from: CoreDate.utcString(window.start),
-            to: CoreDate.utcString(window.end)
-        ), currentVault?.id == vault.id else { return }
+        let from = CoreDate.utcString(window.start), to = CoreDate.utcString(window.end)
+        guard let totals = try? await core.read({ try $0.categoryTotals(vaultId: vault.id, from: from, to: to, person: nil) }),
+              currentVault?.id == vault.id
+        else { return }
         categoryUsage = CategoryUsage.counts(from: totals)
     }
 }

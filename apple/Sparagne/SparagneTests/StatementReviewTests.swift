@@ -36,7 +36,8 @@ struct StatementReviewTests {
     private static func duplicate(_ model: StatementImportModel, in store: AppStore) async throws -> StatementRow {
         var row = try StatementFixture.row(model, line: 2)
         row.status = .possibleDuplicate
-        row.existing = try #require(try await StatementFixture.transactions(store).first { $0.note == "Forno bianco" })
+        let existing = try #require(try await StatementFixture.transactions(store).first { $0.note == "Forno bianco" })
+        row.existing = existing
         row.matchChoice = .skip
         return row
     }

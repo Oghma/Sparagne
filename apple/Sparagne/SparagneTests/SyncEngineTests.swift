@@ -390,7 +390,8 @@ private struct Peer {
     var vaultId: Uuid? { store.currentVault?.id }
 
     func syncState() async throws -> SyncState {
-        try await core.syncState(vaultId: #require(vaultId))
+        let vaultId = try #require(vaultId)
+        return try await core.read { try $0.syncState(vaultId: vaultId) }
     }
 
     /// Names and balances of the wallets and envelopes, for comparing two
@@ -512,8 +513,8 @@ struct SyncEngineTests {
         await other.engine.logIn(username: "alice", password: "supersecret")
 
         #expect(other.account.isLoggedIn)
-        #expect(try await other.core.syncState(vaultId: twin).outbox == 0)
-        #expect(try await other.core.syncState(vaultId: twin).lastServerSeq > 0)
+        #expect(try await other.core.read { try $0.syncState(vaultId: twin) }.outbox == 0)
+        #expect(try await other.core.read { try $0.syncState(vaultId: twin) }.lastServerSeq > 0)
     }
 
     @Test("An editor joins a shared vault and gets the same snapshot")
@@ -767,7 +768,7 @@ struct SyncEngineTests {
         #expect(peer.store.currentVault?.id == beta)
         await peer.engine.syncNow()
 
-        #expect(try await peer.core.syncState(vaultId: beta).outbox == 0)
+        #expect(try await peer.core.read { try $0.syncState(vaultId: beta) }.outbox == 0)
         switch peer.engine.status {
         case .error(let text): #expect(text.contains(ErrorMessages.summary(for: "invalid_command")))
         default: Issue.record("expected an error status, got \(peer.engine.status)")
@@ -926,7 +927,7 @@ struct SyncEngineTests {
 
         #expect(peer.engine.status == .idle)
         #expect(peer.engine.pendingCount == 0)
-        #expect(try await peer.core.syncState(vaultId: vaultId).outbox == 0)
+        #expect(try await peer.core.read { try $0.syncState(vaultId: vaultId) }.outbox == 0)
         #expect(try await server.vault(ofVault: vaultId) == nil)
         #expect(peer.engine.serverVaults.isEmpty)
         // Nothing came back: with no vault listed there is nothing to join.
@@ -957,7 +958,7 @@ struct SyncEngineTests {
         #expect(bob.store.needsOnboarding)
         #expect(bob.store.vaults.isEmpty)
         #expect(bob.engine.status == .idle)
-        #expect(try await bob.core.syncState(vaultId: vaultId).outbox == 0)
+        #expect(try await bob.core.read { try $0.syncState(vaultId: vaultId) }.outbox == 0)
         // The milk was refused by a server that no longer had the vault, and
         // is still listed under the vault it can no longer name.
         let refused = try #require(bob.engine.rejected.first)
@@ -971,9 +972,9 @@ struct SyncEngineTests {
         #expect(bob.engine.rejected.isEmpty)
         // With nothing left to send or to read, the next round lets the
         // deleted vault's log go.
-        #expect(try await bob.core.deletedVaults() == [vaultId])
+        #expect(try await bob.core.read { try $0.deletedVaults() } == [vaultId])
         await bob.engine.syncNow()
-        #expect(try await bob.core.deletedVaults().isEmpty)
+        #expect(try await bob.core.read { try $0.deletedVaults() }.isEmpty)
         #expect(bob.store.vaults.isEmpty)
     }
 
@@ -982,20 +983,20 @@ struct SyncEngineTests {
         let (_, alice, bob, vaultId) = try await Self.shared()
 
         await alice.store.deleteVault(vaultId)
-        #expect(try await alice.core.deletedVaults() == [vaultId])
+        #expect(try await alice.core.read { try $0.deletedVaults() } == [vaultId])
         await alice.engine.syncNow()
         await bob.engine.syncNow()
 
         // Both logs are gone, and nothing joins the vault back.
         for peer in [alice, bob] {
-            #expect(try await peer.core.deletedVaults().isEmpty)
-            #expect(try await peer.core.syncState(vaultId: vaultId).lastServerSeq == 0)
+            #expect(try await peer.core.read { try $0.deletedVaults() }.isEmpty)
+            #expect(try await peer.core.read { try $0.syncState(vaultId: vaultId) }.lastServerSeq == 0)
             #expect(peer.engine.role(forVault: vaultId) == nil)
             #expect(peer.engine.status == .idle)
         }
         await alice.engine.syncNow()
         #expect(alice.store.vaults.isEmpty)
-        #expect(try await alice.core.syncState(vaultId: vaultId).lastServerSeq == 0)
+        #expect(try await alice.core.read { try $0.syncState(vaultId: vaultId) }.lastServerSeq == 0)
     }
 
     @Test("A vault no longer shared is kept read-only and marked, never dropped behind the user's back")
@@ -1029,7 +1030,7 @@ struct SyncEngineTests {
         try await bob.engine.removeFromThisMac(vaultId)
         #expect(bob.store.vaults.isEmpty)
         #expect(bob.store.needsOnboarding)
-        #expect(try await bob.core.vaults().isEmpty)
+        #expect(try await bob.core.read { try $0.vaults() }.isEmpty)
         #expect(!bob.engine.hasLostAccess(to: vaultId))
         #expect(bob.store.readOnlyVaultIds.isEmpty)
     }
@@ -1066,8 +1067,8 @@ struct SyncEngineTests {
         #expect(await server.role(of: "bob", inVault: vaultId) == nil)
         #expect(bob.store.vaults.isEmpty)
         #expect(bob.store.needsOnboarding)
-        #expect(try await bob.core.vaults().isEmpty)
-        #expect(try await bob.core.syncState(vaultId: vaultId).lastServerSeq == 0)
+        #expect(try await bob.core.read { try $0.vaults() }.isEmpty)
+        #expect(try await bob.core.read { try $0.syncState(vaultId: vaultId) }.lastServerSeq == 0)
         #expect(bob.engine.role(forVault: vaultId) == nil)
         #expect(bob.engine.serverVaults.isEmpty)
         #expect(bob.engine.pendingCount == 0)
@@ -1189,12 +1190,12 @@ struct SyncEngineTests {
         let vaultId = try #require(peer.vaultId)
         await peer.store.deleteVault(vaultId)
         #expect(peer.store.needsOnboarding)
-        #expect(try await peer.core.syncState(vaultId: vaultId).outbox == 4)
+        #expect(try await peer.core.read { try $0.syncState(vaultId: vaultId) }.outbox == 4)
 
         await peer.engine.register(username: "alice", password: "supersecret")
 
         #expect(peer.engine.status == .idle)
-        #expect(try await peer.core.syncState(vaultId: vaultId).outbox == 0)
+        #expect(try await peer.core.read { try $0.syncState(vaultId: vaultId) }.outbox == 0)
         #expect(try await server.vault(ofVault: vaultId) == nil)
         #expect(try await server.lastSeq(ofVault: vaultId) == 4)
         #expect(peer.engine.serverVaults.isEmpty)

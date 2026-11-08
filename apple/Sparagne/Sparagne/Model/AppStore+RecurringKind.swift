@@ -84,7 +84,7 @@ extension AppStore {
             return .failure(.archived)
         }
         if ownerHasLeft(template) { return .failure(.ownerLeft) }
-        let runs = try await core.recurringRuns(vaultId: vault.id, recurringId: templateId)
+        let runs = try await core.read { try $0.recurringRuns(vaultId: vault.id, recurringId: templateId) }
         let decided = Set(runs.map(\.periodDate))
         let undecided = try RecurringNext.due(
             schedule: template.schedule,

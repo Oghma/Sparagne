@@ -47,7 +47,7 @@ struct DefaultCategoriesTests {
         let vault = try #require(store.currentVault)
 
         let aliases = list.map(\.aliases.count).reduce(0, +)
-        #expect(try await store.core.syncState(vaultId: vault.id).outbox == UInt32(2 + list.count + aliases))
+        #expect(try await store.core.read { try $0.syncState(vaultId: vault.id) }.outbox == UInt32(2 + list.count + aliases))
     }
 
     @Test("A vault made without a wallet still gets its categories")

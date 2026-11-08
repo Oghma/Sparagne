@@ -228,7 +228,7 @@ struct PeopleTests {
     /// server will read them.
     private static func outbox(_ store: AppStore) async throws -> [[String: Any]] {
         let vault = try #require(store.currentVault)
-        let json = try await store.core.pushRequestJson(vaultId: vault.id, limit: 500)
+        let json = try await store.core.read { try $0.pushRequestJson(vaultId: vault.id, limit: 500) }
         let body = try #require(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
         let envelopes = try #require(body["commands"] as? [[String: Any]])
         return envelopes.compactMap { $0["command"] as? [String: Any] }

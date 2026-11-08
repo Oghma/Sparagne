@@ -27,7 +27,8 @@ extension AppStore {
             allocationRuns = []
             return
         }
-        guard let runs = try? await core.allocationRuns(vaultId: vault.id, limit: Self.allocationRunsLimit),
+        let limit = Self.allocationRunsLimit
+        guard let runs = try? await core.read({ try $0.allocationRuns(vaultId: vault.id, limit: limit) }),
               currentVault?.id == vault.id
         else { return }
         allocationRuns = runs
@@ -38,7 +39,7 @@ extension AppStore {
     /// what they would get.
     func previewAllocation(lines: [AllocationLine], total: Int64) async -> AllocationPreview? {
         guard let vault = currentVault else { return nil }
-        return try? await core.previewAllocation(vaultId: vault.id, lines: lines, total: total)
+        return try? await core.read { try $0.previewAllocation(vaultId: vault.id, lines: lines, total: total) }
     }
 
     // MARK: - The plan
@@ -95,7 +96,7 @@ extension AppStore {
         else { return }
         let preview: AllocationPreview
         do {
-            preview = try await core.previewAllocation(vaultId: vault.id, lines: lines ?? plan.lines, total: total)
+            preview = try await core.read { try $0.previewAllocation(vaultId: vault.id, lines: lines ?? plan.lines, total: total) }
         } catch {
             report(error)
             return

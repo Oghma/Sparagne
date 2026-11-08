@@ -61,8 +61,8 @@ struct VaultLifecycleTests {
         #expect(store.snapshot == nil)
         // The log survives the projection, the deletion at its end: vault,
         // wallet, pizza, delete.
-        #expect(try await store.core.deletedVaults() == [vault.id])
-        #expect(try await store.core.syncState(vaultId: vault.id).outbox == 4)
+        #expect(try await store.core.read { try $0.deletedVaults() } == [vault.id])
+        #expect(try await store.core.read { try $0.syncState(vaultId: vault.id) }.outbox == 4)
 
         // Onboarding again works, and the old name is free.
         await store.createVault(name: "Main", walletName: "Cash", openingBalance: 0)
@@ -118,7 +118,7 @@ struct VaultLifecycleTests {
         #expect(store.presentedError?.code == "forbidden")
         #expect(store.currentVault?.id == vault.id)
         #expect(store.vaults.count == 1)
-        #expect(try await store.core.deletedVaults().isEmpty)
+        #expect(try await store.core.read { try $0.deletedVaults() }.isEmpty)
 
         store.presentedError = nil
         await store.renameVault(vault.id, name: "Casa")
@@ -147,7 +147,7 @@ struct VaultLifecycleTests {
         await store.renameVault(vault.id, name: "Casa")
         #expect(store.presentedError?.code == "forbidden")
         #expect(store.currentVault?.name == "Main")
-        #expect(try await core.syncState(vaultId: vault.id).outbox == 2)
+        #expect(try await core.read { try $0.syncState(vaultId: vault.id) }.outbox == 2)
 
         // A new vault is not a write to that one.
         store.presentedError = nil
@@ -156,7 +156,7 @@ struct VaultLifecycleTests {
 
         await core.setReadOnlyVaults([])
         try await core.execute(vaultId: vault.id, .renameVault(name: "Casa"))
-        #expect(try await core.vaults().contains { $0.name == "Casa" })
+        #expect(try await core.read { try $0.vaults() }.contains { $0.name == "Casa" })
     }
 
     @Test("A repeated name is found whatever its case, and lists tell the two vaults apart by owner")

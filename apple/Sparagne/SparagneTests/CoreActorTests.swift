@@ -26,7 +26,7 @@ struct CoreActorTests {
         #expect(await core.runsOnTheMainThread() == false)
 
         // And the same for a real query made from the main actor.
-        _ = try await core.vaults()
+        _ = try await core.read { try $0.vaults() }
         #expect(await gate.calls > 0)
         #expect(await gate.sawMainThread == false)
     }

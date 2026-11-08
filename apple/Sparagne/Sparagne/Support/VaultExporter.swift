@@ -28,7 +28,7 @@ nonisolated enum VaultExporter {
         let staging = manager.temporaryDirectory
             .appending(path: "Sparagne-backup-\(UUID().uuidString).sqlite", directoryHint: .notDirectory)
         defer { try? manager.removeItem(at: staging) }
-        try await core.backup(to: staging.path(percentEncoded: false))
+        try await core.read { try $0.backupTo(path: staging.path(percentEncoded: false)) }
         if manager.fileExists(atPath: destination.path(percentEncoded: false)) {
             try manager.removeItem(at: destination)
         }
@@ -46,7 +46,9 @@ nonisolated enum VaultExporter {
         var all: [TransactionView] = []
         var cursor: String?
         repeat {
-            let page = try await core.transactions(vaultId: vaultId, filter: filter, limit: pageSize, cursor: cursor)
+            let page = try await core.read { [cursor] in
+                try $0.listTransactions(vaultId: vaultId, filter: filter, limit: pageSize, cursor: cursor)
+            }
             all.append(contentsOf: page.items)
             cursor = page.nextCursor
         } while cursor != nil
@@ -64,7 +66,7 @@ nonisolated enum VaultExporter {
         pageSize: UInt32 = defaultPageSize
     ) async throws -> String {
         let views = try await allTransactions(core: core, vaultId: vaultId, pageSize: pageSize)
-        let names = NameBook(snapshot: try await core.snapshot(vaultId: vaultId))
+        let names = NameBook(snapshot: try await core.read { try $0.snapshot(vaultId: vaultId) })
         return LedgerCSV.renderAll(views.map { TransactionRow(view: $0, names: names) })
     }
 

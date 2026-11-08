@@ -575,7 +575,7 @@ final class AppStore {
     /// that onboarding is needed.
     func bootstrap() async {
         await guarded {
-            vaults = try await core.vaults()
+            vaults = try await core.read { try $0.vaults() }
             guard !vaults.isEmpty else {
                 needsOnboarding = true
                 return
@@ -597,7 +597,7 @@ final class AppStore {
     /// same vault when it still exists (fresh, so a rename shows), the
     /// remembered one or the first otherwise, onboarding when none is left.
     private func adoptVaultList() async throws {
-        vaults = try await core.vaults()
+        vaults = try await core.read { try $0.vaults() }
         // A pull can delete the vault a void is waiting in. Its rows went
         // with it, so the void has nothing left to do, and flushing it on
         // the way to another vault would only bring back a "Not found".
@@ -874,12 +874,9 @@ final class AppStore {
         let load = Task { [weak self] in
             guard let self else { return }
             await guarded {
-                let page = try await core.transactions(
-                    vaultId: vault.id,
-                    filter: filter,
-                    limit: Self.pageSize,
-                    cursor: cursor
-                )
+                let page = try await core.read { [limit = Self.pageSize] in
+                    try $0.listTransactions(vaultId: vault.id, filter: filter, limit: limit, cursor: cursor)
+                }
                 // A reload landed meanwhile: its first page replaced the rows
                 // this one would continue.
                 guard generation == loadGeneration, cursor == nextCursor else { return }
@@ -942,7 +939,7 @@ final class AppStore {
             try await core.executeBatch(
                 envelopes: await firstContents(of: vaultId, walletName: walletName, openingBalance: openingBalance)
             )
-            vaults = try await core.vaults()
+            vaults = try await core.read { try $0.vaults() }
             needsOnboarding = false
             if let created = vaults.first(where: { $0.id == vaultId }) {
                 await select(created)
@@ -1110,8 +1107,9 @@ final class AppStore {
         guard completionIsStale, let vault = currentVault else { return }
         completionIsStale = false
         let since = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? Date()
-        guard let usage = try? await core.recentUsage(vaultId: vault.id, since: CoreDate.utcString(since), limit: 50),
-              let aliases = try? await core.aliases(vaultId: vault.id),
+        let from = CoreDate.utcString(since)
+        guard let usage = try? await core.read({ try $0.recentUsage(vaultId: vault.id, since: from, limit: 50) }),
+              let aliases = try? await core.read({ try $0.aliases(vaultId: vault.id) }),
               currentVault?.id == vault.id
         else {
             completionIsStale = true
@@ -1141,13 +1139,13 @@ final class AppStore {
     /// (suggest, don't block).
     func similarCategories(name: String) async -> [CategoryView] {
         guard let vault = currentVault, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
-        return (try? await core.similarCategories(vaultId: vault.id, name: name)) ?? []
+        return (try? await core.read { try $0.similarCategories(vaultId: vault.id, name: name) }) ?? []
     }
 
     /// What `mergeCategory` would refuse, without changing anything.
     func previewCategoryMerge(sourceId: Uuid, targetId: Uuid) async -> MergePreview? {
         guard let vault = currentVault else { return nil }
-        return try? await core.previewMerge(vaultId: vault.id, sourceId: sourceId, targetId: targetId)
+        return try? await core.read { try $0.previewMerge(vaultId: vault.id, sourceId: sourceId, targetId: targetId) }
     }
 
     func createCategory(name: String) async {
@@ -1670,7 +1668,7 @@ final class AppStore {
         undoTask = nil
         history.forgetPendingVoid()
         await guarded {
-            guard try await core.vaults().contains(where: { $0.id == pending.vaultId }) else { return }
+            guard try await core.read({ try $0.vaults() }).contains(where: { $0.id == pending.vaultId }) else { return }
             try await core.executeBatch(
                 vaultId: pending.vaultId,
                 pending.ids.map { .voidTransaction(transactionId: $0) }

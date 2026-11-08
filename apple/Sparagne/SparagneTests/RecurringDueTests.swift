@@ -249,7 +249,7 @@ struct RecurringDueTests {
         try await Self.dailyExpense(store, note: "Rent", amount: 100)
         try await Self.dailyExpense(store, note: "Gym", amount: 50)
         let vault = try #require(store.currentVault)
-        let outbox = try await store.core.syncState(vaultId: vault.id).outbox
+        let outbox = try await store.core.read { try $0.syncState(vaultId: vault.id) }.outbox
 
         await store.executeAllDueRecurring()
 
@@ -259,7 +259,7 @@ struct RecurringDueTests {
         let spent: Int64 = 3 * 100 + 3 * 50
         #expect(try Self.cash(store) == 10_000 - spent)
         // One batch, but every period keeps its own command in the log.
-        #expect(try await store.core.syncState(vaultId: vault.id).outbox == outbox + 6)
+        #expect(try await store.core.read { try $0.syncState(vaultId: vault.id) }.outbox == outbox + 6)
     }
 
     @Test("Execute All is all or nothing: one period refused leaves every period due")

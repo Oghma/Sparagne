@@ -76,7 +76,7 @@ struct StatementSyncTests {
         let vaultId = try #require(store.currentVault?.id)
         let filter = TransactionFilter(includeVoided: false, includeTransfers: true, ascending: true)
         func grocers() async throws -> Int {
-            try await store.core.transactions(vaultId: vaultId, filter: filter, limit: 50, cursor: nil)
+            try await store.core.read { try $0.listTransactions(vaultId: vaultId, filter: filter, limit: 50, cursor: nil) }
                 .items.filter { $0.amount == 1475 }.count
         }
         #expect(try await grocers() == 1)

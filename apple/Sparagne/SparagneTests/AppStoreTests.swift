@@ -194,7 +194,7 @@ struct AppStoreTests {
         #expect(store.currentVault?.id == casa.id)
         #expect(store.wallets.first?.balance == 5_000)
         // The pizza is voided in Main, whose wallet has its 12.50 back.
-        let snapshot = try await store.core.snapshot(vaultId: main.id)
+        let snapshot = try await store.core.read { try $0.snapshot(vaultId: main.id) }
         #expect(snapshot.wallets.first?.balance == 10_000)
     }
 

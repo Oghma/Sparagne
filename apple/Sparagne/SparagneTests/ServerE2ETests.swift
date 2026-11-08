@@ -73,30 +73,28 @@ private struct E2EPeer {
     }
 
     func syncState() async throws -> SyncState {
-        try await core.syncState(vaultId: #require(vaultId))
+        let vaultId = try #require(vaultId)
+        return try await core.read { try $0.syncState(vaultId: vaultId) }
     }
 
     /// Every transaction in the vault, whatever month and direction the ledger
     /// window happens to be filtering on (`store.transactions` is one page of
     /// one month, expenses only).
     func allTransactions() async throws -> [TransactionView] {
-        try await core.transactions(
-            vaultId: #require(vaultId),
-            filter: TransactionFilter(
-                from: nil,
-                to: nil,
-                kinds: nil,
-                includeVoided: true,
-                includeTransfers: true,
-                walletId: nil,
-                flowId: nil,
-                text: nil,
-                person: nil,
-                ascending: true
-            ),
-            limit: 500,
-            cursor: nil
-        ).items
+        let vaultId = try #require(vaultId)
+        let filter = TransactionFilter(
+            from: nil,
+            to: nil,
+            kinds: nil,
+            includeVoided: true,
+            includeTransfers: true,
+            walletId: nil,
+            flowId: nil,
+            text: nil,
+            person: nil,
+            ascending: true
+        )
+        return try await core.read { try $0.listTransactions(vaultId: vaultId, filter: filter, limit: 500, cursor: nil) }.items
     }
 
     func notes() async throws -> [String] {
@@ -276,7 +274,7 @@ struct ServerE2ETests {
         try await bob.engine.leaveVault(vaultId)
 
         #expect(bob.store.vaults.isEmpty)
-        #expect(try await bob.core.vaults().isEmpty)
+        #expect(try await bob.core.read { try $0.vaults() }.isEmpty)
         #expect(bob.engine.pendingCount == 0)
         let members = try await alice.engine.members(ofVault: vaultId)
         #expect(members.map(\.username) == [alice.username])

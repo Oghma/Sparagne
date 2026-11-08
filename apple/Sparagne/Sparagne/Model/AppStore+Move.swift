@@ -22,7 +22,8 @@ extension AppStore {
               let end = calendar.date(byAdding: .day, value: 1, to: start)
         else { return nil }
         do {
-            let ranges = try await core.balanceRanges(vaultId: vault.id, from: CoreDate.utcString(end), target: side)
+            let from = CoreDate.utcString(end)
+            let ranges = try await core.read { try $0.balanceRanges(vaultId: vault.id, from: from, target: side) }
             return Dictionary(
                 ranges.map { ($0.targetId, MoveBalance($0, timeZone: calendar.timeZone)) },
                 uniquingKeysWith: { first, _ in first }

@@ -206,8 +206,8 @@ final class SyncEngine {
         let known: Set<Uuid>
         let live: [Uuid]
         do {
-            live = try await core.vaults().map(\.id)
-            known = Set(live + (try await core.deletedVaults()))
+            live = try await core.read { try $0.vaults() }.map(\.id)
+            known = Set(live + (try await core.read { try $0.deletedVaults() }))
         } catch {
             round.note(Self.asServerError(error))
             return round
@@ -225,7 +225,7 @@ final class SyncEngine {
         // device, is folded in as well); afterwards its log goes too.
         // Read again: a pull above may have just deleted one.
         var deleted: [Uuid] = []
-        guard await round.step({ deleted = try await core.deletedVaults(); return Outcome() }) else { return round }
+        guard await round.step({ deleted = try await core.read { try $0.deletedVaults() }; return Outcome() }) else { return round }
         for vaultId in deleted {
             guard await round.step({ try await settleDeleted(vaultId, session: session, listed: listed) }) else {
                 return round
@@ -260,7 +260,7 @@ final class SyncEngine {
     /// seen is created by the first push, whose first command is the
     /// `CreateVault` that minted it: there is no separate route for it.
     private func syncVault(_ vaultId: Uuid, session: Session, listed: Set<Uuid>?) async throws -> Outcome {
-        let state = try await core.syncState(vaultId: vaultId)
+        let state = try await core.read { try $0.syncState(vaultId: vaultId) }
         let unlisted = listed.map { !$0.contains(vaultId) } ?? false
         // Known to the server, yet not listed by it: deleted there (its
         // members still pull the deletion) or no longer shared with me (the
@@ -275,7 +275,9 @@ final class SyncEngine {
         if role(forVault: vaultId) == .viewer {
             if state.outbox > 0 {
                 outcome.absorb(
-                    try await core.rejectOutbox(vaultId: vaultId, code: "forbidden", message: Self.readOnlyMessage)
+                    try await core.read { [message = Self.readOnlyMessage] in
+                        try $0.rejectOutbox(vaultId: vaultId, code: "forbidden", message: message)
+                    }
                 )
             }
         } else {
@@ -287,7 +289,9 @@ final class SyncEngine {
                 // The role changed since `GET /vaults`, or the listing could
                 // not be read.
                 outcome.absorb(
-                    try await core.rejectOutbox(vaultId: vaultId, code: "forbidden", message: Self.readOnlyMessage)
+                    try await core.read { [message = Self.readOnlyMessage] in
+                        try $0.rejectOutbox(vaultId: vaultId, code: "forbidden", message: message)
+                    }
                 )
             } catch let error as ServerError where error.isNotFound && mayBeLost {
                 // The pull below tells a lost vault from anything else.
@@ -311,12 +315,12 @@ final class SyncEngine {
     /// vault that no longer exists.
     private func settleDeleted(_ vaultId: Uuid, session: Session, listed: Set<Uuid>?) async throws -> Outcome {
         var outcome = Outcome()
-        if try await core.syncState(vaultId: vaultId).outbox > 0 {
+        if try await core.read({ try $0.syncState(vaultId: vaultId) }).outbox > 0 {
             outcome = try await syncVault(vaultId, session: session, listed: listed)
         }
-        let state = try await core.syncState(vaultId: vaultId)
+        let state = try await core.read { try $0.syncState(vaultId: vaultId) }
         if state.outbox == 0 && state.rejected == 0 {
-            try await core.forgetVault(vaultId)
+            try await core.read { try $0.forgetVault(vaultId: vaultId) }
             drop(vaultId)
         }
         return outcome
@@ -330,9 +334,11 @@ final class SyncEngine {
         account.markLost(vaultId)
         serverVaults.removeAll { $0.id == vaultId }
         var outcome = Outcome()
-        if try await core.syncState(vaultId: vaultId).outbox > 0 {
+        if try await core.read({ try $0.syncState(vaultId: vaultId) }).outbox > 0 {
             outcome.absorb(
-                try await core.rejectOutbox(vaultId: vaultId, code: "not_found", message: Self.noLongerSharedMessage)
+                try await core.read { [message = Self.noLongerSharedMessage] in
+                    try $0.rejectOutbox(vaultId: vaultId, code: "not_found", message: message)
+                }
             )
         }
         return outcome
@@ -352,12 +358,12 @@ final class SyncEngine {
     private func pushLoop(_ vaultId: Uuid, session: Session) async throws -> Outcome {
         var outcome = Outcome()
         for _ in 0..<Self.maxPages {
-            let pending = try await core.syncState(vaultId: vaultId).outbox
+            let pending = try await core.read { try $0.syncState(vaultId: vaultId) }.outbox
             guard pending > 0 else { break }
-            let body = try await core.pushRequestJson(vaultId: vaultId, limit: Self.pushLimit)
+            let body = try await core.read { [limit = Self.pushLimit] in try $0.pushRequestJson(vaultId: vaultId, limit: limit) }
             let response = try await session.api.push(token: session.token, vaultId: vaultId, body: body)
-            outcome.absorb(try await core.applyPushResponse(vaultId: vaultId, json: response))
-            if try await core.syncState(vaultId: vaultId).outbox >= pending { break }
+            outcome.absorb(try await core.read { try $0.applyPushResponseJson(vaultId: vaultId, json: response) })
+            if try await core.read({ try $0.syncState(vaultId: vaultId) }).outbox >= pending { break }
         }
         return outcome
     }
@@ -367,16 +373,16 @@ final class SyncEngine {
     private func pullLoop(_ vaultId: Uuid, session: Session) async throws -> Outcome {
         var outcome = Outcome()
         for _ in 0..<Self.maxPages {
-            let since = try await core.syncState(vaultId: vaultId).lastServerSeq
+            let since = try await core.read { try $0.syncState(vaultId: vaultId) }.lastServerSeq
             let page = try await session.api.pull(
                 token: session.token,
                 vaultId: vaultId,
                 since: since,
                 limit: Self.pullLimit
             )
-            let report = try await core.integratePull(vaultId: vaultId, json: page)
+            let report = try await core.read { try $0.integratePullJson(vaultId: vaultId, json: page) }
             outcome.absorb(report)
-            let reached = try await core.syncState(vaultId: vaultId).lastServerSeq
+            let reached = try await core.read { try $0.syncState(vaultId: vaultId) }.lastServerSeq
             if !report.hasMore || reached <= since { break }
         }
         return outcome
@@ -555,7 +561,7 @@ final class SyncEngine {
         let session = try authorized()
         guard let username = account.username else { throw ServerError.notLoggedIn }
         try await exclusively {
-            if role(forVault: vaultId)?.canWrite ?? true, try await core.syncState(vaultId: vaultId).outbox > 0 {
+            if role(forVault: vaultId)?.canWrite ?? true, try await core.read({ try $0.syncState(vaultId: vaultId) }).outbox > 0 {
                 do {
                     _ = try await pushLoop(vaultId, session: session)
                 } catch {
@@ -565,7 +571,7 @@ final class SyncEngine {
                 }
             }
             try await session.api.removeMember(token: session.token, vaultId: vaultId, username: username)
-            try await core.forgetVault(vaultId)
+            try await core.read { try $0.forgetVault(vaultId: vaultId) }
             drop(vaultId)
         }
         await publishAccess()
@@ -577,7 +583,7 @@ final class SyncEngine {
     /// sent: the server already let it go.
     func removeFromThisMac(_ vaultId: Uuid) async throws {
         try await exclusively {
-            try await core.forgetVault(vaultId)
+            try await core.read { try $0.forgetVault(vaultId: vaultId) }
             drop(vaultId)
         }
         await publishAccess()
