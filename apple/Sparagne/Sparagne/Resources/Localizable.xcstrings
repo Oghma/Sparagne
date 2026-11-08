@@ -4569,18 +4569,18 @@
         }
       }
     },
-    "Figures can differ slightly from the cards above: refunds are netted per flow and category, not per month and person.": {
+    "Figures match the cards above unless someone's refunds in a month exceed their expenses.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Figures can differ slightly from the cards above: refunds are netted per flow and category, not per month and person."
+            "value": "Figures match the cards above unless someone's refunds in a month exceed their expenses."
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le cifre possono scostarsi di poco dalle card sopra: i rimborsi si sottraggono per flusso e categoria, non per mese e persona."
+            "value": "Le cifre coincidono con le card sopra, salvo quando in un mese i rimborsi di qualcuno superano le sue spese."
           }
         }
       }
@@ -8237,6 +8237,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rimborso"
+          }
+        }
+      }
+    },
+    "Refunds": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refunds"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimborsi"
           }
         }
       }
