@@ -724,6 +724,11 @@ fn the_cap_rules_of_the_spec_come_out_as_stated() {
     assert_eq!(preview.remainder, 0);
     assert_eq!(preview.unallocated_after, 0);
     assert_eq!(preview.percent_total_bp, 10_000);
+
+    // The cap wins over a short total when both stop a line at once.
+    let tied = view(g.uuid(), 0, FlowMode::NetCapped { cap: 500 }, None, false);
+    let line = resolve(500, &[fixed(tied.id, 800)], &[tied], 500).lines[0];
+    assert_eq!((line.amount, line.status), (500, LineStatus::CapLimited));
 }
 
 #[test]
@@ -913,6 +918,31 @@ fn extreme_totals_balances_and_caps_never_make_the_resolver_panic() {
     assert_eq!(roomy.lines[0].room, Some(i64::MAX));
     assert_eq!(roomy.lines[0].amount, i64::MAX);
     assert_eq!(roomy.unallocated_after, 0);
+
+    // Over a balance of i64::MIN too. Percents far over the whole clamp the
+    // ask at i64::MAX, a negative total's at nothing, and their basis points
+    // saturate.
+    let bottom = view(
+        g.uuid(),
+        i64::MIN,
+        FlowMode::NetCapped { cap: i64::MAX },
+        None,
+        false,
+    );
+    let flows = [bottom.clone(), zero_open.clone()];
+    let lines = [
+        fill(bottom.id),
+        percent(zero_open.id, u32::MAX),
+        percent(g.uuid(), u32::MAX),
+    ];
+    let over = resolve(i64::MAX, &lines, &flows, 0);
+    assert_eq!(over.lines[0].room, Some(i64::MAX));
+    assert_eq!(over.lines[1].wanted, i64::MAX);
+    assert_eq!(over.distributed, i64::MAX);
+    assert_eq!(over.percent_total_bp, u32::MAX);
+    let under = resolve(i64::MIN, &lines, &flows, i64::MIN);
+    assert_eq!(under.lines[1].wanted, 0);
+    assert_eq!((under.distributed, under.remainder), (0, 0));
 }
 
 fn start() -> NaiveDate {
