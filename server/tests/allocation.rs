@@ -8,7 +8,7 @@
 mod common;
 
 use chrono::NaiveDate;
-use common::{Api, Client, Projection, at, basics, flow_cmd, income_cmd, projection};
+use common::{Api, Client, Projection, at, basics, flow_cmd, income_cmd, move_id, projection};
 use sparagne_core::{
     AllocationBase, AllocationLine, AllocationMove, AllocationPlanView, AllocationRule,
     AllocationRunView, Command, Core, FlowMode, Frequency, PendingAllocation, RunOutcome, Schedule,
@@ -84,11 +84,6 @@ fn envelope_balance(core: &Core, vault: Uuid, id: Uuid) -> i64 {
         .find(|flow| flow.id == id)
         .expect("envelope")
         .balance
-}
-
-/// The id of the transfer an execution makes to `flow`.
-fn move_id(command_id: Uuid, flow: Uuid) -> Uuid {
-    Uuid::new_v5(&command_id, format!("allocation:{flow}").as_bytes())
 }
 
 fn has_transaction(core: &Core, vault: Uuid, id: Uuid) -> bool {

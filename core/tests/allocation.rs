@@ -18,11 +18,6 @@ use sparagne_core::{
 };
 use uuid::Uuid;
 
-/// The id of the transfer an execution makes to `flow`.
-fn move_id(command_id: Uuid, flow: Uuid) -> Uuid {
-    Uuid::new_v5(&command_id, format!("allocation:{flow}").as_bytes())
-}
-
 /// A vault with three envelopes and the plan of the examples: rent 800,
 /// savings 10% and groceries up to their 400 cap, on the 1st of every month
 /// from 2026-01-01.

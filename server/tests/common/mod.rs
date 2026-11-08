@@ -9,12 +9,11 @@ use axum::{
     body::Body,
     http::{HeaderMap, Method, Request, StatusCode, header},
 };
-use chrono::{DateTime, FixedOffset, TimeZone, Utc};
 use http_body_util::BodyExt;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use sparagne_core::{
-    Command, CommandEnvelope, Core, Currency, Entry, FlowMode, SyncReport, TransactionFilter,
+    Command, CommandEnvelope, Core, Currency, SyncReport,
     sync::{
         MemberEntry, MemberRole, PullResponse, PushOutcome, PushResponse, PushResult,
         TokenResponse, VaultSummary,
@@ -24,7 +23,15 @@ use sparagne_server::{AppState, Config, router};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-pub const T0: i64 = 1_700_000_000;
+/// The core's acceptance fixtures, so the commands of both crates' tests are
+/// built by the same helpers.
+#[path = "../../../core/tests/common/mod.rs"]
+mod core_common;
+
+// Every test binary uses its own share of them.
+#[allow(unused_imports)]
+pub use core_common::{T0, all as all_txns, at, entry, flow_cmd, move_id, wallet_cmd};
+
 pub const PASSWORD: &str = "correct horse battery staple";
 /// What the app uses: a push carries at most this many commands.
 pub const BATCH: usize = 500;
@@ -292,49 +299,6 @@ impl Client {
     }
 }
 
-pub fn at(secs: i64) -> DateTime<FixedOffset> {
-    Utc.timestamp_opt(secs, 0)
-        .single()
-        .expect("timestamp")
-        .fixed_offset()
-}
-
-pub fn wallet_cmd(name: &str, opening: i64) -> Command {
-    Command::CreateWallet {
-        name: name.to_string(),
-        opening_balance: opening,
-        occurred_at: at(T0),
-    }
-}
-
-pub fn flow_cmd(name: &str, mode: FlowMode, allow_negative: bool, opening: i64) -> Command {
-    Command::CreateFlow {
-        name: name.to_string(),
-        mode,
-        allow_negative,
-        opening_allocation: opening,
-        occurred_at: at(T0),
-    }
-}
-
-pub fn entry(
-    amount: i64,
-    wallet: Option<Uuid>,
-    flow: Option<Uuid>,
-    category: Option<&str>,
-    secs: i64,
-) -> Entry {
-    Entry {
-        amount,
-        wallet_id: wallet,
-        flow_id: flow,
-        category: category.map(str::to_string),
-        note: None,
-        occurred_at: at(secs),
-        person: None,
-    }
-}
-
 pub fn income_cmd(
     amount: i64,
     wallet: Uuid,
@@ -353,15 +317,6 @@ pub fn expense_cmd(
     secs: i64,
 ) -> Command {
     Command::Expense(entry(amount, Some(wallet), flow, Some(category), secs))
-}
-
-/// Every transaction, voided and transfers included.
-pub fn all_txns() -> TransactionFilter {
-    TransactionFilter {
-        include_voided: true,
-        include_transfers: true,
-        ..Default::default()
-    }
 }
 
 /// Everything a user can see of a vault, in one comparable value.

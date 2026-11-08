@@ -255,6 +255,11 @@ pub fn skip_cmd(plan_id: Uuid, period: NaiveDate) -> Command {
     }
 }
 
+/// The id of the transfer an execution makes to `flow`.
+pub fn move_id(command_id: Uuid, flow: Uuid) -> Uuid {
+    Uuid::new_v5(&command_id, format!("allocation:{flow}").as_bytes())
+}
+
 pub fn reopen_cmd(plan_id: Uuid, period: NaiveDate) -> Command {
     Command::ReopenAllocation {
         plan_id,
