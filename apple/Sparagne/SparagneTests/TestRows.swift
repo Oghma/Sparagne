@@ -41,8 +41,7 @@ enum TestRow {
             walletId: isTransfer ? nil : walletId,
             flowId: isTransfer ? nil : UUID().uuidString,
             fromId: isTransfer ? UUID().uuidString : nil,
-            toId: isTransfer ? UUID().uuidString : nil,
-            legs: []
+            toId: isTransfer ? UUID().uuidString : nil
         )
         let snapshot = wallet.map {
             VaultSnapshot(

@@ -412,7 +412,7 @@ struct KindChangeStoreTests {
             id: "row", kind: .expense, occurredAt: "2026-10-12T12:00:00+05:30", amount: 1_250,
             categoryId: "spesa", category: "Spesa", categoryIsSystem: false, note: "coop",
             person: "elisa", createdBy: "matteo", voided: false,
-            walletId: "conto", flowId: "cash", fromId: nil, toId: nil, legs: []
+            walletId: "conto", flowId: "cash", fromId: nil, toId: nil
         )
         let blank = AppStore.view(view, applying: TransactionPatch(category: "", note: "", person: ""))
         #expect(AppStore.storedCategory(blank) == "")

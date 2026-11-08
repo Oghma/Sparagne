@@ -36,8 +36,7 @@ struct KindChangeTests {
             walletId: isTransfer ? nil : "wallet",
             flowId: isTransfer ? nil : "flow",
             fromId: isTransfer ? "from" : nil,
-            toId: isTransfer ? "to" : nil,
-            legs: []
+            toId: isTransfer ? "to" : nil
         )
     }
 

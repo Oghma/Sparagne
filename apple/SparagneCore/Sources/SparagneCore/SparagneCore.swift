@@ -3303,66 +3303,6 @@ public func FfiConverterTypeFlowView_lower(_ value: FlowView) -> RustBuffer {
 }
 
 
-public struct LegView: Equatable, Hashable, Codable {
-    public var target: LegTarget
-    /**
-     * Signed.
-     */
-    public var amount: Int64
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(target: LegTarget, 
-        /**
-         * Signed.
-         */amount: Int64) {
-        self.target = target
-        self.amount = amount
-    }
-
-    
-
-    
-}
-
-#if compiler(>=6)
-extension LegView: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeLegView: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LegView {
-        return
-            try LegView(
-                target: FfiConverterTypeLegTarget.read(from: &buf), 
-                amount: FfiConverterInt64.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: LegView, into buf: inout [UInt8]) {
-        FfiConverterTypeLegTarget.write(value.target, into: &buf)
-        FfiConverterInt64.write(value.amount, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeLegView_lift(_ buf: RustBuffer) throws -> LegView {
-    return try FfiConverterTypeLegView.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeLegView_lower(_ value: LegView) -> RustBuffer {
-    return FfiConverterTypeLegView.lower(value)
-}
-
-
 /**
  * One reason a merge is refused, with the name of the offending category.
  */
@@ -6846,17 +6786,18 @@ public func FfiConverterTypeTransactionPatch_lower(_ value: TransactionPatch) ->
 /**
  * One transaction as the table shows it.
  *
- * `legs` is the raw shape; `wallet_id`, `flow_id`, `from_id` and `to_id` are
- * the same information already sorted out by kind, so the app never has to
- * bucket the legs itself. Entries fill `wallet_id` and `flow_id`; transfers
- * fill `from_id` with the negative leg and `to_id` with the positive one.
+ * Its legs come already sorted out by kind into `wallet_id`, `flow_id`,
+ * `from_id` and `to_id`, so the app never has to bucket them itself. Entries
+ * fill `wallet_id` and `flow_id`; transfers fill `from_id` with the negative
+ * leg and `to_id` with the positive one.
  */
 public struct TransactionView: Equatable, Hashable, Codable {
     public var id: Uuid
     public var kind: TransactionKind
     public var occurredAt: OffsetDateTime
     /**
-     * Absolute value; see `legs` for signs.
+     * Absolute value: an entry's sign is its kind, a transfer takes it out
+     * of `from_id` and puts it into `to_id`.
      */
     public var amount: Int64
     public var categoryId: Uuid
@@ -6895,13 +6836,13 @@ public struct TransactionView: Equatable, Hashable, Codable {
      * Transfers only: the destination.
      */
     public var toId: Uuid?
-    public var legs: [LegView]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(id: Uuid, kind: TransactionKind, occurredAt: OffsetDateTime, 
         /**
-         * Absolute value; see `legs` for signs.
+         * Absolute value: an entry's sign is its kind, a transfer takes it out
+         * of `from_id` and puts it into `to_id`.
          */amount: Int64, categoryId: Uuid, category: String, 
         /**
          * `true` for `Opening` and `Uncategorized`: the app localizes the name.
@@ -6927,7 +6868,7 @@ public struct TransactionView: Equatable, Hashable, Codable {
          */fromId: Uuid?, 
         /**
          * Transfers only: the destination.
-         */toId: Uuid?, legs: [LegView]) {
+         */toId: Uuid?) {
         self.id = id
         self.kind = kind
         self.occurredAt = occurredAt
@@ -6943,7 +6884,6 @@ public struct TransactionView: Equatable, Hashable, Codable {
         self.flowId = flowId
         self.fromId = fromId
         self.toId = toId
-        self.legs = legs
     }
 
     
@@ -6976,8 +6916,7 @@ public struct FfiConverterTypeTransactionView: FfiConverterRustBuffer {
                 walletId: FfiConverterOptionTypeUuid.read(from: &buf), 
                 flowId: FfiConverterOptionTypeUuid.read(from: &buf), 
                 fromId: FfiConverterOptionTypeUuid.read(from: &buf), 
-                toId: FfiConverterOptionTypeUuid.read(from: &buf), 
-                legs: FfiConverterSequenceTypeLegView.read(from: &buf)
+                toId: FfiConverterOptionTypeUuid.read(from: &buf)
         )
     }
 
@@ -6997,7 +6936,6 @@ public struct FfiConverterTypeTransactionView: FfiConverterRustBuffer {
         FfiConverterOptionTypeUuid.write(value.flowId, into: &buf)
         FfiConverterOptionTypeUuid.write(value.fromId, into: &buf)
         FfiConverterOptionTypeUuid.write(value.toId, into: &buf)
-        FfiConverterSequenceTypeLegView.write(value.legs, into: &buf)
     }
 }
 
@@ -8536,78 +8474,6 @@ public func FfiConverterTypeFrequency_lift(_ buf: RustBuffer) throws -> Frequenc
 #endif
 public func FfiConverterTypeFrequency_lower(_ value: Frequency) -> RustBuffer {
     return FfiConverterTypeFrequency.lower(value)
-}
-
-
-
-
-public enum LegTarget: Equatable, Hashable, Codable {
-    
-    case wallet(walletId: Uuid
-    )
-    case flow(flowId: Uuid
-    )
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension LegTarget: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeLegTarget: FfiConverterRustBuffer {
-    typealias SwiftType = LegTarget
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LegTarget {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .wallet(walletId: try FfiConverterTypeUuid.read(from: &buf)
-        )
-        
-        case 2: return .flow(flowId: try FfiConverterTypeUuid.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: LegTarget, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case let .wallet(walletId):
-            writeInt(&buf, Int32(1))
-            FfiConverterTypeUuid.write(walletId, into: &buf)
-            
-        
-        case let .flow(flowId):
-            writeInt(&buf, Int32(2))
-            FfiConverterTypeUuid.write(flowId, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeLegTarget_lift(_ buf: RustBuffer) throws -> LegTarget {
-    return try FfiConverterTypeLegTarget.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeLegTarget_lower(_ value: LegTarget) -> RustBuffer {
-    return FfiConverterTypeLegTarget.lower(value)
 }
 
 
@@ -10733,31 +10599,6 @@ fileprivate struct FfiConverterSequenceTypeFlowView: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeFlowView.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeLegView: FfiConverterRustBuffer {
-    typealias SwiftType = [LegView]
-
-    public static func write(_ value: [LegView], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeLegView.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LegView] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [LegView]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeLegView.read(from: &buf))
         }
         return seq
     }
