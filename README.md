@@ -96,6 +96,12 @@ falls in is drawn as still going, its last segment dashed and the cash fund
 projected to December at the pace of the finished months; a past month is a
 fact. The person filter sits in the top bar, and the person chosen there is
 the Mastro's too.
+After the two charts a Cash flow card draws the period as a Sankey: income by
+category flows into the income of the month or the year, then into what each
+flow spent and the savings (or, when more went out than came in, the part
+taken from the balance), then into the categories each flow paid. Moves
+between flows are not in it, only who spent; a Month | Year switch picks the
+period, and it follows the person filter.
 
 ### Allocation plan
 

@@ -20,10 +20,10 @@ which is the only thing that talks to `CoreHandle`).
 | `Sparagne/Views/Chrome/` | The window's own chrome: the 44 pt `TopBar` (vault selector, month stepper, search, due pill, Add, `SyncPill`), the `SheetTabBar` along the bottom with each tab's `StatusLine` |
 | `Sparagne/Views/Ledger/` | The Mastro tab: `LedgerWindow` (top bar, sheet, tab bar), `FilterBar`, the `LedgerGrid` ruled sheet, `LedgerRow` (with the pending recurring rows), `SelectionBar`, `SummaryPanel`, the command palette |
 | `Sparagne/Views/QuickAdd/` | The ⌘K panel: the parsed line as chips, and the command palette after `>` |
-| `Sparagne/Views/Summary/` | The Riepilogo tab: the to-do strip, KPI cards, cap bars, the month-by-month table, the people and envelopes cards, two charts, the category list, the heaviest expenses and the months × categories grid |
+| `Sparagne/Views/Summary/` | The Riepilogo tab: the to-do strip, KPI cards, cap bars, the month-by-month table, the people and envelopes cards, two charts, the `CashFlowSankeyCard`, the category list, the heaviest expenses and the months × categories grid |
 | `Sparagne/Views/Recurring/` | The Ricorrenze tab: to confirm, next 30 days, templates table and inspector |
 | `Sparagne/Views/Setup/` | The Setup tab (⌘4, ⌘⇧C): vault card, wallets, envelopes and categories as editable tables, the merge sheet |
-| `Sparagne/Model/YearModel.swift` | `YearSummary.build`, the arithmetic behind the Riepilogo; beside it in `Model/` `SummaryCategories`, `CategoryHeat`, `EnvelopeYear`, `FixedCosts` and `SummaryTodo` |
+| `Sparagne/Model/YearModel.swift` | `YearSummary.build`, the arithmetic behind the Riepilogo; beside it in `Model/` `CashFlowSankey` and `SankeyLayout` (the cash-flow graph and its geometry), `SummaryCategories`, `CategoryHeat`, `EnvelopeYear`, `FixedCosts` and `SummaryTodo` |
 | `Sparagne/Views/Chrome/PersonSegments.swift` | The person control, shared by the Mastro's filter bar and the Riepilogo's heading |
 | `Sparagne/Model/` (other) | Pure models, tested without a window: `LedgerLines` (due periods among the rows), `LedgerCursor` (where each key moves the grid's cursor), `LedgerEditor` (the cell being typed into, written when it is left), `RowDraft`, `SheetStats`, `QuickAddTokens`, `SyncPillState`, `RecurringAgenda` / `RecurringDraft` / `RecurringNext` / `RecurringMonthly`, `ScheduleDraft` (the Quando that Ricorrenze and Riparto both edit) |
 | `Sparagne/Views/ManagementSheet.swift` | Vault picker plus wallet and envelope balances and management (⌘⇧M); the window has no sidebar |
