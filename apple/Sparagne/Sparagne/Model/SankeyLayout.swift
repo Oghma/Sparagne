@@ -106,10 +106,11 @@ struct SankeyLayout: Equatable, Sendable {
 
     /// Where the labels of one column go, top to bottom in its nodes' order:
     /// each wants to be centred on `centres[i]` and is `heights[i]` tall
-    /// (its spacing included), and they are moved apart as little as needed
-    /// to never overlap, inside `0...height`. When they cannot all fit, the
-    /// labels of the lightest `weights` are left out (`nil`) until the
-    /// others do.
+    /// (its spacing included). Labels that would overlap make a group, which
+    /// is centred on its bars, spreading up as much as down, so the labels of
+    /// a run of thin bars stay by them; no two overlap and all stay inside
+    /// `0...height`. When they cannot all fit, the labels of the lightest
+    /// `weights` are left out (`nil`) until the others do.
     static func labelTops(
         centres: [CGFloat], heights: [CGFloat], weights: [Int64], within height: CGFloat
     ) -> [CGFloat?] {
@@ -120,22 +121,48 @@ struct SankeyLayout: Equatable, Sendable {
             else { break }
             shown.removeAll { $0 == lightest }
         }
-        // Down, so none starts above the one before ends; then up, so none
-        // ends past the bottom.
-        var tops: [CGFloat] = []
-        var floor: CGFloat = 0
+
+        // A group of labels stacked without gaps: where it would start for
+        // each member to sit on its own bar, the mean of those is the top
+        // that moves them least.
+        struct Group {
+            var members: [Int] = []
+            var size: CGFloat = 0
+            var wanted: CGFloat = 0
+            var top: CGFloat = 0
+        }
+        func place(_ group: inout Group) {
+            group.top = min(max(group.wanted / CGFloat(group.members.count), 0), max(height - group.size, 0))
+        }
+        var groups: [Group] = []
         for index in shown {
-            let top = max(centres[index] - heights[index] / 2, floor)
-            tops.append(top)
-            floor = top + heights[index]
+            var group = Group(
+                members: [index], size: heights[index], wanted: centres[index] - heights[index] / 2
+            )
+            place(&group)
+            // Merged with the one above as long as the two overlap.
+            while let above = groups.last, above.top + above.size > group.top + 1e-9 {
+                groups.removeLast()
+                var merged = above
+                for member in group.members {
+                    merged.wanted += centres[member] - heights[member] / 2 - merged.size
+                    merged.size += heights[member]
+                    merged.members.append(member)
+                }
+                place(&merged)
+                group = merged
+            }
+            groups.append(group)
         }
-        var ceiling = height
-        for position in tops.indices.reversed() {
-            tops[position] = min(tops[position], ceiling - heights[shown[position]])
-            ceiling = tops[position]
-        }
+
         var result = [CGFloat?](repeating: nil, count: centres.count)
-        for (position, index) in shown.enumerated() { result[index] = tops[position] }
+        for group in groups {
+            var top = group.top
+            for member in group.members {
+                result[member] = top
+                top += heights[member]
+            }
+        }
         return result
     }
 

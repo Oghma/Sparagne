@@ -174,15 +174,49 @@ struct SankeyLayoutTests {
         #expect(tops == [42, 135])
     }
 
-    @Test("Labels that would overlap move apart as little as needed, and up from the bottom")
+    @Test("Labels that would overlap spread as much up as down from their bars, inside the card")
     func labelsMoveApart() {
+        // Centred on the middle one, which stays on its bar.
+        let middle = SankeyLayout.labelTops(centres: [100, 102, 104], heights: [16, 16, 16], weights: [1, 1, 1], within: 320)
+        #expect(middle == [78, 94, 110])
+
         let crowded = SankeyLayout.labelTops(centres: [10, 12, 14], heights: [16, 16, 16], weights: [1, 1, 1], within: 100)
-        #expect(crowded == [2, 18, 34])
+        #expect(crowded == [0, 16, 32])
         Self.expectApart(crowded, heights: [16, 16, 16], within: 100)
 
         let bottom = SankeyLayout.labelTops(centres: [95, 98], heights: [16, 16], weights: [1, 1], within: 100)
         #expect(bottom == [68, 84])
         Self.expectApart(bottom, heights: [16, 16], within: 100)
+    }
+
+    @Test("The labels of a run of thin bars at the bottom of a column stay by their bars when there is room")
+    func labelsOfThinBarsStayClose() throws {
+        // Mutuo, then five categories of 20,00 raised to the minimum height.
+        let thin = ["Edicola", "Francobolli", "Lavanderia", "Parcheggio", "Regali"]
+        let sankey = try #require(
+            CashFlowSankey.build(
+                income: [F.earned("Stipendio", 1_000_000), F.earned("Interessi", 20_000)],
+                expenses: [F.spent("Casa", "Mutuo", 100_000)] + thin.map { F.spent("Spesa", $0, 2_000) },
+                flows: F.flows
+            )
+        )
+        let layout = SankeyLayout.make(sankey, in: Self.size)
+        let bars = Self.rects(layout, column: 3)
+        #expect(bars.count == 6)
+        #expect(bars.dropFirst().allSatisfy { $0.height == SankeyLayout.minimumHeight })
+
+        let heights = [CGFloat](repeating: 16, count: bars.count)
+        let tops = SankeyLayout.labelTops(
+            centres: bars.map(\.midY), heights: heights, weights: [1, 1, 1, 1, 1, 1], within: Self.size.height
+        )
+        Self.expectApart(tops, heights: heights, within: Self.size.height)
+        // Bars 10 points apart under labels 16 tall: the run spreads both
+        // ways, so none ends up more than a label's height from its bar.
+        // Pushed only downwards the last one would be 24 points off.
+        for (top, bar) in zip(tops, bars) {
+            let centre = try #require(top) + 8
+            #expect(abs(centre - bar.midY) < 16, "\(centre) by \(bar.midY)")
+        }
     }
 
     @Test("When the labels cannot all fit, the lightest bars' go until the rest do")
