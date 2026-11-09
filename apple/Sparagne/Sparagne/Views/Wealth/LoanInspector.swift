@@ -262,7 +262,7 @@ struct LoanInspector: View {
                         ].joined(separator: " \u{00B7} ")
                     } ?? String(localized: "loan.recurring.none", defaultValue: "none")
                 )
-                if let template, let figures, let registered = figures.registeredCount {
+                if template != nil, let figures, let registered = figures.registeredCount {
                     let due = recordable ?? figures.paidCount
                     WealthFact(
                         String(localized: "Recorded in the ledger"),
