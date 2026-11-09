@@ -183,6 +183,9 @@ struct LoanSheet: View {
                 case .contract:
                     UnitField(label: String(localized: "Installment"), text: $draft.installment, unit: "\u{20AC}")
                         .frame(width: 130)
+                    // A total with the collection fee in it would count the
+                    // fee twice, with «Spese per rata».
+                    hint(String(localized: "without the fee per installment"))
                 }
             }
         }

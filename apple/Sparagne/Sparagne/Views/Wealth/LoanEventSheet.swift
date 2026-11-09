@@ -133,6 +133,11 @@ struct LoanEventSheet: View {
                 if draft.installmentMode == .contract {
                     UnitField(label: String(localized: "Installment"), text: $draft.installment, unit: "\u{20AC}")
                         .frame(width: 130)
+                    // The loan's own fee per installment comes on top.
+                    Text(String(localized: "without the fee per installment"))
+                        .font(Face.ui(12))
+                        .foregroundStyle(Ink.text3)
+                        .lineLimit(1)
                 }
             }
         }
