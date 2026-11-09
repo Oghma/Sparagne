@@ -72,6 +72,25 @@ pub struct CategoryTotals {
     pub count: u32,
 }
 
+/// What one envelope spent on one category: the ribbons from the flows to
+/// the categories of the RIEPILOGO's cash-flow Sankey.
+///
+/// Amounts come from the flow legs, like [`FlowPersonTotals`], so a future
+/// expense split across two envelopes lands on both.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct FlowCategoryTotals {
+    pub flow_id: Uuid,
+    pub category_id: Uuid,
+    pub name: String,
+    /// `true` for `Uncategorized`, which the app localizes; `Opening` never
+    /// reaches this row, its balances being neither earned nor spent.
+    pub is_system: bool,
+    pub expense: i64,
+    pub refund: i64,
+    /// `max(expense - refund, 0)` for the pair.
+    pub net_expense: i64,
+}
+
 /// One line of "top uscite del mese".
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct TopExpense {
@@ -456,6 +475,73 @@ impl Core {
                 .cmp(&a.net_expense)
                 .then_with(|| b.income.cmp(&a.income))
                 .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        });
+        Ok(out)
+    }
+
+    /// Expense and refund per (envelope, category) over `[from, to)`, opening
+    /// balances left out, optionally for one person (`transactions.person`):
+    /// what each flow spent on what, for the cash-flow Sankey. Heaviest net
+    /// expense first.
+    pub fn flow_category_totals(
+        &self,
+        vault_id: Uuid,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+        person: Option<String>,
+    ) -> Result<Vec<FlowCategoryTotals>> {
+        check_range(from, to)?;
+        let (where_sql, args) = without_openings(scope(vault_id, from, to, person.as_deref()));
+        let sql = format!(
+            "SELECT l.target_id, t.category_id, c.name, c.is_system, t.kind, SUM(ABS(l.amount))
+             FROM transactions t
+             JOIN legs l ON l.transaction_id = t.id AND l.target_kind = 'flow'
+             JOIN categories c ON c.id = t.category_id
+             {where_sql} AND t.kind IN ('expense', 'refund')
+             GROUP BY l.target_id, t.category_id, t.kind"
+        );
+        let rows = query_all(&self.conn, &sql, params_from_iter(args.iter()), |r| {
+            Ok((
+                r.get::<_, Uuid>(0)?,
+                r.get::<_, Uuid>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, bool>(3)?,
+                r.get::<_, String>(4)?,
+                r.get::<_, i64>(5)?,
+            ))
+        })?;
+
+        let mut out: Vec<FlowCategoryTotals> = Vec::new();
+        for (flow_id, category_id, name, is_system, kind, amount) in rows {
+            let slot = find_or_push(
+                &mut out,
+                |f| f.flow_id == flow_id && f.category_id == category_id,
+                || FlowCategoryTotals {
+                    flow_id,
+                    category_id,
+                    name,
+                    is_system,
+                    expense: 0,
+                    refund: 0,
+                    net_expense: 0,
+                },
+            );
+            let mut income = 0;
+            accumulate(
+                &kind,
+                amount,
+                &mut income,
+                &mut slot.expense,
+                &mut slot.refund,
+            );
+            slot.net_expense = (slot.expense - slot.refund).max(0);
+        }
+        out.retain(|f| f.expense != 0 || f.refund != 0);
+        out.sort_by(|a, b| {
+            b.net_expense
+                .cmp(&a.net_expense)
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+                .then_with(|| a.flow_id.cmp(&b.flow_id))
         });
         Ok(out)
     }

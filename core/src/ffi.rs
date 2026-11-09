@@ -14,12 +14,12 @@ use crate::{
     AliasView, AllocationBase, AllocationLine, AllocationPlanView, AllocationPreview,
     AllocationRunView, BalanceRange, BucketCategoryTotals, BucketPersonTotals, BucketTargetTotals,
     CategorySuggestion, CategoryTotals, CategoryView, Command, CommandEnvelope, Core, Currency,
-    DomainError, FlowPersonTotals, FlowTransferTotals, MergePreview, Page, PendingAllocation,
-    PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView, RecurringView,
-    RejectedCommand, Schedule, StatementColumnValue, StatementDetection, StatementFormatGuess,
-    StatementMapping, StatementOptions, StatementPreset, StatementPreview, StatementReport,
-    StatementRowOverride, SyncReport, SyncState, TargetKind, TopExpense, TransactionFilter,
-    VaultSnapshot, VaultView, parse_major,
+    DomainError, FlowCategoryTotals, FlowPersonTotals, FlowTransferTotals, MergePreview, Page,
+    PendingAllocation, PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView,
+    RecurringView, RejectedCommand, Schedule, StatementColumnValue, StatementDetection,
+    StatementFormatGuess, StatementMapping, StatementOptions, StatementPreset, StatementPreview,
+    StatementReport, StatementRowOverride, SyncReport, SyncState, TargetKind, TopExpense,
+    TransactionFilter, VaultSnapshot, VaultView, parse_major,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
     statement,
 };
@@ -256,6 +256,16 @@ forward! {
         to: UtcDateTime,
         person: Option<String>,
     ) -> Vec<CategoryTotals>;
+
+    /// Envelope x category net expense over `[from, to)`: the ribbons from the
+    /// flows to the categories of the cash-flow Sankey.
+    #[uniffi::method(default(person = None))]
+    fn flow_category_totals(
+        vault_id: Uuid,
+        from: UtcDateTime,
+        to: UtcDateTime,
+        person: Option<String>,
+    ) -> Vec<FlowCategoryTotals>;
 
     /// Totals of the ranges between consecutive `bounds`: 13 month starts give
     /// the twelve bars of a year.

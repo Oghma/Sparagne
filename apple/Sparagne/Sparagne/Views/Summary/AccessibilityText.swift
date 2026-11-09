@@ -33,4 +33,35 @@ enum AccessibilityText {
         guard let person else { return "\(label): \(amount)" }
         return "\(label), \(person): \(amount)"
     }
+
+    /// The cash-flow Sankey as one sentence, what came in and then where it
+    /// went: "Income €4,200.00: Casa €1,800.00, Cash €900.00, Savings
+    /// €600.00", the balance after the income when the period spent more
+    /// than it earned: "Income €2,520.00, From the balance €828.60: …".
+    static func sankey(sources: [(String, String)], spending: [(String, String)]) -> String {
+        let from = sources.map { "\($0.0) \($0.1)" }.joined(separator: ", ")
+        let to = spending.map { "\($0.0) \($0.1)" }.joined(separator: ", ")
+        return to.isEmpty ? from : "\(from): \(to)"
+    }
+
+    /// The cash-flow graph's VoiceOver elements in reading order: first the
+    /// graph as a whole, called `name`, its value the `sankey` sentence over
+    /// what was earned, the refunds and the balance, and the flows and the
+    /// savings; then a node at a time, its title and its figure with its
+    /// share of the income, as the labels on screen write it.
+    static func sankeyElements(_ graph: CashFlowSankey, name: String) -> [(label: String, value: String)] {
+        var sources = [(String(localized: "Income"), LedgerMoney.amount(graph.income))]
+        for id in [CashFlowSankey.refundsId, CashFlowSankey.fromBalanceId] {
+            if let node = graph.node(id) { sources.append((node.title, LedgerMoney.amount(node.value))) }
+        }
+        let spending = graph.nodes(in: 2).map { ($0.title, LedgerMoney.amount($0.value)) }
+        let nodes = graph.nodes.map { node -> (label: String, value: String) in
+            let amount = LedgerMoney.amount(graph.shown(node))
+            guard node.role != .total, let share = graph.shareText(graph.shown(node)) else {
+                return (node.title, amount)
+            }
+            return (node.title, "\(amount), \(share)")
+        }
+        return [(name, sankey(sources: sources, spending: spending))] + nodes
+    }
 }

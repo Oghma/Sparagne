@@ -679,6 +679,12 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func executeBatch(envelopes: [CommandEnvelope]) throws  -> [Receipt]
     
     /**
+     * Envelope x category net expense over `[from, to)`: the ribbons from the
+     * flows to the categories of the cash-flow Sankey.
+     */
+    func flowCategoryTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime, person: String?) throws  -> [FlowCategoryTotals]
+    
+    /**
      * Envelope x person matrix over `[from, to)`.
      */
     func flowPersonTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime) throws  -> [FlowPersonTotals]
@@ -1150,6 +1156,23 @@ open func executeBatch(envelopes: [CommandEnvelope])throws  -> [Receipt]  {
     uniffi_sparagne_core_fn_method_corehandle_execute_batch(
             self.uniffiCloneHandle(),
         FfiConverterSequenceTypeCommandEnvelope.lower(envelopes),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Envelope x category net expense over `[from, to)`: the ribbons from the
+     * flows to the categories of the cash-flow Sankey.
+     */
+open func flowCategoryTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime, person: String? = nil)throws  -> [FlowCategoryTotals]  {
+    return try  FfiConverterSequenceTypeFlowCategoryTotals.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_flow_category_totals(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterTypeUtcDateTime_lower(from),
+        FfiConverterTypeUtcDateTime_lower(to),
+        FfiConverterOptionString.lower(person),uniffiCallStatus
     )
 })
 }
@@ -3049,6 +3072,101 @@ public func FfiConverterTypeEntry_lift(_ buf: RustBuffer) throws -> Entry {
 #endif
 public func FfiConverterTypeEntry_lower(_ value: Entry) -> RustBuffer {
     return FfiConverterTypeEntry.lower(value)
+}
+
+
+/**
+ * What one envelope spent on one category: the ribbons from the flows to
+ * the categories of the RIEPILOGO's cash-flow Sankey.
+ *
+ * Amounts come from the flow legs, like [`FlowPersonTotals`], so a future
+ * expense split across two envelopes lands on both.
+ */
+public struct FlowCategoryTotals: Equatable, Hashable, Codable {
+    public var flowId: Uuid
+    public var categoryId: Uuid
+    public var name: String
+    /**
+     * `true` for `Uncategorized`, which the app localizes; `Opening` never
+     * reaches this row, its balances being neither earned nor spent.
+     */
+    public var isSystem: Bool
+    public var expense: Int64
+    public var refund: Int64
+    /**
+     * `max(expense - refund, 0)` for the pair.
+     */
+    public var netExpense: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(flowId: Uuid, categoryId: Uuid, name: String, 
+        /**
+         * `true` for `Uncategorized`, which the app localizes; `Opening` never
+         * reaches this row, its balances being neither earned nor spent.
+         */isSystem: Bool, expense: Int64, refund: Int64, 
+        /**
+         * `max(expense - refund, 0)` for the pair.
+         */netExpense: Int64) {
+        self.flowId = flowId
+        self.categoryId = categoryId
+        self.name = name
+        self.isSystem = isSystem
+        self.expense = expense
+        self.refund = refund
+        self.netExpense = netExpense
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FlowCategoryTotals: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFlowCategoryTotals: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FlowCategoryTotals {
+        return
+            try FlowCategoryTotals(
+                flowId: FfiConverterTypeUuid.read(from: &buf), 
+                categoryId: FfiConverterTypeUuid.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                isSystem: FfiConverterBool.read(from: &buf), 
+                expense: FfiConverterInt64.read(from: &buf), 
+                refund: FfiConverterInt64.read(from: &buf), 
+                netExpense: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FlowCategoryTotals, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.flowId, into: &buf)
+        FfiConverterTypeUuid.write(value.categoryId, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterBool.write(value.isSystem, into: &buf)
+        FfiConverterInt64.write(value.expense, into: &buf)
+        FfiConverterInt64.write(value.refund, into: &buf)
+        FfiConverterInt64.write(value.netExpense, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFlowCategoryTotals_lift(_ buf: RustBuffer) throws -> FlowCategoryTotals {
+    return try FfiConverterTypeFlowCategoryTotals.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFlowCategoryTotals_lower(_ value: FlowCategoryTotals) -> RustBuffer {
+    return FfiConverterTypeFlowCategoryTotals.lower(value)
 }
 
 
@@ -10532,6 +10650,31 @@ fileprivate struct FfiConverterSequenceTypeCommandEnvelope: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeFlowCategoryTotals: FfiConverterRustBuffer {
+    typealias SwiftType = [FlowCategoryTotals]
+
+    public static func write(_ value: [FlowCategoryTotals], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFlowCategoryTotals.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FlowCategoryTotals] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FlowCategoryTotals]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFlowCategoryTotals.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFlowPersonTotals: FfiConverterRustBuffer {
     typealias SwiftType = [FlowPersonTotals]
 
@@ -11716,6 +11859,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_execute_batch() != 30400) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_flow_category_totals() != 27573) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_flow_person_totals() != 61392) {

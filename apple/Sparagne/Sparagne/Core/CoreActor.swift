@@ -390,6 +390,18 @@ actor CoreActor {
                     vaultId: vaultId,
                     bounds: request.yearBounds,
                     target: .flow
+                ),
+                monthFlowCategories: try handle.flowCategoryTotals(
+                    vaultId: vaultId,
+                    from: request.monthFrom,
+                    to: request.monthTo,
+                    person: request.person
+                ),
+                yearFlowCategories: try handle.flowCategoryTotals(
+                    vaultId: vaultId,
+                    from: request.yearFrom,
+                    to: request.yearTo,
+                    person: request.person
                 )
             )
         }
@@ -544,6 +556,12 @@ struct VaultLoad: Sendable {
     /// Bucket x envelope signed movement on `yearBounds`: summed up, each
     /// envelope's balance at the end of every month.
     let flowBalances: [BucketTargetTotals]
+    /// Envelope x category net expense of the month on screen, for the
+    /// PERSONA filter: the cash-flow Sankey's ribbons from the flows to the
+    /// categories.
+    let monthFlowCategories: [FlowCategoryTotals]
+    /// The same over the year so far (`[yearFrom, yearTo)`).
+    let yearFlowCategories: [FlowCategoryTotals]
 }
 
 /// The two lists the Categories table reads together.

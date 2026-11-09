@@ -262,6 +262,15 @@ fn every_aggregation_follows_the_person_not_who_recorded_the_row() {
     let buckets = core.bucket_totals(vault, vec![from, to], elisa()).unwrap();
     assert_eq!(buckets[0].expense, 70);
 
+    let pairs = core.flow_category_totals(vault, from, to, elisa()).unwrap();
+    assert_eq!(
+        pairs
+            .iter()
+            .map(|p| (p.flow_id, p.name.as_str(), p.net_expense))
+            .collect::<Vec<_>>(),
+        [(s.varie, "Ristoranti", 40), (s.cash, "Spesa", 30)]
+    );
+
     let year = core.year_breakdown(vault, vec![from, to]).unwrap();
     let elisa_year = year.iter().find(|r| r.person == "elisa").unwrap();
     assert_eq!(elisa_year.expense, 70);
@@ -1125,4 +1134,262 @@ fn ascending_pages_walk_forward_through_the_month() {
         .collect();
     assert_eq!(times.len(), 5);
     assert!(times.windows(2).all(|w| w[0] <= w[1]), "{times:?}");
+}
+
+/// (flow, category, expense, refund, net) of every row, to compare in one go.
+/// A macro: the row type is not exported from the crate root.
+macro_rules! pairs {
+    ($rows:expr) => {
+        $rows
+            .iter()
+            .map(|r| {
+                (
+                    r.flow_id,
+                    r.name.as_str(),
+                    r.expense,
+                    r.refund,
+                    r.net_expense,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+}
+
+#[test]
+fn flow_category_totals_split_each_envelope_by_category_with_net_expense() {
+    let mut s = shared_month();
+    let w = Some(s.fx.wallet);
+    // Spesa is also paid by varie: two rows for the same category.
+    let cmd = Command::Expense(entry(12, w, Some(s.varie), Some("Spesa"), T0 + 6 * DAY));
+    s.fx.run_as("matteo", cmd);
+    let (from, to) = month_range();
+    let rows =
+        s.fx.core
+            .flow_category_totals(s.fx.vault, from, to, None)
+            .unwrap();
+
+    assert_eq!(
+        pairs!(&rows),
+        [
+            (s.cash, "Casa", 100, 10, 90),
+            (s.cash, "Spesa", 30, 0, 30),
+            (s.varie, "Svago", 25, 0, 25),
+            (s.varie, "Spesa", 12, 0, 12),
+        ]
+    );
+}
+
+#[test]
+fn flow_category_totals_are_ordered_by_net_then_name_then_flow() {
+    let mut s = shared_month();
+    let w = Some(s.fx.wallet);
+    // Same net (30) and the same name on both envelopes: the flow id settles
+    // the tie.
+    let cmd = Command::Expense(entry(30, w, Some(s.varie), Some("Spesa"), T0 + 6 * DAY));
+    s.fx.run_as("matteo", cmd);
+    let (from, to) = month_range();
+    let rows =
+        s.fx.core
+            .flow_category_totals(s.fx.vault, from, to, None)
+            .unwrap();
+    let thirties: Vec<Uuid> = rows
+        .iter()
+        .filter(|r| r.net_expense == 30)
+        .map(|r| r.flow_id)
+        .collect();
+    assert_eq!(thirties.len(), 2);
+    assert!(thirties[0] < thirties[1], "{thirties:?}");
+    let nets: Vec<i64> = rows.iter().map(|r| r.net_expense).collect();
+    assert_eq!(nets, [90, 30, 30, 25]);
+}
+
+#[test]
+fn flow_category_totals_follow_the_person_not_who_recorded_the_row() {
+    let mut s = shared_month();
+    let w = Some(s.fx.wallet);
+    let mut dinner = entry(40, w, Some(s.varie), Some("Ristoranti"), T0 + 5 * DAY);
+    dinner.person = Some("elisa".to_string());
+    s.fx.run_as("matteo", Command::Expense(dinner));
+    let (from, to) = month_range();
+    let core = &s.fx.core;
+
+    let elisa = core
+        .flow_category_totals(s.fx.vault, from, to, Some("elisa".to_string()))
+        .unwrap();
+    assert_eq!(
+        pairs!(&elisa),
+        [
+            (s.varie, "Ristoranti", 40, 0, 40),
+            (s.cash, "Spesa", 30, 0, 30),
+        ]
+    );
+    let matteo = core
+        .flow_category_totals(s.fx.vault, from, to, Some("matteo".to_string()))
+        .unwrap();
+    assert_eq!(
+        pairs!(&matteo),
+        [(s.cash, "Casa", 100, 10, 90), (s.varie, "Svago", 25, 0, 25)]
+    );
+    let nobody = core
+        .flow_category_totals(s.fx.vault, from, to, Some("nessuno".to_string()))
+        .unwrap();
+    assert!(nobody.is_empty());
+}
+
+#[test]
+fn flow_category_totals_leave_openings_and_flow_transfers_out() {
+    let mut s = shared_month_with_openings();
+    s.fx.run(Command::TransferFlow {
+        amount: 50,
+        from_flow_id: s.cash,
+        to_flow_id: s.varie,
+        note: None,
+        occurred_at: at(T0 + 7 * DAY),
+    });
+    let (from, to) = month_range();
+    let rows =
+        s.fx.core
+            .flow_category_totals(s.fx.vault, from, to, None)
+            .unwrap();
+
+    assert!(
+        rows.iter().all(|r| r.flow_id != s.fx.unallocated),
+        "{rows:?}"
+    );
+    assert_eq!(
+        pairs!(&rows),
+        [
+            (s.cash, "Casa", 100, 10, 90),
+            (s.cash, "Spesa", 75, 0, 75),
+            (s.varie, "Svago", 25, 0, 25),
+        ]
+    );
+}
+
+#[test]
+fn flow_category_totals_leave_voided_rows_out() {
+    let mut s = shared_month();
+    let (from, to) = month_range();
+    let svago = list(
+        &s.fx.core,
+        s.fx.vault,
+        &TransactionFilter {
+            person: Some("matteo".to_string()),
+            ..Default::default()
+        },
+    )
+    .into_iter()
+    .find(|t| t.amount == 25)
+    .unwrap();
+    s.fx.run(Command::VoidTransaction {
+        transaction_id: svago.id,
+    });
+    let rows =
+        s.fx.core
+            .flow_category_totals(s.fx.vault, from, to, None)
+            .unwrap();
+    assert_eq!(
+        pairs!(&rows),
+        [(s.cash, "Casa", 100, 10, 90), (s.cash, "Spesa", 30, 0, 30)]
+    );
+}
+
+#[test]
+fn flow_category_totals_range_is_half_open() {
+    let mut s = shared_month();
+    let w = Some(s.fx.wallet);
+    let cmd = Command::Expense(entry(7, w, Some(s.varie), Some("Svago"), T0 + 10 * DAY));
+    s.fx.run_as("matteo", cmd);
+    let totals = |from: i64, to: i64| {
+        s.fx.core
+            .flow_category_totals(s.fx.vault, utc(from), utc(to), None)
+            .unwrap()
+    };
+
+    // A row exactly on `from` is in, exactly on `to` is out.
+    let rows = totals(T0 + 10 * DAY, T0 + 11 * DAY);
+    assert_eq!(pairs!(&rows), [(s.varie, "Svago", 7, 0, 7)]);
+    assert!(totals(T0 + 9 * DAY, T0 + 10 * DAY).is_empty());
+    assert!(matches!(
+        s.fx.core
+            .flow_category_totals(s.fx.vault, utc(T0 + DAY), utc(T0), None),
+        Err(DomainError::InvalidCommand(_))
+    ));
+}
+
+#[test]
+fn flow_category_totals_agree_with_the_other_views_when_no_refund_exceeds_its_expenses() {
+    let mut s = shared_month();
+    let w = Some(s.fx.wallet);
+    let cmd = Command::Expense(entry(12, w, Some(s.varie), Some("Casa"), T0 + 6 * DAY));
+    s.fx.run_as("elisa", cmd);
+    let (from, to) = month_range();
+    let core = &s.fx.core;
+    let rows = core
+        .flow_category_totals(s.fx.vault, from, to, None)
+        .unwrap();
+
+    let matrix = core.flow_person_totals(s.fx.vault, from, to).unwrap();
+    for flow in [s.cash, s.varie] {
+        let by_pairs: i64 = rows
+            .iter()
+            .filter(|r| r.flow_id == flow)
+            .map(|r| r.net_expense)
+            .sum();
+        let by_people: i64 = matrix
+            .iter()
+            .filter(|r| r.flow_id == flow)
+            .map(|r| r.net_expense)
+            .sum();
+        assert_eq!(by_pairs, by_people, "flow {flow}");
+    }
+    let categories = core.category_totals(s.fx.vault, from, to, None).unwrap();
+    for c in categories.iter().filter(|c| c.expense > 0) {
+        let by_pairs: i64 = rows
+            .iter()
+            .filter(|r| r.category_id == c.category_id)
+            .map(|r| r.net_expense)
+            .sum();
+        assert_eq!(by_pairs, c.net_expense, "category {}", c.name);
+    }
+}
+
+/// The floor is per (flow, category) pair, so a refund that exceeds one
+/// envelope's expenses is lost for that pair, while `category_totals` nets
+/// the category as a whole: the two then differ by the excess.
+#[test]
+fn flow_category_totals_floor_each_pair_at_zero_so_a_category_total_can_differ() {
+    let mut s = shared_month();
+    let w = Some(s.fx.wallet);
+    let cmd = Command::Expense(entry(20, w, Some(s.varie), Some("Viaggi"), T0 + 6 * DAY));
+    s.fx.run_as("matteo", cmd);
+    let cmd = Command::Expense(entry(50, w, Some(s.cash), Some("Viaggi"), T0 + 6 * DAY));
+    s.fx.run_as("matteo", cmd);
+    let cmd = Command::Refund(entry(80, w, Some(s.varie), Some("Viaggi"), T0 + 7 * DAY));
+    s.fx.run_as("matteo", cmd);
+    let (from, to) = month_range();
+    let core = &s.fx.core;
+
+    let rows = core
+        .flow_category_totals(s.fx.vault, from, to, None)
+        .unwrap();
+    let viaggi: Vec<_> = pairs!(&rows)
+        .into_iter()
+        .filter(|p| p.1 == "Viaggi")
+        .collect();
+    assert_eq!(
+        viaggi,
+        [
+            (s.cash, "Viaggi", 50, 0, 50),
+            (s.varie, "Viaggi", 20, 80, 0)
+        ]
+    );
+    let category = core
+        .category_totals(s.fx.vault, from, to, None)
+        .unwrap()
+        .into_iter()
+        .find(|c| c.name == "Viaggi")
+        .unwrap();
+    assert_eq!(category.net_expense, 0, "70 spent, 80 refunded");
+    assert_eq!(viaggi.iter().map(|p| p.4).sum::<i64>(), 50);
 }

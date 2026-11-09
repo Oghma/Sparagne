@@ -2561,6 +2561,22 @@
         }
       }
     },
+    "Cash flow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cash flow"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flusso di cassa"
+          }
+        }
+      }
+    },
     "Cash fund": {
       "localizations": {
         "en": {
@@ -4553,6 +4569,22 @@
         }
       }
     },
+    "Figures match the cards above unless someone's refunds in a month exceed their expenses.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Figures match the cards above unless someone's refunds in a month exceed their expenses."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le cifre coincidono con le card sopra, salvo quando in un mese i rimborsi di qualcuno superano le sue spese."
+          }
+        }
+      }
+    },
     "File": {
       "localizations": {
         "en": {
@@ -4909,6 +4941,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Da / A"
+          }
+        }
+      }
+    },
+    "From the balance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From the balance"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dal saldo"
           }
         }
       }
@@ -7313,6 +7361,38 @@
         }
       }
     },
+    "Nothing earned or spent this month": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing earned or spent this month"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niente entrate né uscite questo mese"
+          }
+        }
+      }
+    },
+    "Nothing earned or spent this year": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing earned or spent this year"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niente entrate né uscite quest'anno"
+          }
+        }
+      }
+    },
     "Nothing in the next 30 days": {
       "localizations": {
         "en": {
@@ -8157,6 +8237,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rimborso"
+          }
+        }
+      }
+    },
+    "Refunds": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refunds"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimborsi"
           }
         }
       }
@@ -9317,6 +9413,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Condividi vault"
+          }
+        }
+      }
+    },
+    "Share of income": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share of income"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quota delle entrate"
           }
         }
       }
@@ -12109,6 +12221,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quale persona intendevi?"
+          }
+        }
+      }
+    },
+    "Who spent what; transfers between flows do not show": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Who spent what; transfers between flows do not show"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chi ha speso cosa; i trasferimenti tra flussi non compaiono"
           }
         }
       }

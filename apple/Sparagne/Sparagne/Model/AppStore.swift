@@ -245,6 +245,11 @@ final class AppStore {
     /// Every active flow at the end of the month on screen, in the order its
     /// cards are drawn.
     private(set) var flowCards: [FlowCard] = []
+    /// The cash-flow Sankey of the month on screen, for the PERSONA filter,
+    /// `nil` when the month earned and spent nothing.
+    private(set) var sankeyMonth: CashFlowSankey?
+    /// The same for the year so far.
+    private(set) var sankeyYear: CashFlowSankey?
     /// What the recurring expenses commit a month, `nil` without any.
     private(set) var fixedCosts: FixedCosts?
     /// The strip of things to do; empty, it is not drawn.
@@ -695,6 +700,8 @@ final class AppStore {
             categoryHeat = nil
             envelopeYear = nil
             flowCards = []
+            sankeyMonth = nil
+            sankeyYear = nil
             fixedCosts = nil
             summaryTodo = []
             yearCategoryTotals = []
@@ -848,6 +855,18 @@ final class AppStore {
                 upTo: month,
                 people: []
             )
+        )
+        // Archived flows included: one archived in the year still spent in it.
+        let allFlows = loaded.snapshot.flows
+        sankeyMonth = CashFlowSankey.build(
+            income: loaded.categoryTotals,
+            expenses: loaded.monthFlowCategories,
+            flows: allFlows
+        )
+        sankeyYear = CashFlowSankey.build(
+            income: loaded.yearCategories,
+            expenses: loaded.yearFlowCategories,
+            flows: allFlows
         )
         // Under PERSONA, `year.person` keeps the templates to that person's.
         fixedCosts = FixedCosts.build(templates: loaded.recurringTemplates, year: year)
