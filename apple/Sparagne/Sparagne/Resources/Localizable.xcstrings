@@ -12425,6 +12425,22 @@
         }
       }
     },
+    "The loan now ends before the recurring entry's first period: it no longer comes due. Link another one, or archive it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The loan now ends before the recurring entry's first period: it no longer comes due. Link another one, or archive it."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il prestito ora finisce prima del primo periodo della ricorrenza: non scade più. Collegane un'altra, oppure archiviala."
+          }
+        }
+      }
+    },
     "The money changes wallet, not flow: the flows stay as they are.": {
       "localizations": {
         "en": {
@@ -12549,6 +12565,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "L’anteprima non era aggiornata: non è stato scritto nulla. Controllala e importa di nuovo."
+          }
+        }
+      }
+    },
+    "The recurring entry is paused": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The recurring entry is paused"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La ricorrenza è in pausa"
           }
         }
       }
@@ -17029,6 +17061,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "con le spese"
+          }
+        }
+      }
+    },
+    "without the fee per installment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "without the fee per installment"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "senza le spese per rata"
           }
         }
       }
