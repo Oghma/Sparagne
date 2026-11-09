@@ -15,6 +15,13 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+    # basic-toml is archived, with no release to move to. It reaches the
+    # build through UniFFI's code generator (uniffi_bindgen -> askama), which
+    # reads only its own configuration with it; nothing parses user input.
+    # Drop this once UniFFI or askama moves to `toml`.
+    { id = "RUSTSEC-2026-0374", reason = "basic-toml, unmaintained, used only by UniFFI's code generator" },
+]
 
 [licenses]
 version = 2
