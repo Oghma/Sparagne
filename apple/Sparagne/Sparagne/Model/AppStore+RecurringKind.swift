@@ -83,6 +83,7 @@ extension AppStore {
         guard let template = recurringTemplates.first(where: { $0.id == templateId }), !template.archived else {
             return .failure(.archived)
         }
+        if loans.contains(where: { $0.recurringId == templateId }) { return .failure(.linkedToLoan) }
         if ownerHasLeft(template) { return .failure(.ownerLeft) }
         let runs = try await core.read { try $0.recurringRuns(vaultId: vault.id, recurringId: templateId) }
         let decided = Set(runs.map(\.periodDate))

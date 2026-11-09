@@ -112,8 +112,8 @@ the total or whatever fills it up to its cap; the order is the priority when
 the total runs short. Nothing moves by itself: when a period is due the tab
 shows what each line would get, and you share it out (one transfer per
 flow), skip the period, or reopen the latest decision to undo it. The
-tabs are Riepilogo (⌘1), Mastro (⌘2), Ricorrenze (⌘3), Riparto (⌘4) and
-Setup (⌘5). The plan lives in the vault, so every member sees it and a
+tabs are Riepilogo (⌘1), Mastro (⌘2), Ricorrenze (⌘3), Riparto (⌘4),
+Patrimonio (⌘5) and Setup (⌘6). The plan lives in the vault, so every member sees it and a
 period is decided once; before creating one, upgrade every Mac that syncs
 (`docs/DEPLOY.md` §6.3). An income counts in one period only: edited or
 deleted after its period was shared out, it is not shared again; reopen the
@@ -139,6 +139,74 @@ the first one the source, Conto into Contanti for a withdrawal. A wallet has
 no cap and may go below zero, which is only pointed out, and the flows stay
 as they are: the money changes wallet, not flow. The balances are again
 those of the date chosen.
+
+### Wealth
+
+The Patrimonio tab (⌘5) sets the wallets' money against what the loans and
+mortgages still owe, as of today (it ignores the month and the person on
+screen). Three cards: the liquidity, the sum of the wallets' balances; the
+remaining debt, the residual of every running loan; and the net worth,
+liquidity minus debt. Below, the loans table (name, installment, TAN,
+progress, remaining debt, end; the paid-off ones tagged, the archived ones
+last) and, for the selected loan, an inspector with its terms, TAEG, what
+has been repaid, the interest paid and still to pay, the total cost, the
+residual-debt chart, its events and the full amortization schedule.
+
+A loan is entered with the amount, the TAN or the TAEG, the duration, the
+first installment's date, and the installment either worked out or typed as
+the contract has it: with the amount and the duration, the contract's
+installment gives the rate. An installment above the formula's ends the loan
+sooner (the last one is smaller); one below it leaves a final balloon
+installment, pointed out in a warning. The amortization is French: constant
+installment, interest on the remaining debt at the TAN over twelve, rounded
+to the cent at every installment, the last one settling the residual. The
+schedule is worked out again every time it is read, in integers, from the
+terms and the events, so correcting a term or adding a past event redraws it
+and every device draws the same one.
+
+Two kinds of event change it. A rate change applies to the installments
+falling due after its date, with the installment worked out again or the one
+in the bank's letter. An early repayment cuts the debt and either keeps the
+installment and ends sooner (shorten) or keeps the end and lowers the
+installment (lower), with a penalty if there is one; a repayment above the
+debt is cut to the debt, which closes the loan. The sheet can record the
+payment in the ledger as an expense, penalty included. Warnings (an
+installment that does not cover the interest, a balloon, an event after the
+end) never refuse anything: they depend on the schedule, which depends on the
+order of the events.
+
+Fees are contractual: upfront ones (application, survey, substitute tax) and
+one paid with every installment. The TAEG follows EU Directive 2008/48: a
+standard year of twelve equal months, the rate held for the whole loan,
+counting interest and those fees but not the notary's; the rate comes from
+the TAN. Typing only the TAEG gives the TAN back as an estimate: exact with
+no fees, otherwise it overstates the installment. The total cost, on the
+other hand, comes from the real schedule, events included.
+
+A loan can be linked to a recurring entry, created from the loan form or an
+existing one (a mortgage already in Ricorrenze). The installment is then
+recorded at the schedule's amount for that due date, the fee included,
+whichever way it is confirmed (Ricorrenze, the Mastro's due rows, Register
+All), so a rate change reaches the ledger; the entry's template keeps the
+current installment and the last due date, updated with every change to the
+loan (an amount typed by hand on the template is overwritten as soon as it is
+linked or made, and kept at the schedule's installment from then on). A
+linked template must be monthly (every month, interval 1), on any day. A linked entry cannot change kind. The progress is by date, since the
+bank debits by itself and installments from before Sparagne count; "recorded
+X of Y" next to it checks the ledger. Because the commands are new, upgrade
+every Mac that syncs before creating a loan or recording a linked
+installment (`docs/DEPLOY.md` §6.4).
+
+Limits: monthly installments only; French amortization only (no Italian
+or German schedules); the disbursement is not recorded (a mortgage goes to
+the seller, a loan to the shop); interest is not pro rata between due
+dates, so an early repayment takes effect at the next installment; and the
+net worth counts no assets yet, only the wallets and the debt. A loan
+change that records an expense or creates a template is sent as one batch,
+atomic on this Mac only: if the server refuses one command of it (another
+member archived the loan meanwhile), the others stay and the refused-changes
+list shows the refused one, so the expense or the template may need removing
+by hand.
 
 ### Statements, full export and backup
 

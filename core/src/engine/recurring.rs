@@ -182,20 +182,37 @@ pub(super) fn restore_recurring(
     Ok(())
 }
 
+/// Borrowed view of `Command::ExecuteRecurring`.
+#[derive(Clone, Copy)]
+pub(super) struct Execution<'a> {
+    pub recurring_id: Uuid,
+    pub period_date: NaiveDate,
+    pub occurred_at: DateTime<FixedOffset>,
+    pub person: Option<&'a str>,
+    /// The period's own amount, `None` = the template's.
+    pub amount: Option<i64>,
+}
+
 /// Posts the template as an entry, then records the run. `person` is the
-/// command's, never the template's owner (see `Command::ExecuteRecurring`).
+/// command's, never the template's owner (see `Command::ExecuteRecurring`);
+/// `amount`, when given, is the entry's instead of the template's.
 pub(super) fn execute_recurring(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
-    recurring_id: Uuid,
-    period_date: NaiveDate,
-    occurred_at: DateTime<FixedOffset>,
-    person: Option<&str>,
+    execution: &Execution<'_>,
     now: i64,
 ) -> Result<Uuid> {
+    let Execution {
+        recurring_id,
+        period_date,
+        occurred_at,
+        person,
+        amount,
+    } = *execution;
     let template = due_template(tx, env.vault_id, recurring_id, period_date)?;
     let entry = Entry {
-        amount: template.amount,
+        // The entry checks the amount like any other: `> 0`.
+        amount: amount.unwrap_or(template.amount),
         wallet_id: template.wallet_id,
         flow_id: template.flow_id,
         category: template.category,
@@ -511,6 +528,7 @@ mod tests {
             period_date: at.date_naive(),
             occurred_at: at,
             person: entry.person.clone(),
+            amount: None,
         });
         let typed = run(Command::Expense(entry));
 

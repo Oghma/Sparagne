@@ -50,7 +50,7 @@ struct TopBar: View {
                 // Where the other tabs search: the Riepilogo has nothing to
                 // search, and the person it reads is the Mastro's.
                 PersonSegments(store: store)
-            case .allocation:
+            case .allocation, .wealth:
                 EmptyView()
             }
             // The pill leads to the Ricorrenze tab, where the periods are
@@ -70,8 +70,8 @@ struct TopBar: View {
     }
 
     /// What the tab on screen adds: a row on the Riepilogo and the Mastro, a
-    /// template on the Ricorrenze, a one-off move on the Riparto; the Setup
-    /// tab adds in its tables' own empty lines. Nothing for an account that
+    /// template on the Ricorrenze, a one-off move on the Riparto, a loan on
+    /// the Patrimonio; the Setup tab adds in its tables' own empty lines. Nothing for an account that
     /// only reads the vault, which could not save what it typed.
     ///
     /// Add opens the quick-add line (⌘K), as File ▸ Quick Add does; the
@@ -95,6 +95,10 @@ struct TopBar: View {
                 // wallets.
                 TabActionButton(symbol: "arrow.left.arrow.right", title: String(localized: "Move\u{2026}")) {
                     NotificationCenter.default.post(name: .moveBetweenFlows, object: nil)
+                }
+            case .wealth:
+                TabActionButton(symbol: "plus", title: String(localized: "New loan\u{2026}")) {
+                    NotificationCenter.default.post(name: .newLoan, object: nil)
                 }
             case .setup:
                 EmptyView()

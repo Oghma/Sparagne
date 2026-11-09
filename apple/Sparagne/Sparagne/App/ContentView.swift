@@ -72,6 +72,10 @@ struct MainWindow: View {
         case importStatement
         /// Move between flows or between wallets, by the side it opens on.
         case move(TargetKind)
+        /// «Nuovo prestito», from the top bar, the Vault menu or the palette.
+        case newLoan
+        /// A loan's sheets, asked by the Patrimonio tab (`LoanSheetRequest`).
+        case loan(LoanSheetRequest)
 
         var id: String {
             switch self {
@@ -84,6 +88,8 @@ struct MainWindow: View {
             case .manage: "manage"
             case .importStatement: "importStatement"
             case .move(let side): "move-\(side)"
+            case .newLoan: "newLoan"
+            case .loan(let request): "loan-\(request)"
             }
         }
     }
@@ -153,6 +159,22 @@ struct MainWindow: View {
             .onPosted(.importStatement) { if store.currentVault != nil { sheet = .importStatement } }
             .onPosted(.moveBetweenFlows) { if store.canWrite { sheet = .move(.flow) } }
             .onPosted(.moveBetweenWallets) { if store.canWrite { sheet = .move(.wallet) } }
+            .onPosted(.newLoan) { if store.canWrite { sheet = .newLoan } }
+            // The schedule is read; what writes, only where the vault may be
+            // written.
+            .onReceive(NotificationCenter.default.publisher(for: .loanSheet)) { note in
+                guard let request = note.object as? LoanSheetRequest, request.stands(in: store.loans) else { return }
+                if case .schedule = request {
+                    sheet = .loan(request)
+                } else if store.canWrite {
+                    sheet = .loan(request)
+                }
+            }
+            // A sync or another vault took the loan away under its sheet,
+            // which would be left empty with no way out: it closes.
+            .onChange(of: store.loans) { _, loans in
+                if case .loan(let request) = sheet, !request.stands(in: loans) { sheet = nil }
+            }
             // Back Up Database and Export All Transactions: file panels owned
             // by the exporter (`Support/VaultExporter.swift`).
             .modifier(VaultExportHandlers(store: store))
@@ -208,6 +230,7 @@ struct MainWindow: View {
         case "importstatement": sheet = .importStatement
         case "move": if store.canWrite { sheet = .move(.flow) }
         case "movewallets": if store.canWrite { sheet = .move(.wallet) }
+        case "newloan": if store.canWrite { sheet = .newLoan }
         case "rejected": sheet = .rejected
         default: break
         }
@@ -254,6 +277,26 @@ struct MainWindow: View {
             StatementImportSheet(store: store, engine: engine)
         case .move(let side):
             MoveSheet(store: store, side: side)
+        case .newLoan:
+            LoanSheet(store: store)
+        case .loan(let request):
+            loanSheet(request)
+        }
+    }
+
+    /// A loan's sheet, on the loan as it is now; nothing once it is gone (a
+    /// sync, another vault).
+    @ViewBuilder
+    private func loanSheet(_ request: LoanSheetRequest) -> some View {
+        switch request {
+        case .edit(let id):
+            if let loan = store.loans.first(where: { $0.id == id }) { LoanSheet(store: store, loan: loan) }
+        case .addEvent(let id):
+            if let loan = store.loans.first(where: { $0.id == id }) { LoanEventSheet(store: store, loan: loan) }
+        case .schedule(let id):
+            if let loan = store.loans.first(where: { $0.id == id }) { LoanScheduleSheet(store: store, loan: loan) }
+        case .createRecurring(let id):
+            if let loan = store.loans.first(where: { $0.id == id }) { LoanRecurringSheet(store: store, loan: loan) }
         }
     }
 }

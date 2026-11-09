@@ -329,6 +329,9 @@ actor CoreActor {
                 allocationPlan: try handle.allocationPlan(vaultId: vaultId),
                 pendingAllocation: try handle.pendingAllocation(vaultId: vaultId, today: request.today),
                 allocationBase: try handle.allocationBase(vaultId: vaultId),
+                loans: try handle.loans(vaultId: vaultId),
+                loanOverview: try handle.loanOverview(vaultId: vaultId, today: request.today),
+                linkedInstallments: try handle.linkedInstallments(vaultId: vaultId),
                 flowPerson: try handle.flowPersonTotals(
                     vaultId: vaultId,
                     from: request.monthFrom,
@@ -525,6 +528,12 @@ struct VaultLoad: Sendable {
     let pendingAllocation: PendingAllocation?
     /// The incomes the next allocation would share out.
     let allocationBase: AllocationBase
+    /// Every loan, archived included, by name: the Patrimonio tab.
+    let loans: [LoanView]
+    /// Every active loan as of `today`: residual, progress, next installment.
+    let loanOverview: [LoanOverview]
+    /// The amount each linked template's due date should be recorded with.
+    let linkedInstallments: [LinkedInstallment]
     let flowPerson: [FlowPersonTotals]
     /// The moves between envelopes of the month on screen, by envelope and
     /// person: with `flowPerson`, what the RIEPILOGO's flow cards say came in

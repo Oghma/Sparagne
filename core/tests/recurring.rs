@@ -47,6 +47,7 @@ fn execute(recurring_id: Uuid, period_date: NaiveDate, secs: i64) -> Command {
         period_date,
         occurred_at: at(secs),
         person: None,
+        amount: None,
     }
 }
 

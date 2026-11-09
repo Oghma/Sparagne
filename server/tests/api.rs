@@ -573,6 +573,7 @@ async fn owners_patches_and_executions_name_members_too() {
         period_date: chrono::NaiveDate::from_ymd_opt(2023, day, 1).expect("date"),
         occurred_at: at(T0),
         person: Some(person.to_string()),
+        amount: None,
     };
     let expense = CommandEnvelope::new(vault, "alice", expense(1_000, None));
     let expense_id = expense.id;

@@ -361,6 +361,41 @@ matters, and it is **the same as §6.2**:
    what reached the server in the meantime. The same holds for the local
    database of an app already upgraded.
 
+### 6.4 Moving to schema v6 (loans)
+
+This version takes the core's schema to version 6: two new tables, `loans`
+(a vault's loans and mortgages) and `loan_events` (their rate changes and
+early repayments), and seven new command kinds in the log: `create_loan`,
+`update_loan`, `set_loan_recurring`, `archive_loan`, `restore_loan`,
+`add_loan_event` and `remove_loan_event`. It also adds an optional field,
+`amount`, to the existing `execute_recurring` command: the installment of a
+linked loan, which the app reads from the schedule. Two hazards come
+together: the **new kinds** (as in §6.3) and the **new field** (as in
+§6.2). The order matters, and it is **the same as §6.2 and §6.3**:
+
+1. **Back up the server** (§4): `docker compose exec sparagne backup.sh`,
+   or `backup.sh` without Docker.
+2. **The server first, then the apps.** An old server refuses with `400`
+   the whole push of an app that carries a command kind it does not know,
+   so that Mac stops syncing altogether until the server is upgraded. It
+   also **silently drops** `amount` when it re-serializes a command: the
+   other Macs download an installment recorded at the template's amount.
+3. **Then every app, right away.** An old app cannot pull a vault whose log
+   holds one of the new kinds, and it records a linked installment at the
+   template's amount instead of the schedule's, so its projection diverges
+   from the others'. Upgrade every Mac that syncs as soon as the server is
+   up.
+4. **Nobody creates a loan, nor records an installment of a linked
+   template, until every Mac of the vault runs the new app.** Once a loan
+   is in the log, an app of the previous version stops pulling that vault;
+   and an installment recorded with `amount` is wrong on any Mac that
+   ignores the field.
+5. **Going back is a restore.** A v6 database does not open with a binary
+   or an app of the previous version (§6 point 2): going back means putting
+   the old binary back **and** restoring (§5) the backup of point 1, losing
+   what reached the server in the meantime. The same holds for the local
+   database of an app already upgraded.
+
 ## 7. Logs and health check
 
 - Structured logs on stdout through `tracing`, controlled by `RUST_LOG`

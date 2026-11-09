@@ -52,7 +52,7 @@ struct SparagneApp: App {
 
                 Divider()
 
-                // The sheet tabs, ⌘1 to ⌘5 in the tab bar's order, as a
+                // The sheet tabs, ⌘1 to ⌘6 in the tab bar's order, as a
                 // browser's tabs.
                 ForEach(LedgerTab.allCases) { tab in
                     Button(tab.label) { store?.tab = tab }
@@ -126,6 +126,8 @@ struct SparagneApp: App {
                     .disabled(store?.canWrite != true)
                 post(String(localized: "Move Between Wallets\u{2026}"), .moveBetweenWallets)
                     .disabled(store?.canWrite != true)
+                post(String(localized: "New Loan\u{2026}"), .newLoan)
+                    .disabled(store?.canWrite != true)
             }
         }
 
@@ -185,6 +187,12 @@ extension Notification.Name {
     /// Vault menu and palette: the same sheet on the wallets, money from one
     /// wallet into several.
     static let moveBetweenWallets = Notification.Name("it.oghma.sparagne.moveBetweenWallets")
+    /// Vault menu, palette, the Patrimonio's top bar and its table: the
+    /// «Nuovo prestito» sheet.
+    static let newLoan = Notification.Name("it.oghma.sparagne.newLoan")
+    /// The Patrimonio tab: one of a loan's sheets, the `LoanSheetRequest`
+    /// as the object.
+    static let loanSheet = Notification.Name("it.oghma.sparagne.loanSheet")
     /// File menu: every transaction of the vault on screen as CSV.
     static let exportAllTransactions = Notification.Name("it.oghma.sparagne.exportAllTransactions")
     /// File menu: a copy of the whole database file.

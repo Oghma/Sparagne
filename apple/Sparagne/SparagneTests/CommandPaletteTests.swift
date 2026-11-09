@@ -176,7 +176,7 @@ struct CommandPaletteTests {
 
         let actions = CommandPaletteModel.ledgerActions(store: store, engine: nil)
         let tabIds = actions.map(\.id).filter { $0.hasPrefix("tab.") }
-        #expect(tabIds == ["tab.summary", "tab.ledger", "tab.recurring", "tab.allocation", "tab.setup"])
+        #expect(tabIds == ["tab.summary", "tab.ledger", "tab.recurring", "tab.allocation", "tab.wealth", "tab.setup"])
 
         // From another tab each time, so the run is what moved it.
         for tab in LedgerTab.allCases {
@@ -202,6 +202,31 @@ struct CommandPaletteTests {
         let again = CommandPaletteModel.ledgerActions(store: store, engine: nil)
         let wallet = try #require(again.first { $0.id == "toggle.wallet" })
         #expect(wallet.title == String(localized: "Hide Wallet Column"))
+    }
+
+    @Test("Nuovo prestito is an entry found by its Italian words, and asks the window for the sheet")
+    func newLoanEntry() async throws {
+        let store = try await Self.store()
+        let actions = CommandPaletteModel.ledgerActions(store: store, engine: nil)
+        let entry = try #require(actions.first { $0.id == "loan.new" })
+        #expect(entry.title == String(localized: "New Loan\u{2026}"))
+        #expect(CommandPaletteModel.filter(actions, query: "mutuo").first?.id == "loan.new")
+        #expect(CommandPaletteModel.filter(actions, query: "prestito").first?.id == "loan.new")
+
+        let box = Box()
+        let observer = NotificationCenter.default.addObserver(forName: .newLoan, object: nil, queue: nil) { _ in
+            MainActor.assumeIsolated { box.value = "posted" }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        await entry.run()
+        #expect(box.value == "posted")
+    }
+
+    @Test("A vault that is only read offers no new loan")
+    func newLoanNeedsWriting() async throws {
+        let store = try await Self.store()
+        store.setReadOnlyVaults([try #require(store.currentVault).id])
+        #expect(!CommandPaletteModel.ledgerActions(store: store, engine: nil).contains { $0.id == "loan.new" })
     }
 
     @Test("Without a sync engine there is no sync entry")

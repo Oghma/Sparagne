@@ -131,6 +131,8 @@ struct LedgerWindow: View {
                 RecurringTab(store: store)
             case .allocation:
                 AllocationTab(store: store)
+            case .wealth:
+                WealthTab(store: store)
             case .setup:
                 SetupView(store: store, engine: engine) { sheet = $0 }
             }

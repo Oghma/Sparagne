@@ -352,3 +352,83 @@ impl Drop for TempDb {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Loans
+// ---------------------------------------------------------------------------
+
+/// `principal` at the yearly `annual_rate_ppm` in `months` from `first_due`,
+/// the installment worked out, no fees.
+pub fn loan_terms(
+    principal: i64,
+    annual_rate_ppm: u32,
+    months: u32,
+    first_due: NaiveDate,
+) -> sparagne_core::loan::LoanTerms {
+    sparagne_core::loan::LoanTerms {
+        principal,
+        annual_rate_ppm,
+        months,
+        first_due,
+        installment: sparagne_core::loan::LoanInstallment::Computed,
+        upfront_fees: 0,
+        installment_fee: 0,
+    }
+}
+
+/// A loan named `name` on `terms`, no note, no template.
+pub fn loan_cmd(name: &str, terms: sparagne_core::loan::LoanTerms) -> Command {
+    Command::CreateLoan {
+        name: name.to_string(),
+        note: None,
+        terms,
+        recurring_id: None,
+    }
+}
+
+pub fn event_cmd(loan_id: Uuid, event: sparagne_core::loan::LoanEvent) -> Command {
+    Command::AddLoanEvent { loan_id, event }
+}
+
+/// A new yearly rate from `date` on, the installment worked out again.
+pub fn rate_change(date: NaiveDate, annual_rate_ppm: u32) -> sparagne_core::loan::LoanEvent {
+    sparagne_core::loan::LoanEvent::RateChange {
+        date,
+        annual_rate_ppm,
+        installment: sparagne_core::loan::LoanInstallment::Computed,
+    }
+}
+
+/// An early repayment of `amount` on `date`, no penalty.
+pub fn prepayment(
+    date: NaiveDate,
+    amount: i64,
+    mode: sparagne_core::loan::PrepaymentMode,
+) -> sparagne_core::loan::LoanEvent {
+    sparagne_core::loan::LoanEvent::Prepayment {
+        date,
+        amount,
+        mode,
+        fee: 0,
+    }
+}
+
+pub fn loans_of(fx: &Fx) -> Vec<sparagne_core::loan::LoanView> {
+    fx.core.loans(fx.vault).unwrap()
+}
+
+/// `period` of `recurring_id` executed at its noon, with `amount` instead of
+/// the template's when given.
+pub fn execute_recurring_cmd(
+    recurring_id: Uuid,
+    period: NaiveDate,
+    amount: Option<i64>,
+) -> Command {
+    Command::ExecuteRecurring {
+        recurring_id,
+        period_date: period,
+        occurred_at: noon(period),
+        person: None,
+        amount,
+    }
+}

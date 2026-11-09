@@ -22,6 +22,9 @@ nonisolated enum RecurringKindChange {
         case archived
         /// No period is left before the schedule's end.
         case noPeriodsLeft
+        /// A loan records its installments through it: the copy would leave
+        /// the loan on the archived template.
+        case linkedToLoan
 
         /// What the inspector's menu says under its greyed item, and the
         /// alert when the change is asked for anyway.
@@ -33,6 +36,7 @@ nonisolated enum RecurringKindChange {
             case .readOnly: String(localized: "This vault is shared with you to read, not to change.")
             case .archived: String(localized: "Restore the template first")
             case .noPeriodsLeft: String(localized: "No periods left before its end")
+            case .linkedToLoan: String(localized: "It records a loan's installments: unlink it from the loan first")
             }
         }
     }

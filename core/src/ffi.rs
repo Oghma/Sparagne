@@ -19,7 +19,11 @@ use crate::{
     RecurringView, RejectedCommand, Schedule, StatementColumnValue, StatementDetection,
     StatementFormatGuess, StatementMapping, StatementOptions, StatementPreset, StatementPreview,
     StatementReport, StatementRowOverride, SyncReport, SyncState, TargetKind, TopExpense,
-    TransactionFilter, VaultSnapshot, VaultView, parse_major,
+    TransactionFilter, VaultSnapshot, VaultView,
+    loan::{
+        LinkedInstallment, LoanEventView, LoanOverview, LoanSchedule, LoanTerms, LoanView, math,
+    },
+    parse_major,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
     statement,
 };
@@ -327,6 +331,25 @@ forward! {
     /// The allocation plan's decided periods, the most recent first.
     fn allocation_runs(vault_id: Uuid, limit: u32) -> Vec<AllocationRunView>;
 
+    // -- Loans -------------------------------------------------------------
+
+    /// Every loan of the vault, archived included, by name.
+    fn loans(vault_id: Uuid) -> Vec<LoanView>;
+
+    /// One loan's schedule, its events applied.
+    fn loan_schedule(vault_id: Uuid, loan_id: Uuid) -> LoanSchedule;
+
+    /// Every active loan on `today`: residual, progress, next installment.
+    fn loan_overview(vault_id: Uuid, today: NaiveDate) -> Vec<LoanOverview>;
+
+    /// For every active loan with a linked template, the amount each due
+    /// date's installment should be recorded with.
+    fn linked_installments(vault_id: Uuid) -> Vec<LinkedInstallment>;
+
+    /// The schedule of terms and events not saved yet, for the forms.
+    fn preview_loan(terms: LoanTerms, events: Vec<LoanEventView>) -> LoanSchedule
+        => (&terms, &events);
+
     // -- Sync ---------------------------------------------------------------
 
     /// Where the vault stands with the server: last known server seq, outbox
@@ -436,6 +459,32 @@ pub fn parse_quick_add(input: String, currency: Currency) -> Result<QuickAdd, Qu
 #[uniffi::export]
 pub fn parse_money(text: String, currency: Currency) -> Result<i64, DomainError> {
     parse_major(&text, currency)
+}
+
+/// The French installment that repays `principal` minor units in `months`
+/// monthly installments at the yearly TAN `annual_rate_ppm` (millionths).
+#[uniffi::export]
+pub fn loan_installment(
+    principal: i64,
+    annual_rate_ppm: u32,
+    months: u32,
+) -> Result<i64, DomainError> {
+    math::installment(principal, annual_rate_ppm, months)
+}
+
+/// The yearly TAN, in millionths, at which `installment` repays `principal`
+/// in `months`: what the loan form shows when the user knows the amount, the
+/// installment and the duration but not the rate.
+#[uniffi::export]
+pub fn solve_loan_rate(principal: i64, installment: i64, months: u32) -> Result<u32, DomainError> {
+    math::solve_rate(principal, installment, months)
+}
+
+/// The TAN, in millionths, of a loan with no fees whose TAEG is `taeg_ppm`:
+/// an estimate when the user only knows the TAEG.
+#[uniffi::export]
+pub fn tan_from_taeg(taeg_ppm: u32) -> Result<u32, DomainError> {
+    math::tan_from_taeg(taeg_ppm)
 }
 
 /// Resolves a relative date token from a quick-add line against `today`.

@@ -621,6 +621,7 @@ fn relabelling_renames_the_people_the_outbox_named_by_the_local_name() {
             period_date: chrono::NaiveDate::from_ymd_opt(2023, 11, 1).unwrap(),
             occurred_at: at(T0),
             person: Some("local".to_string()),
+            amount: None,
         },
     );
 

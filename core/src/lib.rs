@@ -16,6 +16,7 @@ mod engine;
 mod error;
 mod ffi;
 mod flow;
+pub mod loan;
 mod maintenance;
 mod money;
 mod query;

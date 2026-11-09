@@ -30,7 +30,10 @@ mod core_common;
 
 // Every test binary uses its own share of them.
 #[allow(unused_imports)]
-pub use core_common::{T0, all as all_txns, at, entry, flow_cmd, move_id, wallet_cmd};
+pub use core_common::{
+    T0, all as all_txns, at, entry, event_cmd, execute_recurring_cmd, flow_cmd, loan_cmd,
+    loan_terms, move_id, prepayment, rate_change, wallet_cmd,
+};
 
 pub const PASSWORD: &str = "correct horse battery staple";
 /// What the app uses: a push carries at most this many commands.

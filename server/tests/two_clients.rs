@@ -242,6 +242,7 @@ async fn a_person_travels_with_the_row() {
             period_date: NaiveDate::from_ymd_opt(2023, 11, 1).unwrap(),
             occurred_at: at(T0 + 120),
             person: Some("bob".to_string()),
+            amount: None,
         },
     );
     // A name that is no member of the vault comes back refused, on its own.
