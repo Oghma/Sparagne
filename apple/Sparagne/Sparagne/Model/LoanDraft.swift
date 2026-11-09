@@ -194,13 +194,17 @@ struct LoanDraft: Equatable, Sendable {
     }
 
     /// The TAN at which the contract's installment repays the amount in
-    /// `months`; refused on the installment, the figure that does not add up.
+    /// `months`; refused on the installment, the figure that does not add up:
+    /// too low when all of them repay less than the amount, too high when
+    /// they would mean a rate the core does not take.
     private static func solvedRate(principal: Int64, installment: Int64, months: UInt32) throws -> UInt32 {
         let solved: UInt32
         do {
             solved = try solveLoanRate(principal: principal, installment: installment, months: months)
         } catch {
-            throw LoanDraftError(field: .installment, message: LoanText.installmentTooLow)
+            let (repaid, overflow) = installment.multipliedReportingOverflow(by: Int64(months))
+            let message = !overflow && repaid < principal ? LoanText.installmentTooLow : LoanText.installmentTooHigh
+            throw LoanDraftError(field: .installment, message: message)
         }
         guard solved <= LoanRate.maxPpm else {
             throw LoanDraftError(field: .installment, message: LoanText.installmentTooHigh)

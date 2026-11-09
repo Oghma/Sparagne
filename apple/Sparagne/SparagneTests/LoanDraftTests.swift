@@ -315,7 +315,7 @@ struct LoanDraftTests {
         #expect(try loanInstallment(principal: terms.principal, annualRatePpm: terms.annualRatePpm, months: 300) == 94_842)
     }
 
-    @Test("A contract's installment that never repays the amount, or only above 50%, is refused on the installment")
+    @Test("A contract's installment that never repays the amount is too low, one that means a rate above 50% too high, both on the installment")
     func contractCannotSolve() throws {
         var draft = try Self.mortgage()
         draft.rate = ""
@@ -324,9 +324,12 @@ struct LoanDraftTests {
         draft.durationUnit = .months
         draft.installmentMode = .contract
         draft.installment = "100"
-        #expect(Self.field(draft) == .installment)
+        #expect(draft.terms() == .failure(LoanDraftError(field: .installment, message: LoanText.installmentTooLow)))
         // 12 × 1.500 on 10.000 is a rate far above 50%.
         draft.installment = "1.500"
-        #expect(Self.field(draft) == .installment)
+        #expect(draft.terms() == .failure(LoanDraftError(field: .installment, message: LoanText.installmentTooHigh)))
+        // Just above 50%: 12 installments of 1.100 on 10.000 are about 54,6%.
+        draft.installment = "1.100"
+        #expect(draft.terms() == .failure(LoanDraftError(field: .installment, message: LoanText.installmentTooHigh)))
     }
 }
