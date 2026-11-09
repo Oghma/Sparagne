@@ -382,6 +382,78 @@ struct LoanStoreTests {
         #expect(byPeriod == amounts)
     }
 
+    /// The day `day` of the month `offset` months from today's.
+    private static func month(_ offset: Int, day: Int) throws -> NaiveDate {
+        let parts = try #require(NaiveDay.components(today))
+        let index = parts.year * 12 + parts.month - 1 + offset
+        return String(format: "%04d-%02d-%02d", index / 12, index % 12 + 1, day)
+    }
+
+    @Test("A template typed by hand on the 1st, linked to a loan due on the 5th, records each month's installment of the schedule")
+    func templateOnAnotherDay() async throws {
+        let store = try await Self.vault()
+        // The template on the 1st since two months ago: three periods due.
+        let first = try Self.month(-2, day: 1)
+        let id = try #require(await store.createRecurring(
+            kind: .expense,
+            amount: 90_000,
+            walletId: nil,
+            flowId: try TestStore.flow("Casa", in: store).id,
+            category: "Prestiti",
+            note: "Mutuo",
+            schedule: Schedule(frequency: .monthly(day: 1), interval: 1, startDate: first, endDate: nil)
+        ))
+        #expect(store.dueDates(of: id) == [first, try Self.month(-1, day: 1), try Self.month(0, day: 1)])
+        // The bank takes the installment on the 5th; the rate drops after
+        // the first one.
+        let terms = Self.kitchen(firstDue: try Self.month(-2, day: 5))
+        #expect(store.linkableRecurring(for: nil).contains { $0.id == id })
+        #expect(await store.createLoan(name: "Mutuo", note: nil, terms: terms, payment: .link(id)))
+        let drop = LoanEvent.rateChange(date: terms.firstDue, annualRatePpm: 30_000, installment: .computed)
+        #expect(await store.addLoanEvent(drop, to: try Self.loan(store, "Mutuo"), expense: nil))
+        #expect(store.presentedError == nil)
+
+        let rows = Array(try await Self.schedule(store, try Self.loan(store, "Mutuo")).rows.prefix(3))
+        let amounts = rows.map { $0.payment + $0.fee }
+        #expect(amounts[0] == 20_188)
+        #expect(amounts[1] < amounts[0])
+        // The alignment leaves the template's day alone.
+        let template = try Self.template(store, id)
+        #expect(template.schedule.frequency == .monthly(day: 1))
+        #expect(template.amount != amounts[0])
+        let periods = store.duePeriods.filter { $0.template.id == id }
+        #expect(periods.map { store.amount(of: $0) } == amounts)
+
+        await store.executeAllDueRecurring()
+
+        #expect(store.presentedError == nil)
+        let vaultId = try #require(store.currentVault).id
+        let runs = try await store.core.read { try $0.recurringRuns(vaultId: vaultId, recurringId: id) }
+        let recorded = try await Self.everyRow(store)
+        let byPeriod = try periods.map { period in
+            let run = try #require(runs.first { $0.periodDate == period.date })
+            return try #require(recorded.first { $0.id == run.transactionId }).amount
+        }
+        #expect(byPeriod == amounts)
+    }
+
+    @Test("A weekly template, or one every other month, cannot be linked: its periods would not meet the installments")
+    func onlyMonthlyTemplatesLink() async throws {
+        let store = try await Self.vault()
+        let start = try Self.day(10)
+        let weekly = try #require(await store.createRecurring(
+            kind: .expense, amount: 5_000, walletId: nil, flowId: nil, category: "Spesa", note: "Spesa",
+            schedule: Schedule(frequency: .weekly(weekday: 1), interval: 1, startDate: start, endDate: nil)
+        ))
+        let bimonthly = try #require(await store.createRecurring(
+            kind: .expense, amount: 5_000, walletId: nil, flowId: nil, category: "Bollette", note: "Luce",
+            schedule: Schedule(frequency: try Self.monthly(on: start), interval: 2, startDate: start, endDate: nil)
+        ))
+        let monthly = try await Self.handTemplate(store, from: start)
+        #expect(store.linkableRecurring(for: nil).map(\.id) == [monthly.id])
+        #expect(!store.linkableRecurring(for: nil).contains { [weekly, bimonthly].contains($0.id) })
+    }
+
     // MARK: - The template's kind
 
     @Test("A template a loan records through cannot change kind, and the menu says why")

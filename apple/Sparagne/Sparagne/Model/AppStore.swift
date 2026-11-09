@@ -315,8 +315,8 @@ final class AppStore {
     private(set) var linkedInstallments: [LinkedInstallment] = [] {
         didSet { installmentsByPeriod = LinkedInstallment.index(linkedInstallments) }
     }
-    /// `linkedInstallments` by `DuePeriod.id`, for `installmentAmount`, which
-    /// every due row asks.
+    /// `linkedInstallments` by template and month (`LinkedInstallment.key`),
+    /// for `installmentAmount`, which every due row asks.
     private(set) var installmentsByPeriod: [String: Int64] = [:]
 
     /// The plan's decided periods, most recent first. Written only by the

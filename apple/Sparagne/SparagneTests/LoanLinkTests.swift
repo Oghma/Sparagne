@@ -186,16 +186,27 @@ struct LoanLinkTests {
 
     // MARK: - What may be linked
 
-    @Test("A loan may link the active expense templates no other loan links, its own included, archived loans holding theirs")
+    @Test("A loan may link the active monthly expense templates no other loan links, its own included, archived loans holding theirs")
     func linkable() {
+        var weekly = Self.template("weekly")
+        weekly.schedule.frequency = .weekly(weekday: 1)
+        var everyOtherMonth = Self.template("everyOtherMonth")
+        everyOtherMonth.schedule.interval = 2
+        var onTheFirst = Self.template("free")
+        onTheFirst.schedule.frequency = .monthly(day: 1)
         let templates = [
-            Self.template("free"),
+            onTheFirst,
             Self.template("mine"),
             Self.template("theirs"),
             Self.template("archivedLoan's"),
             Self.template("salary", kind: .income),
             Self.template("archived", archived: true),
+            weekly,
+            everyOtherMonth,
         ]
+        #expect(LoanLink.isEveryMonth(onTheFirst.schedule))
+        #expect(!LoanLink.isEveryMonth(weekly.schedule))
+        #expect(!LoanLink.isEveryMonth(everyOtherMonth.schedule))
         let loans = [
             Self.loan("me", linking: "mine"),
             Self.loan("other", linking: "theirs"),
@@ -256,16 +267,18 @@ struct LoanLinkTests {
         #expect(LoanLink.ordered(events).map(\.id) == ["c", "a", "b"])
     }
 
-    @Test("The installments are found by template and due date, the key of a due period")
+    @Test("The installments are found by template and month, whatever day the template's period falls on")
     func index() {
         let index = LinkedInstallment.index([
             LinkedInstallment(recurringId: "t", dueDate: "2026-01-05", amount: 34_200),
             LinkedInstallment(recurringId: "t", dueDate: "2026-02-05", amount: 34_100),
-            LinkedInstallment(recurringId: "t", dueDate: "2026-02-05", amount: 1),
+            LinkedInstallment(recurringId: "t", dueDate: "2026-02-28", amount: 1),
         ])
         #expect(index.count == 2)
-        #expect(index[DuePeriod.key("t", "2026-02-05")] == 34_100)
-        let period = DuePeriod(template: Self.template("t"), date: "2026-01-05")
-        #expect(index[period.id] == 34_200)
+        #expect(index[LinkedInstallment.key("t", "2026-02-05")] == 34_100)
+        // A template on the 1st meets the installment due on the 5th.
+        #expect(index[LinkedInstallment.key("t", "2026-01-01")] == 34_200)
+        #expect(index[LinkedInstallment.key("t", "2026-03-01")] == nil)
+        #expect(index[LinkedInstallment.key("other", "2026-01-05")] == nil)
     }
 }

@@ -199,8 +199,8 @@ extension AppStore {
         return try? await core.read { try $0.previewLoan(terms: terms, events: events) }
     }
 
-    /// The active expense templates a loan may link: none linked by another
-    /// loan, `loan`'s own included.
+    /// The active monthly expense templates a loan may link: none linked by
+    /// another loan, `loan`'s own included (`LoanLink.linkable`).
     func linkableRecurring(for loan: LoanView?) -> [RecurringView] {
         LoanLink.linkable(recurringTemplates, loans: loans, for: loan)
     }
@@ -208,10 +208,13 @@ extension AppStore {
     // MARK: - Recording the installments
 
     /// What recording the period of `recurringId` due on `periodDate` writes
-    /// when a loan sets it: the schedule's installment with its fee. `nil`
-    /// for any other period, which records the template's amount.
+    /// when a loan sets it: the schedule's installment of that month, with
+    /// its fee. By month, not by day: a template typed by hand on the 1st
+    /// records the installment the bank takes on the 5th, both monthly
+    /// (`LoanLink.linkable`). `nil` for any other period, which records the
+    /// template's amount.
     func installmentAmount(recurringId: Uuid, periodDate: NaiveDate) -> Int64? {
-        installmentsByPeriod[DuePeriod.key(recurringId, periodDate)]
+        installmentsByPeriod[LinkedInstallment.key(recurringId, periodDate)]
     }
 
     /// The amount a due period shows, the one Registra records.
@@ -315,8 +318,10 @@ enum LoanLink {
     /// What `template` needs to say `schedule`: the current installment
     /// (`currentInstallment`) and the last due date as its end. Its start,
     /// cadence and everything else stay: a template linked as it was keeps
-    /// the periods it already recorded. An end before the template's start
-    /// is left out, since the core would refuse the schedule.
+    /// the periods it already recorded, its day too: the installments are
+    /// matched to its periods by month (`installmentAmount`). An end before
+    /// the template's start is left out, since the core would refuse the
+    /// schedule.
     static func alignment(of template: RecurringView, to schedule: LoanSchedule, today: NaiveDate) -> RecurringPatch {
         var patch = RecurringPatch()
         if let amount = currentInstallment(schedule, today: today), amount > 0, amount != template.amount {
@@ -389,9 +394,20 @@ enum LoanLink {
 
     /// The active expense templates of `templates` that no loan but `loan`
     /// links, archived loans included: the core keeps a template to one loan.
+    /// Only those every month, as the installments are: a period takes the
+    /// installment of its month (`AppStore.installmentAmount`), so a weekly
+    /// template, or one every other month, would record the wrong ones.
     static func linkable(_ templates: [RecurringView], loans: [LoanView], for loan: LoanView?) -> [RecurringView] {
         let taken = Set(loans.filter { $0.id != loan?.id }.compactMap(\.recurringId))
-        return templates.filter { !$0.archived && $0.kind == .expense && !taken.contains($0.id) }
+        return templates.filter {
+            !$0.archived && $0.kind == .expense && !taken.contains($0.id) && isEveryMonth($0.schedule)
+        }
+    }
+
+    /// Monthly with an interval of one.
+    static func isEveryMonth(_ schedule: Schedule) -> Bool {
+        guard case .monthly = schedule.frequency else { return false }
+        return schedule.interval == 1
     }
 
     /// Whether the early repayment `eventId` asks for more than the loan
@@ -451,19 +467,19 @@ extension LoanPatch {
 }
 
 extension LinkedInstallment {
-    /// `installments` by `DuePeriod.id`: one amount per template and due
-    /// date, the first when the core lists one twice.
+    /// `installments` by template and month (`key`): a loan has one due
+    /// date a month, the first when the core lists two.
     static func index(_ installments: [LinkedInstallment]) -> [String: Int64] {
         Dictionary(
-            installments.map { (DuePeriod.key($0.recurringId, $0.dueDate), $0.amount) },
+            installments.map { (key($0.recurringId, $0.dueDate), $0.amount) },
             uniquingKeysWith: { first, _ in first }
         )
     }
-}
 
-extension DuePeriod {
-    /// The id of the period of `templateId` due on `date`.
+    /// `templateId` and the month of `date`, `yyyy-MM`: a monthly
+    /// template's period and the loan's due date of the same month meet
+    /// here whatever their days.
     static func key(_ templateId: Uuid, _ date: NaiveDate) -> String {
-        "\(templateId)/\(date)"
+        "\(templateId)/\(date.prefix(7))"
     }
 }
