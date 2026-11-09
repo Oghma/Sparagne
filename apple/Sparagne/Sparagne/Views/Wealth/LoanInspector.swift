@@ -27,6 +27,19 @@ struct LoanInspector: View {
         loan.recurringId.flatMap { id in store.recurringTemplates.first { $0.id == id } }
     }
 
+    /// The linked template's periods from the first installment to today:
+    /// what «Registrate nel Mastro» counts against.
+    private var recordable: UInt32? {
+        linkedTemplate.map {
+            LoanFacts.recordable(
+                template: $0.schedule,
+                firstDue: loan.terms.firstDue,
+                today: today,
+                occurrences: CoreSchedule.occurrences
+            )
+        }
+    }
+
     private var figures: LoanOverview? {
         overview ?? schedule.map { LoanFacts.overview(of: loan, schedule: $0, today: today) }
     }
@@ -147,7 +160,7 @@ struct LoanInspector: View {
                     ))
                 }
                 ForEach(
-                    LoanFacts.issues(figures, firstDue: loan.terms.firstDue, templateStart: linkedTemplate?.schedule.startDate),
+                    LoanFacts.issues(figures, recordable: recordable),
                     id: \.self
                 ) { issue in
                     FormNote(WealthText.issue(issue), tone: .warning, indented: false)
@@ -250,7 +263,7 @@ struct LoanInspector: View {
                     } ?? String(localized: "loan.recurring.none", defaultValue: "none")
                 )
                 if let template, let figures, let registered = figures.registeredCount {
-                    let due = LoanFacts.recordable(figures, firstDue: loan.terms.firstDue, templateStart: template.schedule.startDate)
+                    let due = recordable ?? figures.paidCount
                     WealthFact(
                         String(localized: "Recorded in the ledger"),
                         String(localized: "\(Int(registered)) of \(Int(due))"),

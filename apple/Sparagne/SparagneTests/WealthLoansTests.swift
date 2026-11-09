@@ -138,11 +138,13 @@ struct WealthLoansTests {
     func issues() throws {
         let first: NaiveDate = "2024-03-01"
         let overview = F.overview(registered: 21, warnings: [.balloon(amount: 120_000)])
-        #expect(LoanFacts.issues(overview, firstDue: first, templateStart: first)
+        #expect(LoanFacts.issues(overview, recordable: 33)
             == [.schedule(.balloon(amount: 120_000)), .unregistered(registered: 21, due: 33)])
-        #expect(LoanFacts.issues(F.overview(registered: 33), firstDue: first, templateStart: first).isEmpty)
+        #expect(LoanFacts.issues(F.overview(registered: 33), recordable: 33).isEmpty)
+        // Without the template's periods, every installment due.
+        #expect(LoanFacts.issues(F.overview(registered: 21), recordable: nil) == [.unregistered(registered: 21, due: 33)])
         // No linked template: nothing to compare.
-        #expect(LoanFacts.issues(F.overview(registered: nil), firstDue: first, templateStart: nil).isEmpty)
+        #expect(LoanFacts.issues(F.overview(registered: nil), recordable: nil).isEmpty)
 
         let template = RecurringFixture.template(amount: 77_188, schedule: RecurringFixture.schedule(from: first))
         let linked = F.loan(id: "a", recurringId: template.id)
@@ -151,27 +153,46 @@ struct WealthLoansTests {
             overview: [F.overview(loanId: "a", registered: 21), F.overview(loanId: "b", registered: 0)],
             schedules: [:],
             templates: [template],
-            today: F.today
+            today: F.today,
+            occurrences: RecurringFixture.core
         )
         #expect(rows[0].issues == [.unregistered(registered: 21, due: 33)])
         #expect(rows[1].issues.isEmpty)
     }
 
-    @Test("Only the installments due since the template's first period are asked of the ledger")
-    func recordableSinceTheTemplate() {
-        let first: NaiveDate = "2024-03-01"
-        // A template made today for a loan 33 installments in: none yet.
-        let fresh = F.overview(paid: 33, registered: 0)
-        #expect(LoanFacts.recordable(fresh, firstDue: first, templateStart: "2026-12-01") == 0)
-        #expect(LoanFacts.issues(fresh, firstDue: first, templateStart: "2026-12-01").isEmpty)
-        // Linked from mid-month: the installment of its month was before it.
-        #expect(LoanFacts.recordable(fresh, firstDue: first, templateStart: "2026-06-15") == 5)
-        #expect(LoanFacts.issues(fresh, firstDue: first, templateStart: "2026-06-15") == [.unregistered(registered: 0, due: 5)])
-        // A template older than the loan asks for every installment.
-        #expect(LoanFacts.recordable(fresh, firstDue: first, templateStart: "2023-01-01") == 33)
-        #expect(LoanFacts.installments(from: first, before: "2024-03-01") == 0)
-        #expect(LoanFacts.installments(from: first, before: "2024-03-02") == 1)
-        #expect(LoanFacts.installments(from: first, before: "2026-12-01") == 33)
+    @Test("The ledger is asked for the template's periods from the first installment to today")
+    func recordableOnTheTemplatesDays() {
+        let first: NaiveDate = "2024-03-05"
+        let onTheFirst = RecurringFixture.schedule(.monthly(day: 1), from: "2024-03-01")
+        // A template on the 1st, a loan due on the 5th: on 3 November the
+        // core counts the run of 1 November, and so does what it is held
+        // to, though the installment of the 5th is not due yet.
+        #expect(LoanFacts.recordable(template: onTheFirst, firstDue: first, today: "2026-11-03", occurrences: RecurringFixture.core) == 32)
+        #expect(LoanFacts.recordable(template: onTheFirst, firstDue: first, today: "2026-11-06", occurrences: RecurringFixture.core) == 32)
+        // The run of 1 March 2024 comes before the first installment: the
+        // core leaves it out, and so does this.
+        #expect(LoanFacts.recordable(template: onTheFirst, firstDue: first, today: "2024-03-31", occurrences: RecurringFixture.core) == 0)
+        #expect(LoanFacts.recordable(template: onTheFirst, firstDue: first, today: "2024-04-01", occurrences: RecurringFixture.core) == 1)
+
+        // A template on the 5th, a loan due on the 1st: between the 1st and
+        // the 5th the month's run is not due, and nothing is missing.
+        let onTheFifth = RecurringFixture.schedule(.monthly(day: 5), from: "2024-03-05")
+        #expect(LoanFacts.recordable(template: onTheFifth, firstDue: "2024-03-01", today: "2026-11-03", occurrences: RecurringFixture.core) == 32)
+        #expect(LoanFacts.recordable(template: onTheFifth, firstDue: "2024-03-01", today: "2026-11-05", occurrences: RecurringFixture.core) == 33)
+
+        // A template made today for a loan already running: none yet.
+        let fresh = RecurringFixture.schedule(.monthly(day: 1), from: "2026-12-01", until: "2049-02-01")
+        #expect(LoanFacts.recordable(template: fresh, firstDue: "2024-03-01", today: F.today, occurrences: RecurringFixture.core) == 0)
+        #expect(LoanFacts.issues(F.overview(paid: 33, registered: 0), recordable: 0).isEmpty)
+    }
+
+    @Test("A loan sheet stands while its loan is there, and goes with it")
+    func sheetRequestStands() {
+        let loans = [F.loan(id: "a"), F.loan(id: "b")]
+        #expect(LoanSheetRequest.edit("a").stands(in: loans))
+        #expect(LoanSheetRequest.schedule("b").loanId == "b")
+        #expect(!LoanSheetRequest.addEvent("c").stands(in: loans))
+        #expect(!LoanSheetRequest.createRecurring("a").stands(in: []))
     }
 
     @Test("Early repayments before the first installment lower the opening debt")

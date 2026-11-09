@@ -50,41 +50,38 @@ enum LoanFacts {
 
     /// The schedule's warnings, then the installments the ledger misses.
     /// A loan with no linked template has nothing to compare: the
-    /// installments are the user's to record. `templateStart` is the linked
-    /// template's first period (`recordable`).
-    static func issues(_ overview: LoanOverview, firstDue: NaiveDate, templateStart: NaiveDate?) -> [LoanIssue] {
+    /// installments are the user's to record. `recordable` is what the
+    /// template could have recorded by today (`recordable(template:...)`);
+    /// without it, every installment due.
+    static func issues(_ overview: LoanOverview, recordable: UInt32?) -> [LoanIssue] {
         var issues = overview.warnings.map(LoanIssue.schedule)
         if let registered = overview.registeredCount {
-            let due = recordable(overview, firstDue: firstDue, templateStart: templateStart)
+            let due = recordable ?? overview.paidCount
             if registered < due { issues.append(.unregistered(registered: registered, due: due)) }
         }
         return issues
     }
 
-    /// The installments due by today that the linked template could have
-    /// recorded: those from its first period on. A template made for a loan
-    /// already running starts at the next installment, and one linked later
-    /// at its own start, so the installments the bank took before it are not
-    /// asked of the ledger. Without a start, every installment due.
-    static func recordable(_ overview: LoanOverview, firstDue: NaiveDate, templateStart: NaiveDate?) -> UInt32 {
-        guard let templateStart, templateStart > firstDue else { return overview.paidCount }
-        let before = installments(from: firstDue, before: templateStart)
-        return UInt32(max(Int(overview.paidCount) - before, 0))
+    /// The periods of the linked template from the loan's first installment
+    /// to today: what the core's registered count reaches when each one was
+    /// recorded, since it counts the template's runs dated in that span.
+    /// Counted on the template's own days, not the loan's: a template on the
+    /// 1st and a loan due on the 5th agree all month, and a template made
+    /// for a loan already running asks nothing of the months before it.
+    static func recordable(
+        template: Schedule,
+        firstDue: NaiveDate,
+        today: NaiveDate,
+        occurrences: ScheduleOccurrences
+    ) -> UInt32 {
+        let from = max(firstDue, template.startDate)
+        guard from <= today, let dates = try? occurrences(template, from, Self.periodLimit) else { return 0 }
+        return UInt32(dates.filter { $0 <= today }.count)
     }
 
-    /// How many monthly installments from `firstDue` fall before `day`: the
-    /// whole months between them, and one more when `day` is past the last
-    /// of them.
-    static func installments(from firstDue: NaiveDate, before day: NaiveDate) -> Int {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = CoreDate.utc
-        guard let first = CoreDate.localDay(firstDue, timeZone: CoreDate.utc),
-              let end = CoreDate.localDay(day, timeZone: CoreDate.utc), first < end
-        else { return 0 }
-        let months = calendar.dateComponents([.month], from: first, to: end).month ?? 0
-        let reached = calendar.date(byAdding: .month, value: months, to: first) ?? end
-        return months + (reached < end ? 1 : 0)
-    }
+    /// The core returns at most this many periods: eighty years of a
+    /// monthly template.
+    private static let periodLimit: UInt32 = 1_000
 
     /// The overview of a loan the core's leaves out (an archived one), from
     /// its schedule, as of `today`: the installments due on or before it are
@@ -158,19 +155,25 @@ struct LoanRow: Identifiable, Equatable, Sendable {
     /// order (by name), then the archived ones. `overview` covers the
     /// running loans; `schedules` stands in for the ones it leaves out,
     /// when the tab has loaded theirs. `templates` gives the linked
-    /// templates' starts, from which the ledger is asked for installments.
+    /// templates' schedules, whose periods (`occurrences`, the core's) the
+    /// ledger is asked for; without them, every installment due.
     static func rows(
         loans: [LoanView],
         overview: [LoanOverview],
         schedules: [Uuid: LoanSchedule],
         templates: [RecurringView] = [],
-        today: NaiveDate
+        today: NaiveDate,
+        occurrences: ScheduleOccurrences? = nil
     ) -> [LoanRow] {
         let byLoan = Dictionary(overview.map { ($0.loanId, $0) }, uniquingKeysWith: { first, _ in first })
-        let starts = Dictionary(templates.map { ($0.id, $0.schedule.startDate) }, uniquingKeysWith: { first, _ in first })
+        let cadences = Dictionary(templates.map { ($0.id, $0.schedule) }, uniquingKeysWith: { first, _ in first })
         let ordered = loans.filter { !$0.archived } + loans.filter(\.archived)
         return ordered.map { loan in
-            let start = loan.recurringId.flatMap { starts[$0] }
+            let recordable: UInt32? = if let occurrences, let cadence = loan.recurringId.flatMap({ cadences[$0] }) {
+                LoanFacts.recordable(template: cadence, firstDue: loan.terms.firstDue, today: today, occurrences: occurrences)
+            } else {
+                nil
+            }
             let schedule = schedules[loan.id]
             let figures = byLoan[loan.id] ?? schedule.map { LoanFacts.overview(of: loan, schedule: $0, today: today) }
             let last = schedule?.rows.last.map { $0.payment + $0.fee }
@@ -193,7 +196,7 @@ struct LoanRow: Identifiable, Equatable, Sendable {
                 end: figures?.endDate,
                 issues: loan.archived
                     ? []
-                    : figures.map { LoanFacts.issues($0, firstDue: loan.terms.firstDue, templateStart: start) } ?? []
+                    : figures.map { LoanFacts.issues($0, recordable: recordable) } ?? []
             )
         }
     }

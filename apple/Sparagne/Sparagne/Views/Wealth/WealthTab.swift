@@ -25,7 +25,8 @@ struct WealthTab: View {
             overview: store.loanOverview,
             schedules: archivedSchedules,
             templates: store.recurringTemplates,
-            today: today
+            today: today,
+            occurrences: CoreSchedule.occurrences
         )
         HStack(spacing: 0) {
             ScrollView {

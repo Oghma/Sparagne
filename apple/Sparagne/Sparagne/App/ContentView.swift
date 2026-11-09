@@ -163,12 +163,17 @@ struct MainWindow: View {
             // The schedule is read; what writes, only where the vault may be
             // written.
             .onReceive(NotificationCenter.default.publisher(for: .loanSheet)) { note in
-                guard let request = note.object as? LoanSheetRequest else { return }
+                guard let request = note.object as? LoanSheetRequest, request.stands(in: store.loans) else { return }
                 if case .schedule = request {
                     sheet = .loan(request)
                 } else if store.canWrite {
                     sheet = .loan(request)
                 }
+            }
+            // A sync or another vault took the loan away under its sheet,
+            // which would be left empty with no way out: it closes.
+            .onChange(of: store.loans) { _, loans in
+                if case .loan(let request) = sheet, !request.stands(in: loans) { sheet = nil }
             }
             // Back Up Database and Export All Transactions: file panels owned
             // by the exporter (`Support/VaultExporter.swift`).

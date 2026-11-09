@@ -14,6 +14,20 @@ enum LoanSheetRequest: Hashable, Sendable {
     case schedule(Uuid)
     case createRecurring(Uuid)
 
+    /// The loan the sheet is about.
+    var loanId: Uuid {
+        switch self {
+        case .edit(let id), .addEvent(let id), .schedule(let id), .createRecurring(let id): id
+        }
+    }
+
+    /// Whether its loan is still among `loans`: a sync or another vault can
+    /// take it away while the sheet is open, and an empty sheet has no way
+    /// out.
+    func stands(in loans: [LoanView]) -> Bool {
+        loans.contains { $0.id == loanId }
+    }
+
     @MainActor
     func post() {
         NotificationCenter.default.post(name: .loanSheet, object: self)
