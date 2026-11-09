@@ -266,26 +266,195 @@ fn nominal_dues(terms: &LoanTerms) -> Vec<NaiveDate> {
     .unwrap()
 }
 
-/// What the prepayments do to the debt, replayed from the ids a schedule
-/// lists: each one applied in the listed order, cut to the residual.
-struct Ledger {
-    residual: i64,
-    prepaid: i64,
-    penalties: i64,
-    listed: Vec<Uuid>,
-    clipped: Vec<Uuid>,
+/// The yearly rate, in millionths, at which `flows` (one a month, the first
+/// a month after the money was received) are worth `received`: what the TAEG
+/// of a schedule must be, solved in floating point on the schedule's own
+/// payments, so that the cent rounding of each row is in it. `None` when
+/// nothing was received or the flows do not repay it; beyond `u32`'s reach
+/// the value is simply large.
+fn irr_ref(received: i64, flows: &[i64]) -> Option<f64> {
+    if received <= 0 {
+        return None;
+    }
+    let received = received as f64;
+    let present_value = |monthly: f64| {
+        flows
+            .iter()
+            .enumerate()
+            .map(|(k, flow)| *flow as f64 / (1.0 + monthly).powi(i32::try_from(k + 1).unwrap()))
+            .sum::<f64>()
+    };
+    if present_value(0.0) < received {
+        return None;
+    }
+    let (mut low, mut high) = (0.0_f64, 2.0_f64);
+    for _ in 0..200 {
+        let middle = (low + high) / 2.0;
+        if present_value(middle) > received {
+            low = middle;
+        } else {
+            high = middle;
+        }
+    }
+    let monthly = (low + high) / 2.0;
+    Some(((1.0 + monthly).powi(12) - 1.0) * 1_000_000.0)
 }
 
-impl Ledger {
-    fn prepay(&mut self, id: Uuid, amount: i64, fee: i64) {
-        let applied = amount.min(self.residual);
-        if amount > self.residual {
-            self.clipped.push(id);
+/// Where a replay of the schedule stands between two installments: the
+/// debt, the rate, the installment and the number of the plan's last row,
+/// which pays whatever is left (the loan's last one, or where the installment
+/// was last worked out again).
+#[derive(Clone, Copy)]
+struct Plan {
+    residual: i64,
+    rate: u32,
+    installment: i64,
+    /// The installment is this file's formula, within a cent of the core's,
+    /// not an amount a contract fixed.
+    approximate: bool,
+    /// A contract amount under the formula leaves a balloon in the plan's
+    /// last row; `None` when the amount is within a cent of the formula,
+    /// where this file's arithmetic cannot tell which side it falls on.
+    balloon: Option<bool>,
+    end: u32,
+}
+
+/// What one installment pays.
+struct Paid {
+    payment: i64,
+    interest: i64,
+    capital: i64,
+    below_interest: bool,
+}
+
+impl Plan {
+    /// Sets the installment `asked` for over `remaining` installments: the
+    /// formula on the debt at the rate, or the contract's amount.
+    fn ask(&mut self, asked: LoanInstallment, remaining: u32) {
+        let formula = installment_ref(self.residual, self.rate, remaining);
+        match asked {
+            LoanInstallment::Computed => {
+                self.installment = formula;
+                self.approximate = true;
+                self.balloon = Some(false);
+            }
+            LoanInstallment::Contract { amount } => {
+                self.installment = amount;
+                self.approximate = false;
+                self.balloon = ((amount - formula).abs() > 1).then_some(amount < formula);
+            }
         }
-        self.residual -= applied;
-        self.prepaid += applied;
-        self.penalties += fee;
-        self.listed.push(id);
+    }
+
+    /// What installment `number` pays: the plan's last one, or one the
+    /// installment would overpay, clears the debt with its interest; one the
+    /// installment does not cover the interest of pays the interest alone.
+    fn pay(&self, number: u32) -> Paid {
+        let interest = interest_ref(self.residual, self.rate);
+        let owed = self.residual + interest;
+        if number >= self.end || self.installment >= owed {
+            Paid {
+                payment: owed,
+                interest,
+                capital: self.residual,
+                below_interest: false,
+            }
+        } else if self.installment <= interest {
+            Paid {
+                payment: interest,
+                interest,
+                capital: 0,
+                below_interest: true,
+            }
+        } else {
+            Paid {
+                payment: self.installment,
+                interest,
+                capital: self.installment - interest,
+                below_interest: false,
+            }
+        }
+    }
+
+    /// The installments the plan has left after installment `paid`: those
+    /// its installment takes to clear the debt, up to its last one. A lower
+    /// installment, or one worked out again at a new rate, is spread over
+    /// these, so a shortened loan stays shortened.
+    fn installments_left(&self, paid: u32) -> u32 {
+        let mut plan = *self;
+        for number in paid + 1..=self.end {
+            let payment = plan.pay(number);
+            if payment.below_interest {
+                break;
+            }
+            plan.residual -= payment.capital;
+            if plan.residual == 0 {
+                return number - paid;
+            }
+        }
+        self.end.saturating_sub(paid)
+    }
+}
+
+/// The schedule replayed from the terms and the events by the contract's
+/// rules, to be compared with the core's row by row.
+struct Replay {
+    plan: Plan,
+    prepaid: i64,
+    penalties: i64,
+    clipped: Vec<Uuid>,
+    after_end: Vec<Uuid>,
+}
+
+impl Replay {
+    /// Applies the events of one window, in order, after installment `paid`
+    /// (`0` before the first), then works the installment out again once if
+    /// one of them asks for it, over the installments the plan had left.
+    /// Returns the ids applied; an event that finds no debt left is after
+    /// the end, and nothing of it counts.
+    fn apply(&mut self, window: &[&LoanEventView], paid: u32) -> Vec<Uuid> {
+        let before = self.plan;
+        let mut asked: Option<LoanInstallment> = None;
+        let mut applied = Vec::new();
+        for view in window {
+            if self.plan.residual == 0 {
+                self.after_end.push(view.id);
+                continue;
+            }
+            match view.event {
+                LoanEvent::Prepayment {
+                    amount, mode, fee, ..
+                } => {
+                    if amount > self.plan.residual {
+                        self.clipped.push(view.id);
+                    }
+                    let repaid = amount.min(self.plan.residual);
+                    self.plan.residual -= repaid;
+                    self.prepaid += repaid;
+                    self.penalties += fee;
+                    if mode == PrepaymentMode::Lower {
+                        asked = Some(LoanInstallment::Computed);
+                    }
+                }
+                LoanEvent::RateChange {
+                    annual_rate_ppm,
+                    installment,
+                    ..
+                } => {
+                    self.plan.rate = annual_rate_ppm;
+                    asked = Some(installment);
+                }
+            }
+            applied.push(view.id);
+        }
+        if let Some(asked) = asked
+            && self.plan.residual > 0
+        {
+            let remaining = before.installments_left(paid);
+            self.plan.ask(asked, remaining);
+            self.plan.end = paid + remaining;
+        }
+        applied
     }
 }
 
@@ -293,233 +462,150 @@ fn is_prepayment(event: &LoanEvent) -> bool {
     matches!(event, LoanEvent::Prepayment { .. })
 }
 
-/// Prepayments before rate changes, each kind by id.
-fn assert_applied_in_order(at: &str, ids: &[Uuid], event_of: impl Fn(Uuid) -> LoanEvent) {
-    let kinds: Vec<bool> = ids.iter().map(|id| is_prepayment(&event_of(*id))).collect();
-    let first_rate = kinds.iter().position(|p| !p).unwrap_or(kinds.len());
-    assert!(
-        kinds[first_rate..].iter().all(|p| !p),
-        "{at}: a prepayment after a rate change in {ids:?}"
-    );
-    for group in [&ids[..first_rate], &ids[first_rate..]] {
-        assert!(
-            group.windows(2).all(|w| w[0] < w[1]),
-            "{at}: same-day events not by id in {ids:?}"
-        );
-    }
-}
-
-/// What the installment of the next row must be after `row`, worked out from
-/// the events the row applied; `None` when the contract leaves it open (a
-/// `Lower` and a `Contract` on the same day) or when the row has no next.
-fn expected_next_installment(
-    row: &LoanScheduleRow,
-    rate: u32,
-    remaining: u32,
-    event_of: impl Fn(Uuid) -> LoanEvent,
-) -> Option<(i64, bool)> {
-    let mut recompute = false;
-    let mut fixed: Option<i64> = None;
-    for id in &row.event_ids {
-        match event_of(*id) {
-            LoanEvent::Prepayment { mode, .. } => {
-                if mode == PrepaymentMode::Lower {
-                    recompute = true;
-                }
-            }
-            LoanEvent::RateChange { installment, .. } => match installment {
-                LoanInstallment::Computed => {
-                    recompute = true;
-                    fixed = None;
-                }
-                LoanInstallment::Contract { amount } => {
-                    fixed = Some(amount);
-                }
-            },
-        }
-    }
-    match (fixed, recompute) {
-        (Some(_), true) => None,
-        (Some(amount), false) => Some((amount, true)),
-        (None, true) => Some((installment_ref(row.residual, rate, remaining), false)),
-        (None, false) => Some((row.payment, true)),
-    }
-}
-
 /// Everything the contract says of a schedule, whatever the terms and the
-/// events: dates, rates, the interest formula, a residual that never grows
-/// nor goes below zero and ends at zero, the sums, the ids listed once and
-/// in order, the warnings that follow from what happened.
+/// events, checked against a replay by its rules: the dates, the rates, the
+/// interest formula, the installment (a formula's within a cent, a contract's
+/// to the cent), the debt row by row down to zero, which events each row
+/// applies (dated from its due date to the day before the next, repayments
+/// before rate changes, then by id, none once the debt is gone), the sums,
+/// the warnings that follow from what happened, and on terms alone the TAEG
+/// as the rate of the schedule's own payments.
 fn check_schedule(ctx: &str, terms: &LoanTerms, events: &[LoanEventView], s: &LoanSchedule) {
     let dues = nominal_dues(terms);
-    let months = usize::try_from(terms.months).unwrap();
+    let months = terms.months;
     assert!(
-        s.rows.len() <= months,
+        s.rows.len() <= dues.len(),
         "{ctx}: {} rows over {months} months",
         s.rows.len()
     );
-    let event_of = |id: Uuid| {
-        events
+    // The window an event applies in: `0` before the first installment, `k`
+    // right after installment `k`.
+    let mut ordered: Vec<(usize, &LoanEventView)> = events
+        .iter()
+        .map(|view| (dues.partition_point(|due| *due <= view.event.date()), view))
+        .collect();
+    ordered.sort_by_key(|(window, view)| (*window, !is_prepayment(&view.event), view.id));
+    let window = |k: usize| -> Vec<&LoanEventView> {
+        ordered
             .iter()
-            .find(|e| e.id == id)
-            .unwrap_or_else(|| panic!("{ctx}: unknown event {id}"))
-            .event
+            .filter(|(window, _)| *window == k)
+            .map(|(_, view)| *view)
+            .collect()
     };
-    let mut ledger = Ledger {
-        residual: terms.principal,
+
+    let mut replay = Replay {
+        plan: Plan {
+            residual: terms.principal,
+            rate: terms.annual_rate_ppm,
+            installment: 0,
+            approximate: true,
+            balloon: None,
+            end: months,
+        },
         prepaid: 0,
         penalties: 0,
-        listed: Vec::new(),
         clipped: Vec::new(),
+        after_end: Vec::new(),
     };
-
-    assert_applied_in_order(
-        &format!("{ctx} before the first"),
-        &s.event_ids_before_first,
-        event_of,
+    replay.plan.ask(terms.installment, months);
+    assert_eq!(
+        s.event_ids_before_first,
+        replay.apply(&window(0), 0),
+        "{ctx}: the events before the first installment"
     );
-    for id in &s.event_ids_before_first {
-        match event_of(*id) {
-            LoanEvent::Prepayment {
-                date, amount, fee, ..
-            } => {
-                assert!(
-                    date < terms.first_due,
-                    "{ctx}: {id} dated {date} is not before the first installment"
-                );
-                ledger.prepay(*id, amount, fee);
-            }
-            LoanEvent::RateChange { .. } => {
-                panic!("{ctx}: a rate change {id} before the first installment")
-            }
-        }
-    }
 
-    let below = below_interest(s);
-    let mut rate = terms.annual_rate_ppm;
-    let mut expected: Option<(i64, bool)> = match terms.installment {
-        LoanInstallment::Contract { amount } => Some((amount, true)),
-        LoanInstallment::Computed => {
-            let lowered = s.event_ids_before_first.iter().any(|id| {
-                matches!(
-                    event_of(*id),
-                    LoanEvent::Prepayment {
-                        mode: PrepaymentMode::Lower,
-                        ..
-                    }
-                )
-            });
-            let on = if lowered {
-                ledger.residual
-            } else {
-                terms.principal
-            };
-            Some((installment_ref(on, rate, terms.months), false))
-        }
-    };
-    let mut first_zero_capital = None;
-    for (i, row) in s.rows.iter().enumerate() {
-        let at = format!("{ctx} row {}", i + 1);
-        let is_last = i + 1 == s.rows.len();
+    let mut below_from: Vec<u32> = Vec::new();
+    let mut was_below = false;
+    // `None` when this file cannot tell whether the last row is a balloon.
+    let mut expected_balloon: Option<Option<i64>> = Some(None);
+    let mut number: u32 = 0;
+    for row in &s.rows {
+        number += 1;
+        let at = format!("{ctx} row {number}");
+        let plan = replay.plan;
+        assert!(plan.residual > 0, "{at}: a row after the debt reached zero");
+        assert_eq!(row.number, number, "{at}: number");
         assert_eq!(
-            row.number,
-            u32_of(i64::try_from(i).unwrap() + 1),
-            "{at}: number"
+            row.due_date,
+            dues[usize::try_from(number - 1).unwrap()],
+            "{at}: due date"
         );
-        assert_eq!(row.due_date, dues[i], "{at}: due date");
-        assert_eq!(row.annual_rate_ppm, rate, "{at}: rate");
+        assert_eq!(row.annual_rate_ppm, plan.rate, "{at}: rate");
         assert_eq!(row.fee, terms.installment_fee, "{at}: fee");
-        assert!(row.interest >= 0, "{at}: negative interest");
-        assert!(row.capital >= 0, "{at}: negative capital {}", row.capital);
+        let mut paid = plan.pay(number);
         assert_eq!(
-            row.interest,
-            interest_ref(ledger.residual, rate),
-            "{at}: interest on {} at {rate}",
-            ledger.residual
+            row.interest, paid.interest,
+            "{at}: interest on {} at {}",
+            plan.residual, plan.rate
         );
-        assert_eq!(
-            row.payment,
-            row.interest + row.capital,
-            "{at}: payment is interest + capital"
-        );
-        assert!(
-            row.capital <= ledger.residual,
-            "{at}: capital {} over the debt {}",
-            row.capital,
-            ledger.residual
-        );
-        if !is_last && row.capital == 0 && first_zero_capital.is_none() {
-            first_zero_capital = Some(row.number);
-        }
-        if let Some((installment, exact)) = expected
-            && !is_last
-            && below.is_none()
-        {
-            if exact {
-                assert_eq!(row.payment, installment, "{at}: the installment");
-            } else {
-                assert!(
-                    (row.payment - installment).abs() <= 1,
-                    "{at}: installment {} is not the formula's {installment}",
-                    row.payment
-                );
-            }
-        }
-        ledger.residual -= row.capital;
-
-        assert_applied_in_order(&at, &row.event_ids, event_of);
-        for id in &row.event_ids {
-            let event = event_of(*id);
+        if plan.approximate && row.capital > 0 && row.capital < plan.residual {
+            // A regular row paying a formula installment: the core's amount
+            // is within a cent of this file's, and is the plan's from here.
             assert!(
-                event.date() >= row.due_date,
-                "{at}: {id} dated {} before the due date {}",
-                event.date(),
-                row.due_date
+                (row.payment - plan.installment).abs() <= 1,
+                "{at}: installment {} is not the formula's {}",
+                row.payment,
+                plan.installment
             );
-            if let Some(next) = dues.get(i + 1) {
-                assert!(
-                    event.date() < *next,
-                    "{at}: {id} dated {} is due with the next installment {next}",
-                    event.date()
-                );
-            }
-            match event {
-                LoanEvent::Prepayment { amount, fee, .. } => ledger.prepay(*id, amount, fee),
-                LoanEvent::RateChange {
-                    annual_rate_ppm, ..
-                } => rate = annual_rate_ppm,
-            }
+            replay.plan.installment = row.payment;
+            replay.plan.approximate = false;
+            paid = replay.plan.pay(number);
         }
-        assert_eq!(row.residual, ledger.residual, "{at}: residual");
-        assert!(row.residual >= 0, "{at}: debt below zero");
-        if !is_last {
-            assert!(row.residual > 0, "{at}: a zero residual ends the schedule");
+        assert_eq!(
+            (row.payment, row.capital),
+            (paid.payment, paid.capital),
+            "{at}: payment and capital on {} with the installment {}",
+            plan.residual,
+            replay.plan.installment
+        );
+        if paid.below_interest && !was_below {
+            below_from.push(number);
         }
-        let remaining = terms.months - row.number;
-        expected = if remaining == 0 {
-            None
-        } else {
-            expected_next_installment(row, rate, remaining, event_of)
-        };
+        was_below = paid.below_interest;
+        if number >= replay.plan.end && paid.payment > replay.plan.installment {
+            expected_balloon = replay
+                .plan
+                .balloon
+                .map(|under| under.then_some(paid.payment - replay.plan.installment));
+        }
+        replay.plan.residual -= paid.capital;
+        let applied = replay.apply(&window(usize::try_from(number).unwrap()), number);
+        assert_eq!(row.event_ids, applied, "{at}: the events applied after it");
+        assert_eq!(row.residual, replay.plan.residual, "{at}: residual");
     }
+    assert_eq!(
+        replay.plan.residual, 0,
+        "{ctx}: the schedule stops after row {number} with a debt left"
+    );
+    for (window, view) in &ordered {
+        if *window > usize::try_from(number).unwrap() {
+            replay.after_end.push(view.id);
+        }
+    }
+    let mut expected_after = replay.after_end;
+    expected_after.sort();
+    assert_eq!(
+        after_end(s),
+        expected_after,
+        "{ctx}: the events after the end"
+    );
+    let mut expected_clipped = replay.clipped;
+    expected_clipped.sort();
+    assert_eq!(
+        clipped(s),
+        expected_clipped,
+        "{ctx}: the clipped repayments"
+    );
 
-    match s.rows.last() {
-        Some(row) => assert_eq!(row.residual, 0, "{ctx}: the last row leaves a debt"),
-        None => assert_eq!(
-            ledger.residual, 0,
-            "{ctx}: no rows but a debt of {}",
-            ledger.residual
-        ),
-    }
     let capital: i64 = s.rows.iter().map(|r| r.capital).sum();
     assert_eq!(
-        capital + ledger.prepaid,
+        capital + replay.prepaid,
         terms.principal,
-        "{ctx}: capital + prepayments"
+        "{ctx}: capital + repayments"
     );
-    assert_eq!(s.total_prepaid, ledger.prepaid, "{ctx}: total_prepaid");
+    assert_eq!(s.total_prepaid, replay.prepaid, "{ctx}: total_prepaid");
     assert_eq!(
-        s.total_penalties, ledger.penalties,
+        s.total_penalties, replay.penalties,
         "{ctx}: total_penalties"
     );
     assert_eq!(
@@ -539,94 +625,49 @@ fn check_schedule(ctx: &str, terms: &LoanTerms, events: &[LoanEventView], s: &Lo
             - terms.principal,
         "{ctx}: total_cost"
     );
-    if terms.annual_rate_ppm == 0
-        && events
-            .iter()
-            .all(|e| matches!(e.event, LoanEvent::Prepayment { .. }))
-    {
+    if terms.annual_rate_ppm == 0 && events.iter().all(|e| is_prepayment(&e.event)) {
         assert_eq!(s.total_interest, 0, "{ctx}: interest at a zero rate");
     }
 
-    // Every event is applied once or flagged as after the end, by its date.
-    let mut listed = ledger.listed.clone();
-    let listed_count = listed.len();
-    listed.sort();
-    listed.dedup();
-    assert_eq!(listed.len(), listed_count, "{ctx}: an event listed twice");
-    let flagged = after_end(s);
-    let end = s.rows.last().map(|r| r.due_date);
-    for e in events {
-        let is_listed = listed.contains(&e.id);
-        let is_flagged = flagged.contains(&e.id);
-        assert!(
-            is_listed || is_flagged,
-            "{ctx}: {} neither applied nor flagged",
-            e.id
-        );
-        assert!(
-            !(is_listed && is_flagged),
-            "{ctx}: {} both applied and after the end",
-            e.id
-        );
-        match end {
-            Some(end) if e.event.date() < end => {
-                assert!(
-                    is_listed,
-                    "{ctx}: {} dated before the end is not applied",
-                    e.id
-                );
-            }
-            Some(end) if e.event.date() > end => {
-                assert!(
-                    is_flagged,
-                    "{ctx}: {} dated after the end is not flagged",
-                    e.id
-                );
-            }
-            None if e.event.date() >= terms.first_due => {
-                assert!(
-                    is_flagged,
-                    "{ctx}: {} after a loan paid off before it began",
-                    e.id
-                );
-            }
-            _ => {}
-        }
-    }
-    for id in &flagged {
-        assert!(
-            events.iter().any(|e| e.id == *id),
-            "{ctx}: flagged unknown {id}"
-        );
-    }
-    let mut expected_clipped = ledger.clipped.clone();
-    expected_clipped.sort();
+    let below_numbers: Vec<u32> = s
+        .warnings
+        .iter()
+        .filter_map(|w| match w {
+            LoanWarning::InstallmentBelowInterest { number } => Some(*number),
+            _ => None,
+        })
+        .collect();
     assert_eq!(
-        clipped(s),
-        expected_clipped,
-        "{ctx}: the clipped prepayments"
+        below_numbers, below_from,
+        "{ctx}: InstallmentBelowInterest from each row the installment stops covering the interest"
     );
-    // The flag names the first row whose installment does not cover the
-    // interest: every such row before the last one repays no capital. The
-    // last row is left open, since it pays what is left whatever the
-    // installment was.
-    match first_zero_capital {
-        Some(number) => assert_eq!(
-            below,
-            Some(number),
-            "{ctx}: InstallmentBelowInterest against the first row with no capital"
-        ),
-        None => assert!(
-            below.is_none() || below == s.rows.last().map(|r| r.number),
-            "{ctx}: InstallmentBelowInterest {below:?} with capital in every row"
-        ),
+    if let Some(expected) = expected_balloon {
+        assert_eq!(balloon(s), expected, "{ctx}: the balloon");
     }
-    for w in &s.warnings {
-        if let LoanWarning::PrepaymentClipped { event_id } = w {
-            assert!(
-                is_prepayment(&event_of(*event_id)),
-                "{ctx}: clipped a rate change"
-            );
+
+    // The TAEG is the terms' alone: on a schedule without events, the rate
+    // at which its payments, each with its fee, are worth the principal net
+    // of the upfront fees; none when the installment is below the interest,
+    // when nothing was received, or when it does not fit in `u32`.
+    if events.is_empty() {
+        let flows: Vec<i64> = s.rows.iter().map(|r| r.payment + r.fee).collect();
+        let irr = irr_ref(terms.principal - terms.upfront_fees, &flows);
+        match s.taeg_ppm {
+            Some(taeg) => {
+                assert!(
+                    below_from.is_empty(),
+                    "{ctx}: a TAEG {taeg} with an installment below the interest"
+                );
+                let irr = irr.unwrap_or_else(|| panic!("{ctx}: a TAEG {taeg} where no rate fits"));
+                assert!(
+                    (f64::from(taeg) - irr).abs() <= 1.0,
+                    "{ctx}: taeg {taeg} against the rate {irr:.2} of the schedule's own payments"
+                );
+            }
+            None => assert!(
+                !below_from.is_empty() || irr.is_none_or(|irr| irr > f64::from(u32::MAX) - 1.0),
+                "{ctx}: no TAEG though the payments give {irr:?}"
+            ),
         }
     }
 }
@@ -881,6 +922,16 @@ fn gen_terms(g: &mut Gen) -> LoanTerms {
     }
 }
 
+/// How far, in millionths, the TAEG of a loan without fees may sit from
+/// `(1 + TAN/12)^12 − 1`: the installment is rounded to the cent, so the
+/// rate its payments really carry moves by up to half a cent over the
+/// principal a month, about `9.4 × 10^6 / principal` a year on a one-month
+/// loan (less over more months), measured at 8.8 on 10 000 €; a cent of
+/// slack for the bisection's rounding on top.
+fn closed_form_drift(principal: i64) -> i64 {
+    3 + 12_000_000 / principal
+}
+
 /// Whether the TAEG of `terms` is bound to exist: no fees, or fees small
 /// enough next to the principal that the yearly rate stays far from what
 /// `u32` millionths can hold (with the fees over the principal there is no
@@ -956,11 +1007,12 @@ fn every_generated_loan_without_events_satisfies_the_contract() {
         assert_eq!(preview(&core, &t, &[]), s, "{ctx}: deterministic");
         if below_interest(&s).is_none() && taeg_is_bounded(&t) {
             assert!(s.taeg_ppm.is_some(), "{ctx}: no TAEG");
-            if t.upfront_fees == 0 && t.installment_fee == 0 {
+            if t.upfront_fees == 0 && t.installment_fee == 0 && t.principal >= 100_000 {
+                let taeg = i64::from(s.taeg_ppm.unwrap());
+                let closed = i64::from(closed_taeg(t.annual_rate_ppm));
                 assert!(
-                    s.taeg_ppm.unwrap() >= closed_taeg(t.annual_rate_ppm).saturating_sub(2),
-                    "{ctx}: taeg {:?} under the TAN's yearly equivalent",
-                    s.taeg_ppm
+                    (taeg - closed).abs() <= closed_form_drift(t.principal),
+                    "{ctx}: taeg {taeg} against the TAN's yearly equivalent {closed}"
                 );
             }
         }
@@ -979,7 +1031,10 @@ fn every_generated_loan_with_events_satisfies_the_contract_and_keeps_the_taeg_of
         let plain = preview(&core, &t, &[]);
         let formula = plain.rows[0].payment;
         if g.chance(20) && t.months > 1 {
-            t.installment = contract(g.range(1, (2 * formula.max(1)).min(MAX_LOAN_AMOUNT)));
+            // Above the first month's interest, which a contract must be.
+            let floor = plain.rows[0].interest + 1;
+            t.installment =
+                contract(g.range(floor, (2 * formula.max(1)).min(MAX_LOAN_AMOUNT).max(floor)));
         }
         let events = gen_events(&mut g, &t, formula);
         if events.is_empty() {
@@ -1051,16 +1106,19 @@ fn a_contract_installment_above_the_formula_ends_early_and_below_it_leaves_a_bal
         above.installment = contract(up);
         let early = preview(&core, &above, &[]);
         check_schedule(&format!("{ctx} above {up}"), &above, &[], &early);
+        // Paying more each month ends earlier, or at least with a smaller
+        // last installment when a row cannot be spared (a two-month loan).
         assert!(
-            early.rows.len() < plain.rows.len(),
-            "{ctx}: {up} over {formula} does not end early ({} rows)",
-            early.rows.len()
+            early.rows.len() < plain.rows.len() || last(&early).payment < up,
+            "{ctx}: {up} over {formula} does not end early ({} rows, last {})",
+            early.rows.len(),
+            last(&early).payment
         );
         assert!(last(&early).payment <= up, "{ctx}: the last row is smaller");
         assert_eq!(balloon(&early), None, "{ctx}: no balloon above the formula");
         assert_eq!(below_interest(&early), None, "{ctx}");
         assert!(
-            early.total_interest < plain.total_interest,
+            early.total_interest < plain.total_interest || t.annual_rate_ppm == 0,
             "{ctx}: paying more each month costs less interest"
         );
 
@@ -1087,7 +1145,7 @@ fn a_contract_installment_above_the_formula_ends_early_and_below_it_leaves_a_bal
         );
         assert_eq!(below_interest(&ballooned), None, "{ctx}");
         assert!(
-            ballooned.total_interest > plain.total_interest,
+            ballooned.total_interest > plain.total_interest || t.annual_rate_ppm == 0,
             "{ctx}: paying less each month costs more interest"
         );
     }
@@ -1103,47 +1161,102 @@ fn an_installment_that_does_not_cover_the_interest_is_flagged_and_the_schedule_s
         let mut t = gen_terms(&mut g);
         t.principal = t.principal.max(100_000);
         t.annual_rate_ppm = t.annual_rate_ppm.max(10_000);
-        t.months = t.months.max(2);
+        t.months = t.months.max(3);
         let first_interest = interest_ref(t.principal, t.annual_rate_ppm);
         if first_interest == 0 {
             continue;
         }
-        t.installment = contract(g.range(1, first_interest));
-        let s = preview(&core, &t, &[]);
-        let ctx = format!("case {case} {t:?}");
-        check_schedule(&ctx, &t, &[], &s);
+        // In the terms, a contract installment at or below the first
+        // month's interest is a typing mistake: refused in the preview as in
+        // the commands.
+        let mut starving = t;
+        starving.installment = contract(g.range(1, first_interest));
+        let err = core.preview_loan(&starving, &[]).unwrap_err();
+        assert_eq!(
+            err.code(),
+            "invalid_amount",
+            "case {case} {starving:?}: {err}"
+        );
+
+        // The bank's letter may fix one that low: flagged from the row after
+        // it, the debt stands still until the last row pays it whole.
+        let plain = preview(&core, &t, &[]);
+        let after_first = plain.rows[0].residual;
+        let interest = interest_ref(after_first, t.annual_rate_ppm);
+        // At a very high rate over many months the formula's own installment
+        // is already below the interest: not this test's case.
+        if interest == 0 || below_interest(&plain).is_some() {
+            continue;
+        }
+        let letter = [ev(
+            id(1),
+            rate_change(
+                t.first_due,
+                t.annual_rate_ppm,
+                contract(g.range(1, interest)),
+            ),
+        )];
+        let s = preview(&core, &t, &letter);
+        let ctx = format!("case {case} {t:?} {letter:?}");
+        check_schedule(&ctx, &t, &letter, &s);
         flagged += 1;
         assert_eq!(
             below_interest(&s),
-            Some(1),
-            "{ctx}: the first installment is below the interest"
+            Some(2),
+            "{ctx}: flagged from the second row"
         );
-        assert_eq!(s.rows.len(), usize::try_from(t.months).unwrap(), "{ctx}");
-        let mut residual = t.principal;
-        for row in &s.rows {
-            assert!(
-                row.residual <= residual,
-                "{ctx}: the debt grew at row {}",
-                row.number
-            );
-            residual = row.residual;
-        }
+        // The letter is spread over the installments the plan had left: the
+        // loan's, unless its rounded-up installment would have cleared the
+        // debt sooner (a high rate over many months), where that end stays.
+        assert_eq!(
+            s.rows.len(),
+            plain.rows.len(),
+            "{ctx}: the end of the plan before the letter"
+        );
+        assert!(
+            s.rows[1..s.rows.len() - 1]
+                .iter()
+                .all(|r| r.capital == 0 && r.residual == after_first),
+            "{ctx}: the debt stands still"
+        );
         assert_eq!(last(&s).residual, 0, "{ctx}");
+        assert_eq!(
+            last(&s).payment,
+            after_first + interest,
+            "{ctx}: the last row pays it whole"
+        );
+        assert_eq!(s.taeg_ppm, plain.taeg_ppm, "{ctx}: the TAEG is the terms'");
     }
     assert!(flagged >= 80, "only {flagged} cases flagged");
 
-    // The plan's loan with 62,50 € a month, exactly the first interest.
+    // The plan's loan with 62,50 € a month, exactly the first interest:
+    // refused as terms. Set by a letter on the first due date at 61,64,
+    // exactly the second month's interest on 9 862,12: flagged from the
+    // second row, 58 rows of interest alone, the debt paid in the last.
     let mut t = ten_k();
     t.installment = contract(6_250);
-    let s = preview(&core, &t, &[]);
-    check_schedule("62,50", &t, &[], &s);
-    assert_eq!(below_interest(&s), Some(1));
+    assert_eq!(
+        core.preview_loan(&t, &[]).unwrap_err().code(),
+        "invalid_amount"
+    );
+    let t = ten_k();
+    let letter = [ev(
+        id(1),
+        rate_change(day(2026, 1, 15), 75_000, contract(6_164)),
+    )];
+    let s = preview(&core, &t, &letter);
+    check_schedule("61,64", &t, &letter, &s);
+    assert_eq!(below_interest(&s), Some(2));
     assert_eq!(s.rows.len(), 60);
-    assert_eq!(s.rows[0].capital, 0);
-    assert_eq!(s.rows[0].interest, 6_250);
-    assert_eq!(s.rows[58].residual, 1_000_000);
-    assert_eq!(last(&s).payment, 1_006_250);
-    assert_eq!(s.total_interest, 375_000);
+    assert_eq!(s.rows[0].event_ids, vec![id(1)]);
+    assert_eq!(
+        (s.rows[1].payment, s.rows[1].interest, s.rows[1].capital),
+        (6_164, 6_164, 0)
+    );
+    assert_eq!(s.rows[58].residual, 986_212);
+    assert_eq!(last(&s).payment, 992_376);
+    assert_eq!(s.total_interest, 369_926);
+    assert_eq!(s.taeg_ppm, preview(&core, &t, &[]).taeg_ppm);
 }
 
 #[test]
@@ -1327,7 +1440,9 @@ fn terms_and_events_at_the_upper_bounds_always_give_a_schedule() {
             t.months = MAX_MONTHS;
         }
         if g.chance(30) {
-            t.installment = contract(at_bound(&mut g));
+            // A contract installment must be above the first month's interest.
+            let floor = interest_ref(t.principal, t.annual_rate_ppm) + 1;
+            t.installment = contract(at_bound(&mut g).max(floor));
         }
         let dues = nominal_dues(&t);
         let n = g.index(4);
@@ -1888,10 +2003,11 @@ fn the_total_cost_is_everything_paid_on_top_of_what_was_borrowed() {
 #[test]
 fn without_fees_the_taeg_is_the_yearly_equivalent_of_the_tan() {
     let core = Core::open_in_memory().unwrap();
-    // Rounding the installments to the cent moves the solved rate: measured
-    // with exact decimals, up to 7 millionths on a loan of 1 000 €, a tenth
-    // of a millionth from 10 000 € up. Two millionths cover that and a
-    // bisection that stops on either neighbour.
+    // Rounding the installment to the cent moves the rate the payments really
+    // carry (`closed_form_drift`): a loan of 10 000 € at 27,7% over eight
+    // months pays 1 383,32 a month and its exact rate is 315 074,4 millionths
+    // a year against 315 068,1 for the TAN; `check_schedule` pins the TAEG to
+    // the payments, this test keeps it near the closed form.
     let mut g = Gen::new(6);
     for case in 0..60 {
         let mut t = gen_terms(&mut g);
@@ -1905,10 +2021,13 @@ fn without_fees_the_taeg_is_the_yearly_equivalent_of_the_tan() {
         let taeg = i64::from(s.taeg_ppm.unwrap_or_else(|| panic!("case {case}: no TAEG")));
         let closed = i64::from(closed_taeg(t.annual_rate_ppm));
         assert!(
-            (taeg - closed).abs() <= 2,
+            (taeg - closed).abs() <= closed_form_drift(t.principal),
             "case {case} {t:?}: taeg {taeg} against (1 + i)^12 − 1 = {closed}"
         );
     }
+    let eight = preview(&core, &terms(1_000_000, 277_038, 8, day(2025, 12, 3)), &[]);
+    assert!(payments(&eight).iter().all(|p| *p == 138_332));
+    assert_eq!(eight.taeg_ppm, Some(315_074));
     for (ppm, expected) in [
         (30_000, 30_416),
         (75_000, 77_633),
@@ -2164,7 +2283,7 @@ fn a_loan_is_refused_on_terms_outside_the_bounds_and_the_vault_stays_as_it_was()
         ),
         (
             "a rate over fifty percent",
-            "invalid_command",
+            "invalid_amount",
             with(|t| t.annual_rate_ppm = MAX_RATE_PPM + 1),
         ),
         ("no months", "invalid_command", with(|t| t.months = 0)),
@@ -2241,12 +2360,6 @@ fn a_loan_at_the_upper_bounds_is_accepted_and_one_cent_over_them_is_refused() {
         rate_change(day(2027, 1, 31), MAX_RATE_PPM, contract(MAX_LOAN_AMOUNT)),
         rate_change(day(2030, 2, 28), 0, LoanInstallment::Computed),
         prepayment(
-            day(2026, 1, 1),
-            MAX_LOAN_AMOUNT,
-            PrepaymentMode::Lower,
-            MAX_LOAN_AMOUNT,
-        ),
-        prepayment(
             last_nominal,
             MAX_LOAN_AMOUNT,
             PrepaymentMode::Shorten,
@@ -2257,12 +2370,25 @@ fn a_loan_at_the_upper_bounds_is_accepted_and_one_cent_over_them_is_refused() {
         fx.id(event_cmd(loan, event));
         fx.id(event_cmd(other, event));
     }
+    // The whole bound repaid before the first installment, with the whole
+    // bound as a penalty: the second loan is over before it begins.
+    fx.id(event_cmd(
+        other,
+        prepayment(
+            day(2026, 1, 1),
+            MAX_LOAN_AMOUNT,
+            PrepaymentMode::Lower,
+            MAX_LOAN_AMOUNT,
+        ),
+    ));
     for loan_id in [loan, other] {
         let view = loan_of(&fx, loan_id);
         let s = schedule_of(&fx, loan_id);
         check_schedule(&view.name, &view.terms, &view.events, &s);
         assert_eq!(s, fx.core.preview_loan(&view.terms, &view.events).unwrap());
     }
+    assert!(schedule_of(&fx, other).rows.is_empty());
+    assert_eq!(schedule_of(&fx, other).total_penalties, MAX_LOAN_AMOUNT);
     for today in [
         day(2025, 1, 1),
         day(2026, 1, 31),
@@ -2278,7 +2404,12 @@ fn a_loan_at_the_upper_bounds_is_accepted_and_one_cent_over_them_is_refused() {
             assert!(o.paid_count <= o.total_count, "on {today}: {o:?}");
         }
     }
-    assert!(!fx.core.linked_installments(fx.vault).unwrap().is_empty());
+    assert_eq!(
+        fx.core.linked_installments(fx.vault).unwrap().len(),
+        schedule_of(&fx, loan).rows.len(),
+        "the linked loan's rows, none of the other's"
+    );
+    assert!(!schedule_of(&fx, loan).rows.is_empty());
 
     // One cent over, on any amount, in any command: refused as an amount,
     // the vault as it was.
@@ -2431,7 +2562,7 @@ fn a_loan_can_be_linked_only_to_an_active_expense_template_of_its_vault_that_no_
     let err = refused_as(
         &mut fx,
         "a template already linked",
-        "already_exists",
+        "invalid_command",
         loan_cmd("Auto", mortgage(), Some(template)),
     );
     assert_ne!(err.code(), "storage_error");
@@ -2439,7 +2570,7 @@ fn a_loan_can_be_linked_only_to_an_active_expense_template_of_its_vault_that_no_
     refused_as(
         &mut fx,
         "linking a second loan to the same template",
-        "already_exists",
+        "invalid_command",
         link_cmd(second, Some(template)),
     );
     refused_as(
@@ -2475,7 +2606,7 @@ fn a_loan_can_be_linked_only_to_an_active_expense_template_of_its_vault_that_no_
     refused_as(
         &mut fx,
         "linking back while the other has it",
-        "already_exists",
+        "invalid_command",
         link_cmd(first, Some(template)),
     );
     // Archiving the template is allowed and keeps the link.
@@ -2540,7 +2671,7 @@ fn updating_a_loan_changes_only_the_fields_given_and_the_schedule_follows_the_ne
         ),
         (
             "a rate over the bound",
-            "invalid_command",
+            "invalid_amount",
             LoanPatch {
                 annual_rate_ppm: Some(MAX_RATE_PPM + 1),
                 ..LoanPatch::default()
@@ -2751,7 +2882,7 @@ fn an_event_is_accepted_inside_the_nominal_window_whatever_the_schedule_makes_of
         ),
         (
             "a rate over the bound",
-            "invalid_command",
+            "invalid_amount",
             rate_change(
                 day(2026, 6, 15),
                 MAX_RATE_PPM + 1,
@@ -2953,12 +3084,13 @@ fn an_event_dated_in_the_past_recomputes_the_schedule_from_there_on() {
 
 #[test]
 fn two_vaults_adding_the_same_events_in_a_different_order_get_the_same_schedule() {
+    // Two cores, one vault each: the event ids are the command ids, and one
+    // core takes a command id once, whatever the vault.
     let mut fx = setup();
-    let (other, _) = other_vault(&mut fx.core);
+    let mut fy = setup();
+    let other = fy.vault;
     let loan_a = fx.id(loan_cmd("Cucina", ten_k(), None));
-    let loan_b = run(&mut fx.core, other, loan_cmd("Cucina", ten_k(), None))
-        .result_id
-        .unwrap();
+    let loan_b = fy.id(loan_cmd("Cucina", ten_k(), None));
     let events = [
         (
             id(0x10),
@@ -2988,7 +3120,7 @@ fn two_vaults_adding_the_same_events_in_a_different_order_get_the_same_schedule(
             .unwrap();
     }
     for (event_id, event) in events.iter().rev() {
-        fx.core
+        fy.core
             .execute(sparagne_core::CommandEnvelope::with_id(
                 *event_id,
                 other,
@@ -2997,13 +3129,14 @@ fn two_vaults_adding_the_same_events_in_a_different_order_get_the_same_schedule(
             ))
             .unwrap();
     }
-    assert_eq!(
-        fx.core.loan_schedule(fx.vault, loan_a).unwrap(),
-        fx.core.loan_schedule(other, loan_b).unwrap()
-    );
+    let s = fx.core.loan_schedule(fx.vault, loan_a).unwrap();
+    assert_eq!(s, fy.core.loan_schedule(other, loan_b).unwrap());
+    assert_eq!(s.event_ids_before_first, vec![id(0x13)]);
+    assert_eq!(s.rows[6].event_ids, vec![id(0x11), id(0x12)]);
+    assert_eq!(s.rows[17].event_ids, vec![id(0x10)]);
     assert_eq!(
         loan_of(&fx, loan_a).events,
-        fx.core.loans(other).unwrap()[0].events,
+        loan_of(&fy, loan_b).events,
         "listed by date and id, not by insertion"
     );
 }
