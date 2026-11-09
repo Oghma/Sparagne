@@ -454,6 +454,37 @@ struct LoanStoreTests {
         #expect(!store.linkableRecurring(for: nil).contains { [weekly, bimonthly].contains($0.id) })
     }
 
+    @Test("A template made for a running loan that is then paid off before its first period is paused in the same batch, and the alert says so")
+    func templateAfterTheEndIsPaused() async throws {
+        let store = try await Self.vault()
+        // Running for 45 days: the template made now starts with the next
+        // installment, after today.
+        #expect(await store.createLoan(name: "Cucina", note: nil, terms: Self.kitchen(firstDue: try Self.day(-45)), payment: .none))
+        #expect(await store.createLoanRecurring(for: try Self.loan(store, "Cucina"), target: try Self.target(store)))
+        let templateId = try #require(try Self.loan(store, "Cucina").recurringId)
+        let made = try Self.template(store, templateId)
+        #expect(made.schedule.startDate > Self.today)
+        #expect(made.enabled)
+        let before = try await Self.outbox(store)
+
+        // The whole debt repaid today: the loan ends with the installment
+        // already behind, before the template's first period.
+        let residual = try #require(await store.residualDebt(of: try Self.loan(store, "Cucina"), on: Self.today))
+        let payoff = LoanEvent.prepayment(date: Self.today, amount: residual, mode: .shorten, fee: 0)
+        #expect(await store.addLoanEvent(payoff, to: try Self.loan(store, "Cucina"), expense: nil))
+
+        let notice = try #require(store.presentedError)
+        #expect(notice.code == "paused")
+        #expect(notice.summary == String(localized: "The recurring entry is paused"))
+        // Paused, its schedule kept: an end before its start is no schedule.
+        let template = try Self.template(store, templateId)
+        #expect(!template.enabled)
+        #expect(template.schedule == made.schedule)
+        #expect(store.dueDates(of: templateId).isEmpty)
+        // AddLoanEvent and the pause, one batch.
+        #expect(try await Self.outbox(store) == before + 2)
+    }
+
     // MARK: - The template's kind
 
     @Test("A template a loan records through cannot change kind, and the menu says why")

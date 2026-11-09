@@ -230,6 +230,10 @@ extension AppStore {
     /// as one batch. `known` is that schedule when the caller already has
     /// it. A schedule the core cannot work out is its refusal, on the alert,
     /// and nothing is written.
+    ///
+    /// A template whose first period comes after the loan's new end is
+    /// paused in the same patch, and the alert says so once the batch went
+    /// through: it would otherwise keep coming due on a debt already paid.
     private func applyLoanWrite(
         _ envelopes: [CommandEnvelope],
         terms: LoanTerms,
@@ -239,17 +243,27 @@ extension AppStore {
         in vaultId: Uuid
     ) async -> Bool {
         var envelopes = envelopes
+        var pauses = false
         if let recurringId, let template = recurringTemplates.first(where: { $0.id == recurringId && !$0.archived }) {
             guard let schedule = await loanPlan(terms: terms, events: events, known: known) else { return false }
             let patch = LoanLink.alignment(of: template, to: schedule, today: CoreDate.day(Date()))
             if !patch.isEmpty {
+                pauses = patch.enabled == false
                 envelopes.append(await core.envelope(
                     vaultId: vaultId,
                     .updateRecurring(recurringId: template.id, patch: patch)
                 ))
             }
         }
-        return await apply(envelopes: envelopes, in: vaultId)
+        let applied = await apply(envelopes: envelopes, in: vaultId)
+        if applied, pauses {
+            presentedError = AppError(
+                code: "paused",
+                message: String(localized: "The loan now ends before the recurring entry's first period: it no longer comes due. Link another one, or archive it."),
+                headline: String(localized: "The recurring entry is paused")
+            )
+        }
+        return applied
     }
 
     /// The `CreateRecurring` of a loan's new template, or `nil` with the
@@ -319,18 +333,24 @@ enum LoanLink {
     /// (`currentInstallment`) and the last due date as its end. Its start,
     /// cadence and everything else stay: a template linked as it was keeps
     /// the periods it already recorded, its day too: the installments are
-    /// matched to its periods by month (`installmentAmount`). An end before
-    /// the template's start is left out, since the core would refuse the
-    /// schedule.
+    /// matched to its periods by month (`installmentAmount`).
+    ///
+    /// An end before the template's start cannot be its end, since the core
+    /// would refuse the schedule: every period it has comes after the debt
+    /// is paid, so a running template is paused instead.
     static func alignment(of template: RecurringView, to schedule: LoanSchedule, today: NaiveDate) -> RecurringPatch {
         var patch = RecurringPatch()
         if let amount = currentInstallment(schedule, today: today), amount > 0, amount != template.amount {
             patch.amount = amount
         }
-        if let end = schedule.rows.last?.dueDate, end != template.schedule.endDate, end >= template.schedule.startDate {
-            var moved = template.schedule
-            moved.endDate = end
-            patch.schedule = moved
+        if let end = schedule.rows.last?.dueDate, end != template.schedule.endDate {
+            if end >= template.schedule.startDate {
+                var moved = template.schedule
+                moved.endDate = end
+                patch.schedule = moved
+            } else if template.enabled {
+                patch.enabled = false
+            }
         }
         return patch
     }

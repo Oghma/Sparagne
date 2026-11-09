@@ -121,10 +121,15 @@ struct LoanLinkTests {
         #expect(patch.enabled == nil)
     }
 
-    @Test("An end before the template's start is left out: the core would refuse it")
+    @Test("A template starting after the loan's end is paused rather than ended: the core would refuse that end")
     func endBeforeStartIsLeftOut() {
         let late = Self.template(amount: 34_200, start: "2026-06-05", end: nil)
-        #expect(LoanLink.alignment(of: late, to: Self.schedule, today: "2025-12-01").isEmpty)
+        let patch = LoanLink.alignment(of: late, to: Self.schedule, today: "2025-12-01")
+        #expect(patch == RecurringPatch(enabled: false))
+        // Paused already, it needs nothing.
+        var paused = late
+        paused.enabled = false
+        #expect(LoanLink.alignment(of: paused, to: Self.schedule, today: "2025-12-01").isEmpty)
     }
 
     // MARK: - A new loan's template
