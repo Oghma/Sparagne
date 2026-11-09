@@ -183,8 +183,9 @@ recorded at the schedule's amount for that due date, the fee included,
 whichever way it is confirmed (Ricorrenze, the Mastro's due rows, Register
 All), so a rate change reaches the ledger; the entry's template keeps the
 current installment and the last due date, updated with every change to the
-loan (an amount typed by hand on the template is overwritten by the first
-event). A linked entry cannot change kind. The progress is by date, since the
+loan (an amount typed by hand on the template is overwritten as soon as it is
+linked or made, and kept at the schedule's installment from then on). A
+linked template must be monthly (every month, interval 1), on any day. A linked entry cannot change kind. The progress is by date, since the
 bank debits by itself and installments from before Sparagne count; "recorded
 X of Y" next to it checks the ledger. Because the commands are new, upgrade
 every Mac that syncs before creating a loan or recording a linked
@@ -194,7 +195,12 @@ Limits: monthly installments only; French amortization only (no Italian
 or German schedules); the disbursement is not recorded (a mortgage goes to
 the seller, a loan to the shop); interest is not pro rata between due
 dates, so an early repayment takes effect at the next installment; and the
-net worth counts no assets yet, only the wallets and the debt.
+net worth counts no assets yet, only the wallets and the debt. A loan
+change that records an expense or creates a template is sent as one batch,
+atomic on this Mac only: if the server refuses one command of it (another
+member archived the loan meanwhile), the others stay and the refused-changes
+list shows the refused one, so the expense or the template may need removing
+by hand.
 
 ### Statements, full export and backup
 
