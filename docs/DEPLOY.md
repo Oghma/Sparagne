@@ -1,7 +1,8 @@
 # Sparagne v2 — Running the server
 
 > 2026-09-12, updated 2026-09-23 (login limits, accounts from the command
-> line) and 2026-10-08 (image on GHCR, §3.2; release binary, §3.3).
+> line), 2026-10-08 (image on GHCR, §3.2; release binary, §3.3) and
+> 2026-11-10 (trusted proxies, §2.1; a proxy on another machine, §3.3).
 > See also: `server/Dockerfile`, `server/deploy/`,
 > `.github/workflows/release.yml`.
 
@@ -24,7 +25,8 @@ certificate from Caddy's internal CA (§3.3).
 | `SPARAGNE_DATA_DIR` | `/data` | directory holding `vaults.sqlite` and `server.sqlite`. |
 | `SPARAGNE_ALLOW_REGISTRATION` | `true` | when `false`, `POST /auth/register` answers `403 registration_disabled`. |
 | `SPARAGNE_TOKEN_TTL_DAYS` | `30` | how long a login token stays valid. |
-| `SPARAGNE_TRUST_PROXY` | `false` (`true` in `compose.yml`) | when `true`, the client's address is the last entry of `X-Forwarded-For` instead of the TCP peer (§2.1). |
+| `SPARAGNE_TRUST_PROXY` | `false` (`true` in `compose.yml`) | when `true`, the client's address is the last entry of `X-Forwarded-For` instead of the TCP peer, whoever the peer is (§2.1). |
+| `SPARAGNE_TRUSTED_PROXIES` | (empty) | the proxies, as addresses or CIDRs separated by commas (`192.168.1.10`, `172.16.0.0/12,::1`): `X-Forwarded-For` counts only when the TCP peer is one of them. It wins over `SPARAGNE_TRUST_PROXY`; an entry that is not an address or a CIDR stops the server at start (§2.1). |
 | `SPARAGNE_LOGIN_MAX_FAILURES` | `5` | failed logins for one username within the window, after which the username is locked for another window; `0` removes the limit. |
 | `SPARAGNE_LOGIN_WINDOW_SECS` | `900` | the window of the two login limits, in seconds. |
 | `SPARAGNE_IP_MAX_FAILURES` | `30` | failed logins from one address within the window; `0` removes the limit. |
@@ -49,18 +51,29 @@ resets the counts) and before computing any hash:
 - **Registration**: at most 10 attempts an hour per address, valid or not.
 
 **Which address.** Without a proxy it is the TCP peer. Behind a proxy the
-peer is always the proxy, and every client would share one count: with
-`SPARAGNE_TRUST_PROXY=true` the server uses the **last** entry of
-`X-Forwarded-For` instead, the one the proxy appends itself and the client
-cannot forge (anyone can write the entries further left). `compose.yml`
-turns it on because port 3000 is not published and only Caddy reaches the
-container; Caddy sets `X-Forwarded-For` by itself. Without Docker, turn it
-on only when the server listens on `127.0.0.1` (or on a port the firewall
-opens to the proxy alone) and the proxy appends the client's address: Caddy
-does by default, nginx with `proxy_set_header X-Forwarded-For
-$proxy_add_x_forwarded_for;`. **Never** with the server's port reachable
-directly: anyone could pick their own address and the per-address limit
-would be worthless (the per-username one stays).
+peer is always the proxy, and every client would share one count: told to
+trust the proxy, the server uses the **last** entry of `X-Forwarded-For`
+instead, the one the proxy appends itself and the client cannot forge
+(anyone can write the entries further left). The proxy has to append the
+client's address: Caddy does by default, nginx with `proxy_set_header
+X-Forwarded-For $proxy_add_x_forwarded_for;`. Two settings say whom to
+trust:
+
+- `SPARAGNE_TRUSTED_PROXIES=192.168.1.10` (addresses or CIDRs, separated by
+  commas): the header counts only when the TCP peer is in the list, and
+  anyone else is counted by their own address whatever they send. This is
+  the one for a proxy **on another machine**, where the server's port is
+  open to the network (§3.3). A peer that reaches an IPv6 socket as
+  `::ffff:192.168.1.10` matches the entry `192.168.1.10`.
+- `SPARAGNE_TRUST_PROXY=true`: the header counts from **any** peer. Right
+  only where nothing but the proxy reaches the server: `compose.yml` turns
+  it on because port 3000 is not published and only Caddy, whose address in
+  the Docker network is not fixed, reaches the container; so does
+  `install.sh`, with the server on `127.0.0.1`. **Never** with the server's
+  port reachable directly: anyone could pick their own address and the
+  per-address limit would be worthless (the per-username one stays).
+
+With both set the list wins, and the log says so at start.
 
 ## 3. First start
 
@@ -203,8 +216,28 @@ Then `sparagne-server.service`, in the archive: the comment at its top
 lists the commands (dedicated user, data directory, `/etc/sparagne.env`,
 start), to run as root (without `sudo` where you already are root, as in a
 container). The server listens on `127.0.0.1:3000`; the reverse proxy with
-TLS (§1) is a separate service, on the same machine or another one, and
-§2.1 applies to `SPARAGNE_TRUST_PROXY`.
+TLS (§1) is a separate service, on the same machine or another one.
+
+**The proxy on another machine** (one reverse proxy for the whole network,
+say). The server has to listen on the network and to know the proxy's
+address (§2.1). The unit is replaced by every update, so the address goes
+in a drop-in, `/etc/systemd/system/sparagne-server.service.d/listen.conf`:
+
+```
+[Service]
+Environment=SPARAGNE_BIND=0.0.0.0:3000
+```
+
+and in `/etc/sparagne.env`, with `SPARAGNE_TRUST_PROXY` removed or `false`:
+
+```
+SPARAGNE_TRUSTED_PROXIES=192.168.1.10
+```
+
+Then `systemctl daemon-reload && systemctl restart sparagne-server`; the
+`listening` line of the log (§7) shows `trust_proxy=192.168.1.10`. The
+proxy forwards to `http://<server>:3000`: that stretch is plain HTTP, so
+it belongs on a network you trust.
 
 **Local network only, no domain.** Caddy on the same machine also issues a
 certificate for an IP address, signed by its own internal CA:
@@ -404,5 +437,6 @@ together: the **new kinds** (as in §6.3) and the **new field** (as in
 - `GET /health` answers `{"status":"ok"}` without authentication: it is
   also the Docker image's `HEALTHCHECK` (`docker ps` shows `healthy`).
 - At start, the `listening` line reports the effective configuration,
-  limits and `trust_proxy` included: that is where to check that the proxy
-  is seen the way it should be.
+  limits and `trust_proxy` included (`none`, `any peer` or the list of
+  `SPARAGNE_TRUSTED_PROXIES`): that is where to check that the proxy is
+  seen the way it should be.

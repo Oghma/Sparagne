@@ -72,10 +72,10 @@ impl AppState {
             inner: Arc::new(Inner {
                 core: Mutex::new(core),
                 db: Mutex::new(db),
+                limiter: RateLimiter::new(config.clone()),
                 config,
                 argon,
                 dummy_hash,
-                limiter: RateLimiter::new(config),
             }),
         })
     }

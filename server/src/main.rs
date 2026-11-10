@@ -67,15 +67,15 @@ async fn serve_until_shutdown() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|_| "127.0.0.1:3000".to_string())
         .parse()?;
     let data_dir = std::env::var("SPARAGNE_DATA_DIR").unwrap_or_else(|_| "./data".to_string());
-    let config = Config::from_env();
-    let state = AppState::open(&data_dir, config)?;
+    let config = Config::from_env()?;
+    let state = AppState::open(&data_dir, config.clone())?;
     let listener = tokio::net::TcpListener::bind(bind).await?;
     tracing::info!(
         %bind,
         data_dir,
         allow_registration = config.allow_registration,
         token_ttl_days = config.token_ttl_days,
-        trust_proxy = config.trust_forwarded_for,
+        trust_proxy = %config.trusted_proxies,
         login_max_failures = config.login_max_failures,
         login_window_secs = config.login_window_secs,
         ip_max_failures = config.ip_max_failures,

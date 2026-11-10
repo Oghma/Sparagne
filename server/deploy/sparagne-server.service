@@ -18,9 +18,9 @@ Wants=network-online.target
 #   sudo systemctl enable --now sparagne-server
 #
 # /etc/sparagne.env holds SPARAGNE_ALLOW_REGISTRATION, SPARAGNE_TOKEN_TTL_DAYS,
-# the login limits, SPARAGNE_TRUST_PROXY and RUST_LOG (docs/DEPLOY.md);
-# SPARAGNE_BIND and SPARAGNE_DATA_DIR are set below since they describe this
-# machine, not the deployment's policy.
+# the login limits, SPARAGNE_TRUST_PROXY or SPARAGNE_TRUSTED_PROXIES and
+# RUST_LOG (docs/DEPLOY.md); SPARAGNE_BIND and SPARAGNE_DATA_DIR are set
+# below since they describe this machine, not the deployment's policy.
 #
 # Accounts, as the service user so SQLite's side files keep their owner
 # (`runuser` is there even where `sudo` is not):

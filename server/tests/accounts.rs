@@ -18,6 +18,7 @@ use sparagne_core::sync::{MemberEntry, TokenResponse};
 use sparagne_server::{
     AppState, Config,
     admin::{self, AdminError},
+    client_ip::TrustedProxies,
     db::ServerDb,
     router,
 };
@@ -310,7 +311,7 @@ async fn wrong_current_passwords_count_as_failed_logins() {
 #[tokio::test]
 async fn the_address_limit_uses_the_rightmost_forwarded_for_when_trusted() {
     let api = Api::with_config(Config {
-        trust_forwarded_for: true,
+        trusted_proxies: TrustedProxies::Any,
         ip_max_failures: 3,
         ..Config::default()
     });
@@ -360,6 +361,48 @@ async fn an_untrusted_forwarded_for_is_ignored() {
     // Another peer is another client.
     let other = Origin::peer("192.0.2.11:50000");
     let res = login_from(&api, other, "alice", PASSWORD).await;
+    assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
+}
+
+#[tokio::test]
+async fn only_a_listed_proxy_speaks_for_its_clients() {
+    let api = Api::with_config(Config {
+        trusted_proxies: TrustedProxies::Only(vec!["10.0.0.2".parse().unwrap()]),
+        ip_max_failures: 3,
+        ..Config::default()
+    });
+    api.register("alice").await;
+    // Straight to the server, off the list: the forged header is not read
+    // and the peer is what gets counted.
+    for (i, forged) in ["203.0.113.1", "203.0.113.2", "203.0.113.3"]
+        .into_iter()
+        .enumerate()
+    {
+        let from = Origin {
+            peer: Some("192.0.2.10:50000"),
+            forwarded_for: Some(forged),
+        };
+        let res = login_from(&api, from, &format!("user{i}"), WRONG).await;
+        assert_eq!(res.status, StatusCode::UNAUTHORIZED);
+    }
+    let direct = Origin {
+        peer: Some("192.0.2.10:50001"),
+        forwarded_for: Some("203.0.113.4"),
+    };
+    assert_limited(&login_from(&api, direct, "alice", PASSWORD).await, 900);
+
+    // Through the proxy each client has its own count, and the addresses
+    // the direct peer claimed were never charged.
+    let client = Origin::forwarded("203.0.113.1");
+    let res = login_from(&api, client, "alice", PASSWORD).await;
+    assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
+    let noisy = Origin::forwarded("198.51.100.1, 203.0.113.7");
+    for i in 0..3 {
+        let res = login_from(&api, noisy, &format!("guest{i}"), WRONG).await;
+        assert_eq!(res.status, StatusCode::UNAUTHORIZED);
+    }
+    assert_limited(&login_from(&api, noisy, "alice", PASSWORD).await, 900);
+    let res = login_from(&api, client, "alice", PASSWORD).await;
     assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
 }
 
