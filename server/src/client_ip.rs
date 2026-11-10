@@ -133,11 +133,11 @@ impl fmt::Display for TrustedProxies {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::None => f.write_str("none"),
-            Self::Any => f.write_str("any peer"),
+            Self::Any => f.write_str("any"),
             Self::Only(proxies) => {
                 for (i, proxy) in proxies.iter().enumerate() {
                     if i > 0 {
-                        f.write_str(", ")?;
+                        f.write_str(",")?;
                     }
                     write!(f, "{proxy}")?;
                 }
@@ -374,8 +374,8 @@ mod tests {
     #[test]
     fn the_log_names_what_is_trusted() {
         assert_eq!(TrustedProxies::None.to_string(), "none");
-        assert_eq!(TrustedProxies::Any.to_string(), "any peer");
+        assert_eq!(TrustedProxies::Any.to_string(), "any");
         let list = only(&["192.168.178.193/32", "::ffff:10.0.0.2", "fd00::/8"]);
-        assert_eq!(list.to_string(), "192.168.178.193, 10.0.0.2, fd00::/8");
+        assert_eq!(list.to_string(), "192.168.178.193,10.0.0.2,fd00::/8");
     }
 }

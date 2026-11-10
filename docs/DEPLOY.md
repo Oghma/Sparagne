@@ -228,7 +228,8 @@ in a drop-in, `/etc/systemd/system/sparagne-server.service.d/listen.conf`:
 Environment=SPARAGNE_BIND=0.0.0.0:3000
 ```
 
-and in `/etc/sparagne.env`, with `SPARAGNE_TRUST_PROXY` removed or `false`:
+and in `/etc/sparagne.env` (the list wins over `SPARAGNE_TRUST_PROXY`, which
+is best removed all the same):
 
 ```
 SPARAGNE_TRUSTED_PROXIES=192.168.1.10
@@ -437,6 +438,6 @@ together: the **new kinds** (as in §6.3) and the **new field** (as in
 - `GET /health` answers `{"status":"ok"}` without authentication: it is
   also the Docker image's `HEALTHCHECK` (`docker ps` shows `healthy`).
 - At start, the `listening` line reports the effective configuration,
-  limits and `trust_proxy` included (`none`, `any peer` or the list of
+  limits and `trust_proxy` included (`none`, `any` or the list of
   `SPARAGNE_TRUSTED_PROXIES`): that is where to check that the proxy is
   seen the way it should be.
