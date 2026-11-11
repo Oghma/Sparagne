@@ -13,7 +13,7 @@
 # Builder
 ########################################
 # The same release as rust-toolchain.toml.
-FROM rust:1.99.0-trixie AS builder
+FROM rust:1.99.1-trixie AS builder
 WORKDIR /build
 
 # Cache the dependency graph separately from the application code: copy only
